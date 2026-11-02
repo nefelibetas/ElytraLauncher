@@ -131,6 +131,31 @@ fn normalized(id: &str) -> &str {
     id.strip_prefix("minecraft:").unwrap_or(id)
 }
 
+/// 中心点到 region 方块矩形的最短距离平方（region 覆盖 512×512 方块）。
+fn region_min_dist2(region_x: i32, region_z: i32, center_x: i32, center_z: i32) -> i64 {
+    let x0 = region_x as i64 * 512;
+    let z0 = region_z as i64 * 512;
+    let x1 = x0 + 511;
+    let z1 = z0 + 511;
+    let cx = center_x as i64;
+    let cz = center_z as i64;
+    let dx = if cx < x0 {
+        x0 - cx
+    } else if cx > x1 {
+        cx - x1
+    } else {
+        0
+    };
+    let dz = if cz < z0 {
+        z0 - cz
+    } else if cz > z1 {
+        cz - z1
+    } else {
+        0
+    };
+    dx * dx + dz * dz
+}
+
 fn scan<F>(world: &Path, dimension: &str, max_y: i32, mut visit: F)
 where
     F: FnMut(&str, i32, i32),
@@ -172,25 +197,40 @@ pub fn find_biome(
     center_z: i32,
 ) -> Option<MapBiomeHit> {
     let target = normalized(target);
+    let dir = dimension_dir(world, dimension);
+    let max_y = max_y.clamp(-512, 512) as isize;
+    let mut regions = list_region_files(&dir);
+    // 按 region 到中心的矩形距离排序；一旦最近候选近于下一 region 的下界即可停。
+    regions.sort_by_key(|r| (region_min_dist2(r.x, r.z, center_x, center_z), r.x, r.z));
     let mut best: Option<(i64, MapBiomeHit)> = None;
-    scan(world, dimension, max_y, |biome, x, z| {
-        if normalized(biome) != target {
-            return;
+    for region in regions {
+        let lower = region_min_dist2(region.x, region.z, center_x, center_z);
+        if best.as_ref().is_some_and(|(d, _)| lower > *d) {
+            break;
         }
-        let dx = (x - center_x) as i64;
-        let dz = (z - center_z) as i64;
-        let dist = dx * dx + dz * dz;
-        if best.as_ref().is_none_or(|(d, _)| dist < *d) {
-            best = Some((
-                dist,
-                MapBiomeHit {
-                    biome: biome.to_string(),
-                    x,
-                    z,
-                },
-            ));
+        let path = dir
+            .join("region")
+            .join(format!("r.{}.{}.mca", region.x, region.z));
+        let hits = region_biome_hits(&path, region.mtime, region.x, region.z, max_y);
+        for hit in hits.iter() {
+            if normalized(&hit.biome) != target {
+                continue;
+            }
+            let dx = (hit.x - center_x) as i64;
+            let dz = (hit.z - center_z) as i64;
+            let dist = dx * dx + dz * dz;
+            if best.as_ref().is_none_or(|(d, _)| dist < *d) {
+                best = Some((
+                    dist,
+                    MapBiomeHit {
+                        biome: hit.biome.to_string(),
+                        x: hit.x,
+                        z: hit.z,
+                    },
+                ));
+            }
         }
-    });
+    }
     best.map(|(_, hit)| hit)
 }
 
