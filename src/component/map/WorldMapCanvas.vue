@@ -75,6 +75,37 @@ interface TileEntry {
   img: HTMLImageElement;
   url: string;
   mtime: number;
+  /** 按 2 的幂缓存缩小后的瓦片，避免每帧把 512×512 重采样到小尺寸。 */
+  levels?: Map<number, HTMLCanvasElement>;
+}
+
+const LOD_MAX = 4;
+/** 仅在瓦片显示尺寸 ≥128px 时启用；64px 实测预缩放开销高于收益。 */
+const LOD_MIN_SIZE = 128;
+
+/** 目标显示尺寸对应的瓦片层级；源尺寸保持 >= 目标尺寸。 */
+function tileLod(size: number): number {
+  if (size < LOD_MIN_SIZE || size >= REGION_BLOCKS) return 0;
+  const raw = Math.floor(Math.log2(REGION_BLOCKS / size));
+  return Math.min(LOD_MAX, Math.max(0, raw));
+}
+
+/** 取瓦片的缩小层级；首次访问时生成并缓存。 */
+function tileLevel(entry: TileEntry, lod: number): CanvasImageSource {
+  if (lod <= 0) return entry.img;
+  const cached = entry.levels?.get(lod);
+  if (cached) return cached;
+  const px = REGION_BLOCKS >> lod;
+  const canvas = document.createElement("canvas");
+  canvas.width = px;
+  canvas.height = px;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return entry.img;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(entry.img, 0, 0, px, px);
+  if (!entry.levels) entry.levels = new Map();
+  entry.levels.set(lod, canvas);
+  return canvas;
 }
 
 interface MapBounds {
@@ -489,6 +520,7 @@ function draw() {
   const toScreenX = (x: number) => (x - cam.x) * scale + w / 2;
   const toScreenY = (z: number) => (z - cam.z) * scale + h / 2;
   const size = REGION_BLOCKS * scale;
+  const lod = tileLod(size);
 
   for (const region of regions.value) {
     if (region.x < rx0 || region.x > rx1 || region.z < rz0 || region.z > rz1) continue;
@@ -497,7 +529,7 @@ function draw() {
     const x = toScreenX(region.x * REGION_BLOCKS);
     const y = toScreenY(region.z * REGION_BLOCKS);
     if (entry && entry.mtime === region.mtime) {
-      ctx.drawImage(entry.img, x, y, size, size);
+      ctx.drawImage(tileLevel(entry, lod), x, y, size, size);
     } else {
       drawChecker(ctx, x, y, size);
       requestTile(region);
