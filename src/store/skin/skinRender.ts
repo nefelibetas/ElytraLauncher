@@ -120,7 +120,163 @@ function facesOf(b: VoxelBox): FaceDef[] {
   return faces;
 }
 
-/** 皮肤 UV 原点（64×64，Mojang 公开布局）。 */
+/** 细分块裁剪边缘的抗锯齿会在相邻块间露出 1px 缝；只把内部边外扩 1px，让相邻块重叠盖住缝。 */
+const CLIP_PAD = 1;
+
+function expandedClip(
+  xs: number[],
+  ys: number[],
+  grid?: readonly [number, number, number, number],
+): { xs: number[]; ys: number[] } {
+  if (!grid) return { xs, ys };
+  const [n, m, col, row] = grid;
+  if (n === 1 && m === 1) return { xs, ys };
+  const cx = (xs[0]! + xs[1]! + xs[2]! + xs[3]!) / 4;
+  const cy = (ys[0]! + ys[1]! + ys[2]! + ys[3]!) / 4;
+  const nx = [0, 0, 0, 0];
+  const ny = [0, 0, 0, 0];
+  const off = [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const ex = xs[j]! - xs[i]!;
+    const ey = ys[j]! - ys[i]!;
+    const len = Math.hypot(ex, ey);
+    if (len < 1e-6) continue;
+    let ux = ey / len;
+    let uy = -ex / len;
+    const mx = (xs[i]! + xs[j]!) / 2 - cx;
+    const my = (ys[i]! + ys[j]!) / 2 - cy;
+    if (ux * mx + uy * my < 0) {
+      ux = -ux;
+      uy = -uy;
+    }
+    nx[i] = ux;
+    ny[i] = uy;
+    if (i === 0) off[i] = row > 0 ? CLIP_PAD : 0;
+    else if (i === 1) off[i] = col < n - 1 ? CLIP_PAD : 0;
+    else if (i === 2) off[i] = row < m - 1 ? CLIP_PAD : 0;
+    else off[i] = col > 0 ? CLIP_PAD : 0;
+  }
+  const outX = xs.slice();
+  const outY = ys.slice();
+  for (let i = 0; i < 4; i++) {
+    const prev = (i + 3) % 4;
+    outX[i] = xs[i]! + nx[prev]! * off[prev]! + nx[i]! * off[i]!;
+    outY[i] = ys[i]! + ny[prev]! * off[prev]! + ny[i]! * off[i]!;
+  }
+  return { xs: outX, ys: outY };
+}
+
+/** 纹理像素缓存：HTMLImageElement 不可变，可跨帧复用；Canvas 源可能被原地编辑，只在本次绘制内复用。 */
+const TEXTURE_PIXELS = new WeakMap<object, ImageData>();
+
+function texturePixels(src: CanvasImageSource): ImageData | null {
+  const cacheable = src instanceof HTMLImageElement;
+  if (cacheable) {
+    const hit = TEXTURE_PIXELS.get(src as object);
+    if (hit) return hit;
+  }
+  const w = (src as HTMLImageElement).naturalWidth || (src as HTMLCanvasElement).width;
+  const h = (src as HTMLImageElement).naturalHeight || (src as HTMLCanvasElement).height;
+  if (!w || !h) return null;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const x = c.getContext("2d");
+  if (!x) return null;
+  x.drawImage(src, 0, 0);
+  const data = x.getImageData(0, 0, w, h);
+  if (cacheable) TEXTURE_PIXELS.set(src as object, data);
+  return data;
+}
+
+/** 光栅化一个四边形面（两个三角形）到 RGBA/深度缓冲；深度大 = 近。 */
+function rasterizeFace(
+  image: ImageData,
+  zbuf: Float32Array,
+  width: number,
+  height: number,
+  xs: number[],
+  ys: number[],
+  zs: number[],
+  uv: UvRect,
+  mirror: boolean,
+  shade: number,
+  tex: ImageData,
+): void {
+  const [u, v, uw, uh] = uv;
+  const uSign = mirror ? -1 : 1;
+  const uBase = mirror ? u + uw : u;
+  const uvs: readonly (readonly [number, number])[] = [
+    [uBase, v + uh],
+    [uBase + uw * uSign, v + uh],
+    [uBase + uw * uSign, v],
+    [uBase, v],
+  ];
+  for (const [a, b, c] of [
+    [0, 1, 2],
+    [0, 2, 3],
+  ] as const) {
+    rasterizeTriangle(image, zbuf, width, height, xs, ys, zs, uvs, a, b, c, shade, tex);
+  }
+}
+
+function rasterizeTriangle(
+  image: ImageData,
+  zbuf: Float32Array,
+  width: number,
+  height: number,
+  xs: number[],
+  ys: number[],
+  zs: number[],
+  uvs: readonly (readonly [number, number])[],
+  ia: number,
+  ib: number,
+  ic: number,
+  shade: number,
+  tex: ImageData,
+): void {
+  const ax = xs[ia]!;
+  const ay = ys[ia]!;
+  const bx = xs[ib]!;
+  const by = ys[ib]!;
+  const cx = xs[ic]!;
+  const cy = ys[ic]!;
+  const denom = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+  if (Math.abs(denom) < 1e-6) return;
+  const minX = Math.max(0, Math.floor(Math.min(ax, bx, cx)));
+  const maxX = Math.min(width - 1, Math.ceil(Math.max(ax, bx, cx)));
+  const minY = Math.max(0, Math.floor(Math.min(ay, by, cy)));
+  const maxY = Math.min(height - 1, Math.ceil(Math.max(ay, by, cy)));
+  const [ua, va] = uvs[ia]!;
+  const [ub, vb] = uvs[ib]!;
+  const [uc, vc] = uvs[ic]!;
+  for (let y = minY; y <= maxY; y++) {
+    const py = y + 0.5;
+    for (let x = minX; x <= maxX; x++) {
+      const px = x + 0.5;
+      const w0 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / denom;
+      const w1 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / denom;
+      const w2 = 1 - w0 - w1;
+      if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+      const z = w0 * zs[ia]! + w1 * zs[ib]! + w2 * zs[ic]!;
+      const idx = y * width + x;
+      if (z <= zbuf[idx]!) continue;
+      const tx = Math.floor(w0 * ua + w1 * ub + w2 * uc);
+      const ty = Math.floor(w0 * va + w1 * vb + w2 * vc);
+      if (tx < 0 || ty < 0 || tx >= tex.width || ty >= tex.height) continue;
+      const si = (ty * tex.width + tx) * 4;
+      if (tex.data[si + 3]! <= 25) continue;
+      const di = idx * 4;
+      image.data[di] = Math.min(255, tex.data[si]! * shade);
+      image.data[di + 1] = Math.min(255, tex.data[si + 1]! * shade);
+      image.data[di + 2] = Math.min(255, tex.data[si + 2]! * shade);
+      image.data[di + 3] = 255;
+      zbuf[idx] = z;
+    }
+  }
+}
+
 const SKIN_UV = {
   head: [0, 0],
   hat: [32, 0],
@@ -267,6 +423,8 @@ function project(
 interface PaintFace {
   /** 屏幕四角（扁平 [x0,y0,x1,y1,x2,y2,x3,y3]，顺序＝左下、右下、右上、左上） */
   pts: number[];
+  /** 四角深度（与 pts 同序），供 z-buffer 光栅化。 */
+  zs: number[];
   uv: UvRect;
   shade: number;
   depth: number;
@@ -274,6 +432,7 @@ interface PaintFace {
   /** 0 = 第一层（本体），1 = 第二层（帽子/外套/袖腿）；披风/鞘翅面为独立纹理 */
   layer: 0 | 1;
   cape: boolean;
+  grid: readonly [number, number, number, number];
   tex?: CanvasImageSource;
 }
 
@@ -315,6 +474,8 @@ const SUBDIV_STEP = 2;
 interface FacePart {
   readonly corners: readonly (readonly [number, number, number])[];
   readonly uv: UvRect;
+  /** 细分网格 [n,m,列,行]；用于只扩展内部边、遮住裁剪缝。 */
+  readonly grid: readonly [number, number, number, number];
 }
 
 /** 把面按体素步长切成 n×m 小块；未超过步长则原样返回。角点双线性插值（顺序同 FaceDef：
@@ -328,7 +489,9 @@ function subdivideFace(f: FaceDef, step: number): FacePart[] {
   const lenV = Math.hypot(d[0] - a[0], d[1] - a[1], d[2] - a[2]);
   const n = Math.max(1, Math.ceil(lenU / step - 1e-6));
   const m = Math.max(1, Math.ceil(lenV / step - 1e-6));
-  if (n === 1 && m === 1) return [{ corners: f.corners, uv: f.uv }];
+  if (n === 1 && m === 1) {
+    return [{ corners: f.corners, uv: f.uv, grid: [1, 1, 0, 0] }];
+  }
   const [u, v, uw, uh] = f.uv;
   const at = (s: number, t: number): readonly [number, number, number] => [
     a[0] * (1 - s) * (1 - t) + b[0] * s * (1 - t) + c[0] * s * t + d[0] * (1 - s) * t,
@@ -345,6 +508,7 @@ function subdivideFace(f: FaceDef, step: number): FacePart[] {
       parts.push({
         corners: [at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)],
         uv: [u + (uw * i) / n, v + (uh * (m - j - 1)) / m, uw / n, uh / m],
+        grid: [n, m, i, j],
       });
     }
   }
@@ -426,8 +590,13 @@ function paint(
         if (nDepth <= 1e-4) continue;
       }
 
-      for (const part of subdivideFace(f, b.noSubdiv ? Number.POSITIVE_INFINITY : SUBDIV_STEP)) {
+      // z-buffer 全身路径不需要用细分近似深度；细分只留给 Canvas 回退（头像 bbox）。
+      const subdivStep = b.noSubdiv || fit === "fixed"
+        ? Number.POSITIVE_INFINITY
+        : SUBDIV_STEP;
+      for (const part of subdivideFace(f, subdivStep)) {
         const pts: number[] = [];
+        const zs: number[] = [];
         let depthSum = 0;
         // 四肢/头部姿态：顶点绕支点依次做 X（前后摆）→ Y（转头）→ Z（外张）旋转
         for (const c of part.corners) {
@@ -454,6 +623,7 @@ function paint(
           }
           const [sx, sy, depth] = project(wx, wy, wz, cosY, sinY, cosP, sinP);
           pts.push(sx, sy);
+          zs.push(depth);
           depthSum += depth;
           if (sx < minX) minX = sx;
           if (sx > maxX) maxX = sx;
@@ -462,12 +632,14 @@ function paint(
         }
         faces.push({
           pts,
+          zs,
           uv: part.uv,
           shade: shadeFor(f.normal),
           depth: depthSum / part.corners.length,
           mirror: b.mirror === true,
           layer: b.inflate > 0 ? 1 : 0,
           cape: b.cape === true,
+          grid: part.grid,
           tex: b.cape ? opts.capeTex : undefined,
         });
       }
@@ -510,8 +682,25 @@ function paint(
   };
   const hardenedSkin = harden(skin);
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.imageSmoothingEnabled = false;
+  // 全身预览用软件 z-buffer：逐像素深度测试替代画家排序，消除斜视/换肤时的面块消失。
+  const useZBuffer = fit === "fixed";
+  const zImage = useZBuffer ? ctx.createImageData(canvas.width, canvas.height) : null;
+  const zBuffer = zImage
+    ? new Float32Array(canvas.width * canvas.height).fill(-Infinity)
+    : null;
+  const zTextures = new Map<CanvasImageSource, ImageData>();
+  const zTexture = (src: CanvasImageSource): ImageData | null => {
+    const hit = zTextures.get(src);
+    if (hit) return hit;
+    const data = texturePixels(src);
+    if (data) zTextures.set(src, data);
+    return data;
+  };
+
+  if (!useZBuffer) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+  }
 
   for (const f of faces) {
     const [x0, y0, x1, y1, x2, y2, x3, y3] = f.pts;
@@ -536,12 +725,33 @@ function paint(
       hits.push({ uv: f.uv, m: [m11, m12, m21, m22, tx, ty], layer: f.layer, cape: f.cape });
     }
 
+    if (zImage && zBuffer && useZBuffer) {
+      const tex = zTexture(f.tex ? harden(f.tex) : hardenedSkin);
+      if (tex) {
+        rasterizeFace(
+          zImage,
+          zBuffer,
+          canvas.width,
+          canvas.height,
+          sxp,
+          syp,
+          f.zs,
+          f.uv,
+          f.mirror,
+          f.shade,
+          tex,
+        );
+      }
+      continue;
+    }
+
     ctx.save();
+    const clip = expandedClip(sxp, syp, f.grid);
     ctx.beginPath();
-    ctx.moveTo(sxp[0]!, syp[0]!);
-    ctx.lineTo(sxp[1]!, syp[1]!);
-    ctx.lineTo(sxp[2]!, syp[2]!);
-    ctx.lineTo(sxp[3]!, syp[3]!);
+    ctx.moveTo(clip.xs[0]!, clip.ys[0]!);
+    ctx.lineTo(clip.xs[1]!, clip.ys[1]!);
+    ctx.lineTo(clip.xs[2]!, clip.ys[2]!);
+    ctx.lineTo(clip.xs[3]!, clip.ys[3]!);
     ctx.closePath();
     ctx.clip();
     ctx.transform(m11, m12, m21, m22, tx, ty);
@@ -550,6 +760,7 @@ function paint(
     ctx.drawImage(f.tex ? harden(f.tex) : hardenedSkin, 0, 0);
     ctx.restore();
   }
+  if (zImage) ctx.putImageData(zImage, 0, 0);
   return true;
 }
 

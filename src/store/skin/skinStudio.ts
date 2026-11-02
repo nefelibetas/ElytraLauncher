@@ -35,9 +35,10 @@ export interface StudioCape {
   texture: string;
 }
 
-/** 俯仰角绝对范围：±90° 可转到正顶面 / 正底面（正交投影下即为该面的平面正视图）。 */
-const PITCH_MIN = -90;
-const PITCH_MAX = 90;
+/** 俯仰角范围：限制在 ±60°，避免拖到正顶/正底后模型只剩上/下面、看起来像“躺下”。
+ *  正常 3/4 视角和俯视检查都在此范围内。 */
+const PITCH_MIN = -60;
+const PITCH_MAX = 60;
 /** 拖动灵敏度（度/像素）。yaw 符号与 viewer 相机配套（左拖 → 模型左转）；pitch 正号（下拖 → 视角下移）。 */
 const YAW_SENS = -0.6;
 const PITCH_SENS = 0.5;
@@ -170,9 +171,12 @@ export const skinStudio = reactive({
     this.pitch = DEFAULT_VIEW_PITCH;
     this.zoom = 1;
     this.phase = "loading";
-    await Promise.allSettled([this.loadOfficial(), this.loadSkins(), this.loadCapes()]);
+    // 披风贴图冷启动要访问 textures.minecraft.net（1~3s）；首帧只等皮肤主体，披风后台补齐，
+    // 否则 currentSkin 已就绪但画布要等披风解码，加载态消失后空白数秒。
+    await Promise.allSettled([this.loadOfficial(), this.loadSkins()]);
     this.phase = "ready";
     void this.cacheCurrent(); // 自动缓存当前皮肤（后台进行，不阻塞首帧）
+    void this.loadCapes();
   },
 
   /** 拉取账号当前皮肤（正版 / 第三方 / 离线各自来源）；失败回退内置 Steve 保证预览可用。 */
@@ -251,9 +255,10 @@ export const skinStudio = reactive({
 
   async refresh() {
     this.phase = "loading";
-    await Promise.allSettled([this.loadOfficial(), this.loadSkins(), this.loadCapes()]);
+    await Promise.allSettled([this.loadOfficial(), this.loadSkins()]);
     this.phase = "ready";
     void this.cacheCurrent();
+    void this.loadCapes();
     showToast(t("skin.studio.refreshed"));
   },
 

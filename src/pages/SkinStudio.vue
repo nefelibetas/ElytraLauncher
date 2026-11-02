@@ -17,6 +17,8 @@ const router = useRouter();
 const { t } = useI18n();
 
 const stageCanvas = ref<HTMLCanvasElement | null>(null);
+/** 首帧是否已真正画到画布；加载态据此保持，避免 currentSkin 先到而画布空白。 */
+const stageDrawn = ref(false);
 let stageImg: HTMLImageElement | null = null;
 let stageCape: HTMLImageElement | null = null;
 /** 动画帧句柄（0 = 未运行）。 */
@@ -38,7 +40,7 @@ function drawStage(): void {
     el.width = w;
     el.height = h;
   }
-  drawFullCanvas(el, stageImg, {
+  if (drawFullCanvas(el, stageImg, {
     yaw: skinStudio.yaw,
     pitch: skinStudio.pitch,
     slim: skinStudio.currentSlim,
@@ -47,7 +49,9 @@ function drawStage(): void {
     phase: (performance.now() - animStart) / 1000,
     fill: BASE_FILL * skinStudio.zoom,
     capeTex: stageCape ?? undefined,
-  });
+  })) {
+    stageDrawn.value = true;
+  }
 }
 
 function onWheel(e: WheelEvent): void {
@@ -139,6 +143,7 @@ async function refreshCape(): Promise<void> {
 onMounted(async () => {
   // 进入即切刷新态（store 为模块级单例，否则会先闪上次会话缓存）
   skinStudio.phase = "loading";
+  stageDrawn.value = false;
   // 账号列表是异步 IPC：未就绪就判定来源会把正版账号误判为离线（store 的 loadOfficial 同样先 await）
   await ensureAuthReady();
   if (!skinStudio.premium) {
@@ -161,6 +166,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animRaf);
   animRaf = 0;
   stageReady = false;
+  stageDrawn.value = false;
   stageImg = null;
   stageCape = null;
   skinStudio.dispose();
@@ -357,9 +363,9 @@ function savePickedSkin() {
         @touchmove="onTouchMove"
         @touchend="onTouchEnd"
       >
-        <canvas v-show="!!skinStudio.currentSkin" ref="stageCanvas" class="frame"></canvas>
+        <canvas v-show="stageDrawn && !!skinStudio.currentSkin" ref="stageCanvas" class="frame"></canvas>
         <LoadingSpinner
-          v-if="!skinStudio.currentSkin && skinStudio.phase === 'loading'"
+          v-if="!stageDrawn && (!!skinStudio.currentSkin || skinStudio.phase === 'loading')"
           :text="t('skin.studio.loadingPreview')"
         />
         <EmptyState v-else-if="!skinStudio.currentSkin">
