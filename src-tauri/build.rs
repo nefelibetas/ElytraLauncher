@@ -92,7 +92,7 @@ fn env_tool_set(name: &str) -> bool {
     let Ok(target) = env::var("TARGET") else {
         return false;
     };
-    let underscored = target.replace('-', "_").replace('.', "_");
+    let underscored = target.replace(['-', '.'], "_");
     env::var_os(format!("{name}_{target}")).is_some()
         || env::var_os(format!("{name}_{underscored}")).is_some()
 }
