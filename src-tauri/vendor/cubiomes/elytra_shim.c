@@ -184,6 +184,65 @@ static void candidate_push(ElytraCandidate *best, int *count, int cap, int x,
     }
 }
 
+static int int_abs(int v)
+{
+    return v < 0 ? -v : v;
+}
+
+// 当前 K 个候选中最远的距离平方；未满 K 时返回 0（不剪枝）。
+static int64_t worst_candidate_dist(const ElytraCandidate *best, int count)
+{
+    int64_t worst = 0;
+    for (int i = 0; i < count; i++)
+        if (best[i].dist > worst)
+            worst = best[i].dist;
+    return worst;
+}
+
+// 下一环的最小可能距离平方超过当前第 K 名即停止；lower_bound 为保守下界。
+static int ring_can_prune(const ElytraCandidate *best, int count, int cap,
+                          int64_t lower_bound)
+{
+    if (count < cap || lower_bound <= 0)
+        return 0;
+    return lower_bound * lower_bound > worst_candidate_dist(best, count);
+}
+
+static void push_structure_candidate(int type, int mc, uint64_t seed,
+                                     Generator *g, int center_x, int center_z,
+                                     int64_t radius_sq, ElytraCandidate *best,
+                                     int *count, int cap, int gx, int gz)
+{
+    Pos pos;
+    if (!getStructurePos(type, mc, seed, gx, gz, &pos))
+        return;
+    int64_t dx = (int64_t) pos.x - center_x;
+    int64_t dz = (int64_t) pos.z - center_z;
+    int64_t dist = dx * dx + dz * dz;
+    if (dist > radius_sq)
+        return;
+    if (!isViableStructurePos(type, g, pos.x, pos.z, 0))
+        return;
+    if (mc >= MC_1_18 &&
+        !isViableStructureTerrain(type, g, pos.x, pos.z))
+        return;
+    candidate_push(best, count, cap, pos.x, pos.z, dist);
+}
+
+static void push_slime_candidate(uint64_t seed, int cx, int cz, int center_x,
+                                 int center_z, int64_t radius_sq,
+                                 ElytraCandidate *best, int *count, int cap)
+{
+    if (!isSlimeChunk(seed, cx, cz))
+        return;
+    int64_t bx = (int64_t) cx * 16 + 8 - center_x;
+    int64_t bz = (int64_t) cz * 16 + 8 - center_z;
+    int64_t dist = bx * bx + bz * bz;
+    if (dist > radius_sq)
+        return;
+    candidate_push(best, count, cap, cx, cz, dist);
+}
+
 int elytra_find_structures(void *gen, int mc, uint64_t seed, int type,
                            int center_x, int center_z, int radius_blocks,
                            ElytraStructure *out, int cap)
@@ -206,30 +265,59 @@ int elytra_find_structures(void *gen, int mc, uint64_t seed, int type,
     int r1x = floordiv(c1x, sc.regionSize);
     int r0z = floordiv(c0z, sc.regionSize);
     int r1z = floordiv(c1z, sc.regionSize);
+    int cell_blocks = sc.regionSize * 16;
+    int ccx = floordiv(center_x, cell_blocks);
+    int ccz = floordiv(center_z, cell_blocks);
+    int max_ring = int_abs(ccx - r0x);
+    int other = int_abs(ccx - r1x);
+    if (other > max_ring)
+        max_ring = other;
+    other = int_abs(ccz - r0z);
+    if (other > max_ring)
+        max_ring = other;
+    other = int_abs(ccz - r1z);
+    if (other > max_ring)
+        max_ring = other;
     int best_cap = cap > 64 ? 64 : cap;
     ElytraCandidate best[64];
     int count = 0;
     int64_t radius_sq = (int64_t) radius_blocks * radius_blocks;
     Generator *g = (Generator *) gen;
-    for (int gx = r0x; gx <= r1x; gx++)
+    for (int ring = 0; ring <= max_ring; ring++)
     {
-        for (int gz = r0z; gz <= r1z; gz++)
+        for (int gx = ccx - ring; gx <= ccx + ring; gx++)
         {
-            Pos pos;
-            if (!getStructurePos(type, mc, seed, gx, gz, &pos))
+            if (gx < r0x || gx > r1x)
                 continue;
-            int64_t dx = (int64_t) pos.x - center_x;
-            int64_t dz = (int64_t) pos.z - center_z;
-            int64_t dist = dx * dx + dz * dz;
-            if (dist > radius_sq)
-                continue;
-            if (!isViableStructurePos(type, g, pos.x, pos.z, 0))
-                continue;
-            if (mc >= MC_1_18 &&
-                !isViableStructureTerrain(type, g, pos.x, pos.z))
-                continue;
-            candidate_push(best, &count, best_cap, pos.x, pos.z, dist);
+            if (int_abs(gx - ccx) == ring)
+            {
+                // 上/下两条整边（包含四角）。
+                for (int gz = ccz - ring; gz <= ccz + ring; gz++)
+                {
+                    if (gz < r0z || gz > r1z)
+                        continue;
+                    push_structure_candidate(type, mc, seed, g, center_x,
+                                             center_z, radius_sq, best, &count,
+                                             best_cap, gx, gz);
+                }
+            }
+            else
+            {
+                // 中间列只取环带上下两点，避免再次遍历环内区域。
+                if (ccz - ring >= r0z && ccz - ring <= r1z)
+                    push_structure_candidate(type, mc, seed, g, center_x,
+                                             center_z, radius_sq, best, &count,
+                                             best_cap, gx, ccz - ring);
+                if (ccz + ring >= r0z && ccz + ring <= r1z)
+                    push_structure_candidate(type, mc, seed, g, center_x,
+                                             center_z, radius_sq, best, &count,
+                                             best_cap, gx, ccz + ring);
+            }
         }
+        // 下一环区域离中心至少 ring*cell_blocks（中心在中心 region 内）；超过第 K 名即停。
+        if (ring_can_prune(best, count, best_cap,
+                           (int64_t) ring * cell_blocks))
+            break;
     }
     qsort(best, count, sizeof(ElytraCandidate), candidate_cmp);
     for (int i = 0; i < count; i++)
@@ -285,19 +373,33 @@ int elytra_find_slime_chunks(uint64_t seed, int center_x, int center_z,
     ElytraCandidate best[64];
     int count = 0;
     int64_t radius_sq = (int64_t) radius_blocks * radius_blocks;
-    for (int dx = -r; dx <= r; dx++)
+    for (int ring = 0; ring <= r; ring++)
     {
-        for (int dz = -r; dz <= r; dz++)
+        for (int dx = -ring; dx <= ring; dx++)
         {
-            if (!isSlimeChunk(seed, cx + dx, cz + dz))
-                continue;
-            int64_t bx = (int64_t) (cx + dx) * 16 + 8 - center_x;
-            int64_t bz = (int64_t) (cz + dz) * 16 + 8 - center_z;
-            int64_t dist = bx * bx + bz * bz;
-            if (dist > radius_sq)
-                continue;
-            candidate_push(best, &count, best_cap, cx + dx, cz + dz, dist);
+            if (int_abs(dx) == ring)
+            {
+                // 上/下两条整边（包含四角）。
+                for (int dz = -ring; dz <= ring; dz++)
+                    push_slime_candidate(seed, cx + dx, cz + dz, center_x,
+                                         center_z, radius_sq, best, &count,
+                                         best_cap);
+            }
+            else
+            {
+                // 中间列只取环带上下两点，避免再次遍历环内区块。
+                push_slime_candidate(seed, cx + dx, cz - ring, center_x,
+                                     center_z, radius_sq, best, &count,
+                                     best_cap);
+                push_slime_candidate(seed, cx + dx, cz + ring, center_x,
+                                     center_z, radius_sq, best, &count,
+                                     best_cap);
+            }
         }
+        // 下一环区块到中心至少 16*(ring+1)-15 格；超过第 K 名即停。
+        if (ring_can_prune(best, count, best_cap,
+                           (int64_t) 16 * (ring + 1) - 15))
+            break;
     }
     qsort(best, count, sizeof(ElytraCandidate), candidate_cmp);
     for (int i = 0; i < count; i++)

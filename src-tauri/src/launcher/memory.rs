@@ -156,11 +156,12 @@ fn meminfo_kb(s: &str) -> u64 {
         .unwrap_or(0)
 }
 
-/// 自动分配公式（纯函数，便于测试）：剩余内存 × 比例，封顶 85%，下限 2GB。
+/// 自动分配公式（纯函数，便于测试）：目标 = max(2GB, 剩余×比例)，再压 85% 上限；小内存时上限优先。
 fn auto_alloc_memory(available_mb: u64, mods: u32) -> u32 {
     let ratio = 0.60 + 0.003 * (mods.min(60) as f64);
-    let alloc = (available_mb as f64 * ratio).min(available_mb as f64 * 0.85);
-    alloc.max(2048.0) as u32
+    let target = (available_mb as f64 * ratio).max(2048.0);
+    // 先取目标再压 85% 上限：下限不能突破可用内存的 85%（小内存机尤其重要）。
+    target.min(available_mb as f64 * 0.85) as u32
 }
 
 #[cfg(test)]
@@ -202,5 +203,13 @@ mod tests {
         assert_eq!(auto_alloc_memory(2560, 0), 2048);
         assert_eq!(auto_alloc_memory(2560, 30), 2048); // 66% 仍低于下限
         assert_eq!(auto_alloc_memory(5120, 0), (5120.0 * 0.60) as u32);
+    }
+
+    #[test]
+    fn test_auto_memory_floor_never_exceeds_85_percent() {
+        // 小内存机：2GB 下限不能压过 85% 可用上限。
+        assert_eq!(auto_alloc_memory(1500, 0), (1500.0 * 0.85) as u32);
+        assert_eq!(auto_alloc_memory(2000, 60), (2000.0 * 0.85) as u32);
+        assert!(auto_alloc_memory(1500, 0) < 2048);
     }
 }

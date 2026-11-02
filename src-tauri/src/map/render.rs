@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use fastanvil::Rgba;
 
@@ -38,6 +39,19 @@ const SHADE_LIGHT: [f32; 3] = [0.45, 1.0, 0.36];
 const SHADE_STRENGTH: f32 = 1.35;
 const SHADE_MIN: f32 = 0.68;
 const SHADE_MAX: f32 = 1.32;
+
+/// 单位化光向量：`shade_factor` 每像素调用，避免重复归一化常量光。
+static SHADE_LIGHT_UNIT: LazyLock<[f32; 3]> = LazyLock::new(|| {
+    let len = (SHADE_LIGHT[0] * SHADE_LIGHT[0]
+        + SHADE_LIGHT[1] * SHADE_LIGHT[1]
+        + SHADE_LIGHT[2] * SHADE_LIGHT[2])
+        .sqrt();
+    [
+        SHADE_LIGHT[0] / len,
+        SHADE_LIGHT[1] / len,
+        SHADE_LIGHT[2] / len,
+    ]
+});
 
 /// 水面浅深分层：水深 ≥ SHALLOW_BLOCKS 视为深水（基底色），更浅向亮色过渡。
 const SHALLOW_BLOCKS: f32 = 9.0;
@@ -91,13 +105,10 @@ fn shade_factor(heights: &[i16], size: usize, x: usize, z: usize) -> f32 {
     let nx = -gx;
     let nz = -gz;
     let len = (nx * nx + 1.0 + nz * nz).sqrt().max(0.001);
-    // 光源入射单位化后的平面投影基准 d0：平地 d = d0 → f = 1
-    let light_len = (SHADE_LIGHT[0] * SHADE_LIGHT[0]
-        + SHADE_LIGHT[1] * SHADE_LIGHT[1]
-        + SHADE_LIGHT[2] * SHADE_LIGHT[2])
-        .sqrt();
-    let d = (nx * SHADE_LIGHT[0] + SHADE_LIGHT[1] + nz * SHADE_LIGHT[2]) / (len * light_len);
-    let d0 = SHADE_LIGHT[1] / light_len;
+    // 光源单位化后：n·u / |n|；平地 = u_y，故 f = 1。
+    let u = *SHADE_LIGHT_UNIT;
+    let d = (nx * u[0] + u[1] + nz * u[2]) / len;
+    let d0 = u[1];
     (1.0 + SHADE_STRENGTH * (d - d0)).clamp(SHADE_MIN, SHADE_MAX)
 }
 
@@ -483,12 +494,16 @@ fn render_top_down(
     }
     for z in 0..16usize {
         for x in 0..16usize {
-            let mut y = top_y;
+            // 高度场已给出首个非空气列；从该高度起扫，避免从 max_y 穿过整段空气。
+            let start_y = view
+                .heights
+                .map(|h| h[(view.hz0 + z) * 512 + view.hx0 + x] as isize)
+                .unwrap_or(top_y)
+                .clamp(y_range.start, top_y);
+            let mut y = start_y;
             let mut colour: Rgba = [0, 0, 0, 0];
-            // 表面方块名与深度（水面分层用）
-            let mut surface_name: Option<String> = None;
-            let mut surface_biome: Option<fastanvil::biome::Biome> = None;
-            let mut surface_y = y;
+            let mut surface_seen = false;
+            let mut water_depth: Option<i32> = None;
             while colour[3] != 255 && y >= y_range.start {
                 let Some(block) = chunk.block(x, y, z) else {
                     y -= 1;
@@ -500,38 +515,39 @@ fn render_top_down(
                     continue;
                 }
                 let biome = chunk.biome(x, y, z);
+                if !surface_seen {
+                    surface_seen = true;
+                    if name == "minecraft:water" || name == "minecraft:bubble_column" {
+                        // 水面按列深浅分层；最终色只看水柱深度，无需再往下混合方块。
+                        let mut depth = 1;
+                        for dy in (y_range.start..y).rev() {
+                            let Some(b) = chunk.block(x, dy, z) else {
+                                break;
+                            };
+                            let bn = b.name();
+                            if bn == "minecraft:water" || bn == "minecraft:bubble_column" {
+                                depth += 1;
+                            } else {
+                                break;
+                            }
+                            if depth > 40 {
+                                break;
+                            }
+                        }
+                        water_depth = Some(depth);
+                        colour = grade(water_depth_color(pal.water(biome), depth));
+                        break;
+                    }
+                }
                 let c = pal.pick_with(&block, biome, overlay);
                 colour = if c[3] == 255 { c } else { blend(c, colour) };
-                if surface_name.is_none() {
-                    surface_name = Some(name.to_string());
-                    surface_biome = biome;
-                    surface_y = y;
-                }
                 if colour[3] == 255 {
                     break;
                 }
                 y -= 1;
             }
-            // 水面：按列深浅分层（浅水提亮）
-            if let Some(name) = &surface_name {
-                if name == "minecraft:water" || name == "minecraft:bubble_column" {
-                    let mut depth = 1;
-                    for dy in (y_range.start..surface_y).rev() {
-                        let Some(b) = chunk.block(x, dy, z) else {
-                            break;
-                        };
-                        let bn = b.name();
-                        if bn == "minecraft:water" || bn == "minecraft:bubble_column" {
-                            depth += 1;
-                        } else {
-                            break;
-                        }
-                        if depth > 40 {
-                            break;
-                        }
-                    }
-                    colour = grade(water_depth_color(pal.water(surface_biome), depth));
-                } else if let Some(heights) = view.heights {
+            if water_depth.is_none() {
+                if let Some(heights) = view.heights {
                     if colour[3] != 0 {
                         // 坡面光影（水面已走分层，陆地/植被乘亮度因子）
                         let f = shade_factor(heights, 512, view.hx0 + x, view.hz0 + z);
