@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn main() {
     tauri_build::build();
@@ -35,21 +35,25 @@ fn main() {
 /// Windows MSVC 目标用 clang-cl（上游不支持 cl.exe 的 VLA）；LLVM 已是 kcp-sys 构建依赖。
 fn build_cubiomes() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/cubiomes");
-    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") && env::var_os("CC").is_none() {
-        let Some(clang) = find_clang_cl() else {
+    let mut build = cc::Build::new();
+    build.include(&root);
+
+    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") && !env_tool_set("CC") {
+        let clang = find_clang_cl().unwrap_or_else(|| {
             panic!(
                 "种子预览需要 clang-cl 编译 cubiomes：请安装 LLVM 并确保 clang-cl.exe 可用，或设置 CC/AR"
-            );
-        };
-        env::set_var("CC", &clang);
-        let llvm_lib = clang.with_file_name("llvm-lib.exe");
-        if llvm_lib.is_file() {
-            env::set_var("AR", llvm_lib);
+            )
+        });
+        build.compiler(&clang);
+
+        // 用户显式设置 AR 时不要覆盖
+        if !env_tool_set("AR") {
+            if let Some(ar) = find_llvm_lib() {
+                build.archiver(ar);
+            }
         }
     }
 
-    let mut build = cc::Build::new();
-    build.include(&root);
     for file in [
         "biomenoise.c",
         "biomes.c",
@@ -80,16 +84,93 @@ fn build_cubiomes() {
     println!("cargo:rerun-if-changed={}", root.display());
 }
 
-fn find_clang_cl() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Some(path) = env::var_os("LIBCLANG_PATH") {
-        candidates.push(Path::new(&path).join("clang-cl.exe"));
+/// 是否由用户显式指定了工具：兼容 cc 的 `<var>_<target>`、`<var>_<target_underscored>`、`TARGET_<var>`、`<var>`。
+fn env_tool_set(name: &str) -> bool {
+    if env::var_os(name).is_some() || env::var_os(format!("TARGET_{name}")).is_some() {
+        return true;
     }
-    candidates.push(PathBuf::from(r"C:\Program Files\LLVM\bin\clang-cl.exe"));
-    if let Some(paths) = env::var_os("PATH") {
-        for dir in env::split_paths(&paths) {
-            candidates.push(dir.join("clang-cl.exe"));
+    let Ok(target) = env::var("TARGET") else {
+        return false;
+    };
+    let underscored = target.replace('-', "_").replace('.', "_");
+    env::var_os(format!("{name}_{target}")).is_some()
+        || env::var_os(format!("{name}_{underscored}")).is_some()
+}
+
+fn llvm_bin_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    for var in ["LIBCLANG_PATH", "LLVM_HOME", "LLVM_PATH"] {
+        if let Some(v) = env::var_os(var) {
+            let p = PathBuf::from(v);
+            dirs.push(p.clone());
+            dirs.push(p.join("bin"));
         }
     }
+
+    #[cfg(windows)]
+    {
+        for var in ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"] {
+            if let Some(v) = env::var_os(var) {
+                dirs.push(PathBuf::from(v).join("LLVM").join("bin"));
+            }
+        }
+        if let Some(v) = env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(v).join("Programs").join("LLVM").join("bin"));
+        }
+        dirs.push(PathBuf::from(r"C:\Program Files\LLVM\bin"));
+    }
+
+    #[cfg(not(windows))]
+    {
+        dirs.extend(
+            [
+                "/usr/bin",
+                "/usr/local/bin",
+                "/opt/homebrew/opt/llvm/bin",
+                "/usr/local/opt/llvm/bin",
+            ]
+            .into_iter()
+            .map(PathBuf::from),
+        );
+    }
+
+    dirs
+}
+
+fn find_tool(names: &[&str], dirs: &[PathBuf]) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    for dir in dirs {
+        for name in names {
+            candidates.push(dir.join(name));
+        }
+    }
+
+    if let Some(paths) = env::var_os("PATH") {
+        for dir in env::split_paths(&paths) {
+            for name in names {
+                candidates.push(dir.join(name));
+            }
+        }
+    }
+
     candidates.into_iter().find(|p| p.is_file())
+}
+
+fn find_clang_cl() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["clang-cl.exe", "clang-cl"]
+    } else {
+        &["clang-cl"]
+    };
+    find_tool(names, &llvm_bin_dirs())
+}
+
+fn find_llvm_lib() -> Option<PathBuf> {
+    let names: &[&str] = if cfg!(windows) {
+        &["llvm-lib.exe", "llvm-lib"]
+    } else {
+        &["llvm-lib"]
+    };
+    find_tool(names, &llvm_bin_dirs())
 }
