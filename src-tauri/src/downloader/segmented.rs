@@ -1,9 +1,9 @@
-//! 分段（多线程）下载：单文件按 HTTP Range 切段并发写入同一文件，支持断点续传。
-//! 仅当服务端返回 206 且总长可解析、总长 ≥ `MIN_SEGMENT_BYTES`、URL 非镜像源时启用，否则回退单连接 `fetch_with_c`；内容写 `<dest>.part`、元数据写 `<dest>.part.json`，全部段成功后 `rename` 到 `dest` 并删元数据，暂停/失败保留二者供续传。
+//! 分段（多线程）下载：1MB 工作块 + 工作窃取，单文件按 HTTP Range 并发写入同一文件，支持断点续传。
+//! 仅当服务端返回 206 且总长可解析、总长 ≥ `CHUNK_BYTES`、URL 非镜像源时启用，否则回退单连接 `fetch_with_c`；内容写 `<dest>.part`、元数据写 `<dest>.part.json`，全部块成功后 `rename` 到 `dest` 并删元数据。暂停/失败保留二者供续传。
 
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -16,9 +16,11 @@ use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
 
 use super::fetcher::{self, FetchError};
 
-/// 每段最小字节数：低于此值不分段（段过碎时开销大于收益）。
-const MIN_SEGMENT_BYTES: u64 = 1024 * 1024;
-/// 段数硬上限：调用方配置再大也不超过（防连接数爆炸）。
+/// 工作窃取块大小：至少 1MB；超大文件按最多 `MAX_CHUNKS` 块反推块大小，避免请求数膨胀。
+const CHUNK_BYTES: u64 = 1024 * 1024;
+/// 单文件工作块数上限：1GB 约 128 块（8MB/块），兼顾尾部均衡与请求开销。
+const MAX_CHUNKS: usize = 128;
+/// worker 数硬上限：调用方配置再大也不超过（防连接数爆炸）。
 const MAX_SEGMENTS: usize = 32;
 /// 单文件下载时间预算（秒）：段数按此推导——单流吞吐（近海 CDN 受拥塞窗口×RTT 限制，
 /// 实测 ~0.47MB/s 级）除该预算即所需并行度；25MB client.jar 约 5 段、50MB 约 8 段。
@@ -30,9 +32,9 @@ const OFFICIAL_SINGLE_STREAM_BPS: u64 = 512 * 1024;
 /// 限流，但避免爆发连接数逼近我们对官方的经验并发上限）。
 const MAX_FILE_SEGMENTS: usize = 8;
 
-/// 官方大文件的请求段数：`ceil(total / (预算时间 × 单流吞吐))`，随文件大小生长
-/// （返回 `< 2` 表示不值得分段，调用方回退单流）；实际切分仍由 `segment_count`
-/// 按 `MIN_SEGMENT_BYTES` 二次收敛。
+/// 官方大文件的请求 worker 数：`ceil(total / (预算时间 × 单流吞吐))`，随文件大小生长
+/// （返回 `< 2` 表示不值得分段，调用方回退单流）；实际并发数仍由 `segment_count`
+/// 按 `CHUNK_BYTES` 二次收敛。
 pub(crate) fn requested_segment_count(total: u64) -> usize {
     let budget_bytes = TARGET_DOWNLOAD_SECS.saturating_mul(OFFICIAL_SINGLE_STREAM_BPS);
     let k = (total as f64 / budget_bytes as f64).ceil() as usize;
@@ -48,7 +50,7 @@ pub struct SegmentedRequest<'a> {
     pub url: &'a str,
     /// 最终落地路径（分段中间产物为其 `.part` / `.part.json` 兄弟文件）。
     pub dest: &'a Path,
-    /// 期望并发段数；实际按总长收敛（每段 ≥ [`MIN_SEGMENT_BYTES`]，上限 [`MAX_SEGMENTS`]）。
+    /// 期望并发 worker 数；实际 worker 按总长收敛（上限 [`MAX_SEGMENTS`]），工作块固定 [`CHUNK_BYTES`]。
     pub segments: usize,
     /// 断点续传：读 `<dest>.part.json` 跳过/接续已完成部分（URL/总长/切分不一致时忽略）。
     pub resume: bool,
@@ -64,11 +66,11 @@ pub struct SegmentedOutcome {
     pub speed: u64,
     /// 是否真正走了 Range 分段（false = 回退单连接）。
     pub ranged: bool,
-    /// 实际并发段数（回退时为 1）。
+    /// 实际并发 worker 数（回退时为 1）。
     pub segments: usize,
 }
 
-/// 分段中间产物位图（`.part.json`）：`progress[i]` 为第 i 段已写入的字节数。
+/// 分段中间产物位图（`.part.json`）：`progress[i]` 为第 i 个工作块已写入的字节数。
 #[derive(Serialize, Deserialize)]
 struct PartMeta {
     url: String,
@@ -77,7 +79,7 @@ struct PartMeta {
     progress: Vec<u64>,
 }
 
-/// 分段下载入口：探测 → 分段并发 → 合并；不可分段时回退单连接。
+/// 分段下载入口：探测 → 工作窃取并发 → 合并；不可分段时回退单连接。
 pub async fn download_segmented<F>(
     req: SegmentedRequest<'_>,
     progress_cb: Option<F>,
@@ -145,7 +147,7 @@ pub(crate) struct RangeTransfer<'a> {
     pub cancel: Option<&'a AtomicBool>,
 }
 
-/// 核心分段传输：`total`/`count` 由调用方预探测给出，各段 `Range` 并发直写 `<dest>.part`
+/// 核心分段传输：`total`/`count` 由调用方预探测给出，worker 领取块后 `Range` 直写 `<dest>.part`
 /// 并汇入位图，全部完成后 rename 到 dest；不持 path_lock（调用方负责互斥——fetch 核心分支
 /// 的 batch worker 已持锁，download_segmented 自持；嵌套占用同路径会自旋死锁）。
 pub(crate) async fn transfer_with_ranges(
@@ -162,7 +164,7 @@ pub(crate) async fn transfer_with_ranges(
 ) -> Result<SegmentedOutcome, FetchError> {
     let started = Instant::now();
 
-    let ranges = segment_ranges(total, count);
+    let chunks = total.div_ceil(chunk_size(total)) as usize;
     let (part, meta_path) = partial_paths(dest);
     if let Some(parent) = dest.parent() {
         tokio::fs::create_dir_all(parent)
@@ -170,17 +172,21 @@ pub(crate) async fn transfer_with_ranges(
             .map_err(|e| FetchError::Io(format!("创建目录失败\n{e}")))?;
     }
 
-    // 仅在 URL / 总长 / 划分数完全一致时才复用旧位图
-    let mut progress = vec![0u64; count];
+    // 仅在 URL / 总长 / 块数完全一致时才复用旧位图；旧版本按 worker 数存的位图会因块数不同作废。
+    let mut progress = vec![0u64; chunks];
     if resume {
         if let Some(meta) = read_meta(&meta_path) {
-            if meta.url == url && meta.total == total && meta.segments == count {
+            if meta.url == url
+                && meta.total == total
+                && meta.segments == chunks
+                && meta.progress.len() == chunks
+            {
                 progress = meta.progress;
             }
         }
     }
 
-    // 预分配到总长：各段 seek 到自身偏移直写，无需拼接
+    // 预分配到总长：各块 seek 到自身偏移直写，无需拼接
     {
         let file = tokio::fs::OpenOptions::new()
             .create(true)
@@ -200,30 +206,38 @@ pub(crate) async fn transfer_with_ranges(
     let counter = Arc::new(AtomicU64::new(done_base));
     let pace = Arc::new(Pace::new(done_base));
     let writer = PartWriter {
-        slots: Mutex::new(progress.clone()),
+        slots: Mutex::new(progress),
         path: meta_path.clone(),
         url: url.to_string(),
         total,
-        segments: count,
+        segments: chunks,
     };
 
-    let jobs = ranges
-        .iter()
-        .enumerate()
-        .filter_map(|(index, &(start, end))| {
-            let span = end - start + 1;
-            let already = progress[index].min(span);
-            if already >= span {
-                // 该段此前已完整落盘，无需重下
-                return None;
-            }
-            let client = Arc::clone(&client);
-            let part = part.clone();
-            let counter = Arc::clone(&counter);
-            let pace = Arc::clone(&pace);
-            let writer = &writer;
-            let url = url.to_string();
-            Some(async move {
+    // 1MB 块工作队列：快连接完成后继续领取下一块，避免固定等分被最慢连接拖尾。
+    let next = AtomicUsize::new(0);
+    let jobs = (0..count).map(|_| {
+        let client = Arc::clone(&client);
+        let part = part.clone();
+        let counter = Arc::clone(&counter);
+        let pace = Arc::clone(&pace);
+        let writer = &writer;
+        let next = &next;
+        let url = url.to_string();
+        async move {
+            loop {
+                if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                    return Err(FetchError::Cancelled);
+                }
+                let index = next.fetch_add(1, Ordering::Relaxed);
+                if index >= chunks {
+                    return Ok(());
+                }
+                let (start, end) = chunk_range(index, total);
+                let span = end - start + 1;
+                let already = writer.already(index, span);
+                if already >= span {
+                    continue;
+                }
                 fetch_segment(SegmentJob {
                     client: client.as_ref(),
                     url: &url,
@@ -239,16 +253,17 @@ pub(crate) async fn transfer_with_ranges(
                     cancel,
                     progress: callback,
                 })
-                .await
-            })
-        });
+                .await?;
+            }
+        }
+    });
 
     let mut cancelled = false;
     for result in futures_util::future::join_all(jobs).await {
         match result {
             Ok(()) => {}
             Err(FetchError::Cancelled) => cancelled = true,
-            // 任一段失败：保留 .part 与位图，下次 resume 从断点继续
+            // 任一块失败：保留 .part 与位图，下次 resume 从断点继续
             Err(e) => return Err(e),
         }
     }
@@ -256,7 +271,7 @@ pub(crate) async fn transfer_with_ranges(
         return Err(FetchError::Cancelled);
     }
 
-    // 全部段就位：改名到最终路径并清位图
+    // 全部块就位：改名到最终路径并清位图
     let _ = std::fs::remove_file(&meta_path);
     std::fs::rename(&part, dest).map_err(|e| FetchError::Io(format!("完成写入失败\n{e}")))?;
 
@@ -281,7 +296,7 @@ pub fn partial_paths(dest: &Path) -> (PathBuf, PathBuf) {
     )
 }
 
-/// 位图写入器：记录某段已完成字节并落盘（`.part.json`）。
+/// 位图写入器：记录某个工作块已完成字节并落盘（`.part.json`）。
 struct PartWriter {
     slots: Mutex<Vec<u64>>,
     path: PathBuf,
@@ -291,7 +306,7 @@ struct PartWriter {
 }
 
 impl PartWriter {
-    /// 记录第 `index` 段已完成 `done` 字节并落盘（写失败仅丢进度记录，不影响本次下载）。
+    /// 记录第 `index` 块已完成 `done` 字节并落盘（写失败仅丢进度记录，不影响本次下载）。
     fn record(&self, index: usize, done: u64) {
         let snapshot = {
             let mut slots = self.slots.lock();
@@ -305,19 +320,24 @@ impl PartWriter {
         };
         let _ = write_meta(&self.path, &snapshot);
     }
+
+    /// 该块已落盘字节（续传起点），不超过块长度。
+    fn already(&self, index: usize, span: u64) -> u64 {
+        self.slots.lock()[index].min(span)
+    }
 }
 
-/// 单段下载上下文（字段多，收敛为结构体避免 `too_many_arguments`）。
+/// 单块下载上下文（字段多，收敛为结构体避免 `too_many_arguments`）。
 struct SegmentJob<'a> {
     client: &'a Client,
     url: &'a str,
     part: &'a Path,
     index: usize,
-    /// 段起始偏移（含）
+    /// 块起始偏移（含）
     start: u64,
-    /// 段结束偏移（含）
+    /// 块结束偏移（含）
     end: u64,
-    /// 本段此前已写入的字节数（续传起点）
+    /// 本块此前已写入的字节数（续传起点）
     already: u64,
     total: u64,
     counter: &'a AtomicU64,
@@ -327,7 +347,7 @@ struct SegmentJob<'a> {
     progress: Option<&'a (dyn Fn(u64, u64) + Send + Sync)>,
 }
 
-/// 下载单个段：`Range` 请求（从断点起）→ seek 到段偏移顺序写 → 限速/取消检查；完成/取消/周期节点均落盘本段进度。
+/// 下载单个块：`Range` 请求（从断点起）→ seek 到块偏移顺序写 → 限速/取消检查；完成/取消/周期节点均落盘本块进度。
 async fn fetch_segment(job: SegmentJob<'_>) -> Result<(), FetchError> {
     let SegmentJob {
         client,
@@ -496,19 +516,32 @@ where
     })
 }
 
-/// 按总长与期望段数决定实际切分：每段不低于 [`MIN_SEGMENT_BYTES`]，段数不足 2 时返回 `None`（回退单连接）。
+/// 按总长与期望并发数决定 worker 数：至少 2 个 `CHUNK_BYTES` 块才分段，否则返回 `None`（回退单连接）。
 fn segment_count(total: u64, requested: usize) -> Option<(u64, usize)> {
-    let by_size = (total / MIN_SEGMENT_BYTES) as usize;
+    let by_size = (total / CHUNK_BYTES) as usize;
     let count = requested.clamp(1, MAX_SEGMENTS).min(by_size);
     (count >= 2).then_some((total, count))
 }
 
 /// 均匀切分 `[0, total)` 为 `count` 段：第 i 段 `[i*total/count, (i+1)*total/count - 1]`，各段长度差 ≤ 1 且恰好覆盖全文件。
+#[cfg(test)]
 fn segment_ranges(total: u64, count: usize) -> Vec<(u64, u64)> {
     let count = count as u64;
     (0..count)
         .map(|i| (i * total / count, (i + 1) * total / count - 1))
         .collect()
+}
+
+/// 工作窃取调度单元：固定块大小；块数可多于 worker 数。
+fn chunk_size(total: u64) -> u64 {
+    CHUNK_BYTES.max(total.div_ceil(MAX_CHUNKS as u64))
+}
+
+fn chunk_range(index: usize, total: u64) -> (u64, u64) {
+    let size = chunk_size(total);
+    let start = index as u64 * size;
+    let end = (start + size).min(total) - 1;
+    (start, end)
 }
 
 fn append_suffix(path: &Path, suffix: &str) -> PathBuf {
@@ -631,6 +664,20 @@ mod tests {
     }
 
     #[test]
+    fn chunk_ranges_cover_file_exactly() {
+        let total = 8u64 * 1024 * 1024 + 123;
+        let chunks = total.div_ceil(chunk_size(total)) as usize;
+        let mut next = 0u64;
+        for index in 0..chunks {
+            let (start, end) = chunk_range(index, total);
+            assert_eq!(start, next, "块起点应连续");
+            assert!(end >= start, "块起点不能超过终点");
+            next = end + 1;
+        }
+        assert_eq!(next, total, "末块应覆盖到文件末尾");
+    }
+
+    #[test]
     fn segment_ranges_cover_file_exactly() {
         let ranges = segment_ranges(1000, 8);
         assert_eq!(ranges.len(), 8);
@@ -644,17 +691,27 @@ mod tests {
     }
 
     #[test]
+    fn huge_file_chunks_are_bounded() {
+        let total = 4u64 * 1024 * 1024 * 1024;
+        let size = chunk_size(total);
+        let chunks = total.div_ceil(size) as usize;
+        assert!(chunks <= MAX_CHUNKS, "块数应被 MAX_CHUNKS 约束: {chunks}");
+        assert!(size > CHUNK_BYTES, "超大文件应放大块大小");
+        assert!(total.div_ceil(size) * size >= total);
+    }
+
+    #[test]
     fn segment_count_rejects_small_files() {
-        assert!(segment_count(MIN_SEGMENT_BYTES - 1, 16).is_none());
-        assert!(segment_count(MIN_SEGMENT_BYTES, 16).is_none());
-        assert!(segment_count(MIN_SEGMENT_BYTES * 2, 1).is_none());
+        assert!(segment_count(CHUNK_BYTES - 1, 16).is_none());
+        assert!(segment_count(CHUNK_BYTES, 16).is_none());
+        assert!(segment_count(CHUNK_BYTES * 2, 1).is_none());
         assert_eq!(
-            segment_count(MIN_SEGMENT_BYTES * 3, 16),
-            Some((MIN_SEGMENT_BYTES * 3, 3))
+            segment_count(CHUNK_BYTES * 3, 16),
+            Some((CHUNK_BYTES * 3, 3))
         );
         assert_eq!(
-            segment_count(MIN_SEGMENT_BYTES * 100, 999),
-            Some((MIN_SEGMENT_BYTES * 100, MAX_SEGMENTS))
+            segment_count(CHUNK_BYTES * 100, 999),
+            Some((CHUNK_BYTES * 100, MAX_SEGMENTS))
         );
     }
 
@@ -758,7 +815,7 @@ mod tests {
         let (url, hits) = serve(body.clone(), true).await;
         let dest = temp_dest("seg_resume");
         let (part, meta_path) = partial_paths(&dest);
-        let span = body.len() as u64 / 4;
+        let span = body.len() as u64 / 8;
 
         std::fs::write(&part, &body).expect("写入 .part");
         write_meta(
@@ -766,8 +823,8 @@ mod tests {
             &PartMeta {
                 url: url.clone(),
                 total: body.len() as u64,
-                segments: 4,
-                progress: vec![span, 0, span, 0],
+                segments: 8,
+                progress: vec![span, 0, span, 0, 0, 0, 0, 0],
             },
         )
         .expect("写入位图");
@@ -792,7 +849,7 @@ mod tests {
             body,
             "续传后内容完整"
         );
-        assert_eq!(hits.load(Ordering::SeqCst), 3, "1 次探测 + 仅 2 个未完成段");
+        assert_eq!(hits.load(Ordering::SeqCst), 7, "1 次探测 + 6 个未完成块");
         let _ = std::fs::remove_file(&dest);
     }
 
@@ -803,7 +860,7 @@ mod tests {
         let dest = temp_dest("seg_resume_inner");
         let (part, meta_path) = partial_paths(&dest);
         let total = body.len() as u64;
-        let span = total / 4;
+        let span = total / 8;
         let half = span / 2;
 
         std::fs::write(&part, &body).expect("写入 .part");
@@ -812,8 +869,8 @@ mod tests {
             &PartMeta {
                 url: url.clone(),
                 total,
-                segments: 4,
-                progress: vec![half, 0, half, 0],
+                segments: 8,
+                progress: vec![half, half, half, half, span, span, span, span],
             },
         )
         .expect("写入位图");
@@ -830,18 +887,18 @@ mod tests {
             None::<fn(u64, u64)>,
         )
         .await
-        .expect("段内续传应成功");
+        .expect("块内续传应成功");
 
         assert_eq!(out.bytes, total);
         assert_eq!(
             std::fs::read(&dest).expect("读回文件"),
             body,
-            "段内续传后内容完整"
+            "块内续传后内容完整"
         );
         assert_eq!(
             hits.load(Ordering::SeqCst),
             5,
-            "1 次探测 + 4 段（两段从半途请求，两段全量）"
+            "1 次探测 + 4 个半途块（4 个整块已跳过）"
         );
         let _ = std::fs::remove_file(&dest);
     }
@@ -852,15 +909,15 @@ mod tests {
         let (url, hits) = serve(body.clone(), true).await;
         let dest = temp_dest("seg_stale");
         let (part, meta_path) = partial_paths(&dest);
-        let span = body.len() as u64 / 4;
+        let span = body.len() as u64 / 8;
         std::fs::write(&part, &body).expect("写入 .part");
         write_meta(
             &meta_path,
             &PartMeta {
                 url: "https://other.example.com/other.bin".into(),
                 total: body.len() as u64,
-                segments: 4,
-                progress: vec![span, span, span, 0],
+                segments: 8,
+                progress: vec![span, span, span, 0, 0, 0, 0, 0],
             },
         )
         .expect("写入位图");
@@ -881,8 +938,8 @@ mod tests {
 
         assert_eq!(
             hits.load(Ordering::SeqCst),
-            5,
-            "位图 URL 不匹配应作废（1 探测 + 4 段全下）"
+            9,
+            "位图 URL 不匹配应作废（1 探测 + 8 块全下）"
         );
         let _ = std::fs::remove_file(&dest);
         let _ = std::fs::remove_file(&meta_path);
