@@ -4,6 +4,7 @@
 //! 模块布局：[`api`]/[`shared`]/[`modrinth`]/[`curseforge`]/[`translation`]/[`wiki_entry`]。
 
 mod api;
+mod cache;
 mod curseforge;
 mod dependencies;
 mod modrinth;

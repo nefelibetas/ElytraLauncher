@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use super::cache;
 use super::shared::{
     api_routes, api_urls, get_json_multi, post_json_multi, version_range, ApiPlatform,
 };
@@ -347,6 +348,9 @@ pub(super) async fn curseforge_versions(
     game_version: Option<&str>,
     loader: Option<&str>,
 ) -> Result<Vec<CommunityVersion>, String> {
+    if let Some(hit) = cache::get_version("curseforge", project_id, game_version, loader) {
+        return Ok(hit);
+    }
     let mut params: Vec<(&str, String)> = vec![("pageSize", "30".into())];
     if let Some(gv) = game_version {
         params.push(("gameVersion", gv.to_string()));
@@ -364,7 +368,7 @@ pub(super) async fn curseforge_versions(
             "文件响应缺少 data"
         )
     })?;
-    Ok(arr
+    let versions: Vec<CommunityVersion> = arr
         .iter()
         .filter_map(|f| {
             let game_versions: Vec<String> = f["gameVersions"]
@@ -422,7 +426,9 @@ pub(super) async fn curseforge_versions(
                     .unwrap_or_default(),
             })
         })
-        .collect())
+        .collect();
+    cache::put_version("curseforge", project_id, game_version, loader, &versions);
+    Ok(versions)
 }
 
 pub(super) async fn curseforge_details(

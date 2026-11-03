@@ -1,5 +1,6 @@
 //! Modrinth 平台实现（无需 key）：搜索 / 版本列表 / 详情原始 JSON。
 
+use super::cache;
 use super::shared::{api_urls, get_json_multi, version_range, ApiPlatform};
 use super::wiki_entry;
 use super::{
@@ -137,6 +138,9 @@ pub(super) async fn modrinth_versions(
     game_version: Option<&str>,
     loader: Option<&str>,
 ) -> Result<Vec<CommunityVersion>, String> {
+    if let Some(hit) = cache::get_version("modrinth", project_id, game_version, loader) {
+        return Ok(hit);
+    }
     let mut params: Vec<(&str, String)> = Vec::new();
     if let Some(gv) = game_version {
         let arr = serde_json::to_string(&vec![gv]).map_err(common_err_ctx_key!(
@@ -165,7 +169,7 @@ pub(super) async fn modrinth_versions(
             "版本响应格式错误"
         )
     })?;
-    Ok(arr
+    let versions: Vec<CommunityVersion> = arr
         .iter()
         .filter_map(|v| {
             let files = v["files"].as_array()?;
@@ -217,7 +221,9 @@ pub(super) async fn modrinth_versions(
                     .unwrap_or_default(),
             })
         })
-        .collect())
+        .collect();
+    cache::put_version("modrinth", project_id, game_version, loader, &versions);
+    Ok(versions)
 }
 
 /// 批量拉取 Modrinth 项目原始 JSON（GET /v2/projects?ids=[...]），保持响应顺序。
