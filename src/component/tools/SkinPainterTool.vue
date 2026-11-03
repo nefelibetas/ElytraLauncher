@@ -9,7 +9,7 @@ import {
 } from "@lucide/vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
-  DEFAULT_VIEW_PITCH, DEFAULT_VIEW_YAW, drawFullCanvas,
+  DEFAULT_VIEW_PITCH, DEFAULT_VIEW_YAW, drawFullCanvas, pickSkinPixel,
 } from "../../store/skin/skinRender";
 import type { SkinPart } from "../../store/skin/skinRender";
 import type { Animation, PickFace } from "../../store/skin/skinRender";
@@ -124,7 +124,7 @@ let checkerTex: HTMLCanvasElement | null = null;
 let checkerPattern: CanvasPattern | null = null;
 /** 最近一次预览绘制的可拾取面（绘制顺序：远 → 近），3D 直绘靠它做屏幕 → 贴图反查。 */
 let previewHits: PickFace[] = [];
-/** z-buffer 逐像素面 ID（1 基索引 previewHits），与 previewHits 同帧生成。 */
+/** 软件回退用 z-buffer 面 ID（1 基索引 previewHits）；WebGL 路径由 GPU 面 ID 拾取。 */
 let previewHitMap: Uint32Array | null = null;
 let previewHitWidth = 0;
 let previewHitHeight = 0;
@@ -329,6 +329,8 @@ function drawPreview() {
     hiddenParts: preview.hiddenParts,
     hits: previewHits,
     hitMap: previewHitMap,
+    // WebGL 直绘拾取：每帧只多一个 GPU 面 ID pass，点击/悬停时读 1×1。
+    pick: mode.value === "3d",
   });
   // 相机 / 模型变化后按新矩阵重算悬停像素
   hoverPick.value = lastPointer ? pickAtDevice(lastPointer.x, lastPointer.y) : null;
@@ -390,8 +392,28 @@ function pickFaceAt(
   return { face, x: Math.floor(ux), y: Math.floor(uy) };
 }
 
-/** 优先用 z-buffer 的逐像素 face ID；透明/非当前图层时回退到远→近遍历。 */
+/** 优先用 WebGL 面 ID / 软件 z-buffer 的逐像素结果；透明/非当前图层时回退到远→近遍历。 */
 function pickAtDevice(dx: number, dy: number): { face: PickFace; x: number; y: number } | null {
+  const el = previewCanvas.value;
+  const gpuIndex = el ? pickSkinPixel(el, dx, dy) : undefined;
+  if (gpuIndex !== undefined) {
+    if (gpuIndex !== null) {
+      const face = previewHits[gpuIndex];
+      if (face && !face.cape && face.layer === paintLayer.value) {
+        const hit = pickFaceAt(face, dx, dy);
+        if (hit) return hit;
+      }
+    }
+    // 硬件拾取可用时不再读软件 hitMap（WebGL 路径不会更新它）。
+    for (let i = previewHits.length - 1; i >= 0; i--) {
+      const face = previewHits[i]!;
+      if (face.cape || face.layer !== paintLayer.value) continue;
+      const hit = pickFaceAt(face, dx, dy);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   const map = previewHitMap;
   const ix = Math.floor(dx);
   const iy = Math.floor(dy);

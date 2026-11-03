@@ -12,19 +12,12 @@ export default defineConfig(() => ({
   // 显式固定，勿依赖 Vite 默认 target——它随主版本上移会静默抬高前端基线。
   build: {
     target: ["chrome111", "safari16.4"],
-    // vendor 单独成块：入口 chunk 低于 Vite 默认 500 kB 告警阈值；Tauri 本地加载，拆块无网络收益。
+    // vendor / stores / i18n 独立成块；页面与工具交给路由/动态导入自然分块，首屏不预加载未访问页面。
     rolldownOptions: {
       output: {
         codeSplitting: {
           groups: [
             { name: "vendor", test: /node_modules/ },
-            { name: "page-launch", test: /[\\/]src[\\/]pages[\\/]Launch\.vue$/ },
-            { name: "page-download", test: /[\\/]src[\\/]pages[\\/]Download\.vue$/ },
-            { name: "page-settings", test: /[\\/]src[\\/]pages[\\/]Settings\.vue$/ },
-            { name: "page-task", test: /[\\/]src[\\/]pages[\\/]DownloadDetail\.vue$/ },
-            { name: "pages", test: /[\\/]src[\\/]pages[\\/]/ },
-            // tools 保持动态导入，不并入公共组件块；否则任意页面引用公共组件会把全部工具一起预加载。
-            { name: "components", test: /[\\/]src[\\/]component[\\/](?!tools[\\/])/ },
             { name: "stores", test: /[\\/]src[\\/]store[\\/]/ },
             { name: "i18n", test: /[\\/]src[\\/]i18n[\\/]/ },
           ],

@@ -316,12 +316,25 @@ interface GlState {
   pos: number;
   z: number;
   uv: number;
+  id: number;
   size: WebGLUniformLocation;
   tex: WebGLUniformLocation;
   shade: WebGLUniformLocation;
+  pick: WebGLUniformLocation;
 }
 
 const GL_CACHE = new WeakMap<HTMLCanvasElement, GlState | null>();
+
+interface PickState {
+  gl: WebGLRenderingContext;
+  width: number;
+  height: number;
+  faceCount: number;
+  pixel: Uint8Array;
+}
+
+/** 最近一次 WebGL 绘制的面 ID 缓冲；`undefined` 表示该画布没有可用硬件拾取。 */
+const PICK_STATE = new WeakMap<HTMLCanvasElement, PickState>();
 
 function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -353,6 +366,8 @@ function glStateFor(target: HTMLCanvasElement): GlState | null {
     antialias: true,
     alpha: true,
     premultipliedAlpha: false,
+    // 离屏面 ID pass 在指针事件时才 readPixels，需保留默认帧缓冲内容。
+    preserveDrawingBuffer: true,
   });
   if (!gl) {
     GL_CACHE.set(target, null);
@@ -362,22 +377,32 @@ function glStateFor(target: HTMLCanvasElement): GlState | null {
     const vs = compileShader(
       gl,
       gl.VERTEX_SHADER,
-      `attribute vec2 aPos; attribute float aZ; attribute vec2 aUv;
-       uniform vec2 uSize; varying vec2 vUv;
+      `attribute vec2 aPos; attribute float aZ; attribute vec2 aUv; attribute float aId;
+       uniform vec2 uSize; varying vec2 vUv; varying float vId;
        void main() {
          vec2 p = vec2(aPos.x / uSize.x * 2.0 - 1.0, 1.0 - aPos.y / uSize.y * 2.0);
          gl_Position = vec4(p, -aZ * 0.02, 1.0);
          vUv = aUv;
+         vId = aId;
        }`,
     );
     const fs = compileShader(
       gl,
       gl.FRAGMENT_SHADER,
-      `precision mediump float; uniform sampler2D uTex; uniform float uShade;
-       varying vec2 vUv;
+      `precision mediump float; uniform sampler2D uTex; uniform float uShade; uniform float uPick;
+       varying vec2 vUv; varying float vId;
        void main() {
          vec4 c = texture2D(uTex, vUv);
          if (c.a < 0.1) discard;
+         if (uPick > 0.5) {
+           float id = floor(vId + 0.5);
+           float r = mod(id, 256.0);
+           float g = mod(floor(id / 256.0), 256.0);
+           float b = mod(floor(id / 65536.0), 256.0);
+           float a = floor(id / 16777216.0);
+           gl_FragColor = vec4(r, g, b, a) / 255.0;
+           return;
+         }
          gl_FragColor = vec4(c.rgb * uShade, 1.0);
        }`,
     );
@@ -401,9 +426,11 @@ function glStateFor(target: HTMLCanvasElement): GlState | null {
       pos: gl.getAttribLocation(program, "aPos"),
       z: gl.getAttribLocation(program, "aZ"),
       uv: gl.getAttribLocation(program, "aUv"),
+      id: gl.getAttribLocation(program, "aId"),
       size: gl.getUniformLocation(program, "uSize")!,
       tex: gl.getUniformLocation(program, "uTex")!,
       shade: gl.getUniformLocation(program, "uShade")!,
+      pick: gl.getUniformLocation(program, "uPick")!,
     };
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
@@ -432,7 +459,7 @@ function glTexture(gl: WebGLRenderingContext, src: CanvasImageSource): WebGLText
   return texture;
 }
 
-/** WebGL MSAA 路径：无拾取需求时用硬件深度/边缘抗锯齿渲染。 */
+/** WebGL MSAA 路径；`picking` 时追加一遍面 ID 渲染，供 `pickSkinPixel` 读取。 */
 function paintWebGL(
   target: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
@@ -442,6 +469,7 @@ function paintWebGL(
   scale: number,
   offX: number,
   offY: number,
+  withPicking: boolean,
 ): boolean {
   const state = glStateFor(target);
   if (!state || state.gl.isContextLost()) {
@@ -452,69 +480,117 @@ function paintWebGL(
   const skinTex = glTexture(gl, skin);
   const capeTex = cape ? glTexture(gl, cape) : null;
   if (!skinTex) return false;
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.useProgram(program);
-  gl.uniform2f(state.size, target.width, target.height);
-  gl.uniform1i(state.tex, 0);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.enableVertexAttribArray(state.pos);
-  gl.enableVertexAttribArray(state.z);
-  gl.enableVertexAttribArray(state.uv);
-  const stride = 5 * 4;
-  const data = new Float32Array(6 * 5);
-  for (const f of faces) {
-    const texSrc = f.tex ? capeTex : skinTex;
-    if (!texSrc) continue;
-    const src = f.tex ?? skin;
-    const tw = (src as HTMLImageElement).naturalWidth || (src as HTMLCanvasElement).width;
-    const th = (src as HTMLImageElement).naturalHeight || (src as HTMLCanvasElement).height;
-    if (!tw || !th) continue;
-    const [u, v, uw, uh] = f.uv;
-    const uSign = f.mirror ? -1 : 1;
-    const uBase = f.mirror ? u + uw : u;
-    const uvs = [
-      [uBase, v + uh],
-      [uBase + uw * uSign, v + uh],
-      [uBase + uw * uSign, v],
-      [uBase, v],
-    ];
-    const xs = [
-      f.pts[0]! * scale + offX,
-      f.pts[2]! * scale + offX,
-      f.pts[4]! * scale + offX,
-      f.pts[6]! * scale + offX,
-    ];
-    const ys = [
-      f.pts[1]! * scale + offY,
-      f.pts[3]! * scale + offY,
-      f.pts[5]! * scale + offY,
-      f.pts[7]! * scale + offY,
-    ];
-    const verts = [0, 1, 2, 0, 2, 3];
-    for (let i = 0; i < verts.length; i++) {
-      const corner = verts[i]!;
-      const off = i * 5;
-      data[off] = xs[corner]!;
-      data[off + 1] = ys[corner]!;
-      data[off + 2] = f.zs[corner]!;
-      data[off + 3] = uvs[corner]![0]! / tw;
-      data[off + 4] = uvs[corner]![1]! / th;
+  const data = new Float32Array(6 * 6);
+  const drawPass = (picking: boolean) => {
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(program);
+    gl.uniform2f(state.size, target.width, target.height);
+    gl.uniform1i(state.tex, 0);
+    gl.uniform1f(state.pick, picking ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.enableVertexAttribArray(state.pos);
+    gl.enableVertexAttribArray(state.z);
+    gl.enableVertexAttribArray(state.uv);
+    if (state.id >= 0) gl.enableVertexAttribArray(state.id);
+    const stride = 6 * 4;
+    for (const [faceIndex, f] of faces.entries()) {
+      const texSrc = f.tex ? capeTex : skinTex;
+      if (!texSrc) continue;
+      const src = f.tex ?? skin;
+      const tw = (src as HTMLImageElement).naturalWidth || (src as HTMLCanvasElement).width;
+      const th = (src as HTMLImageElement).naturalHeight || (src as HTMLCanvasElement).height;
+      if (!tw || !th) continue;
+      const [u, v, uw, uh] = f.uv;
+      const uSign = f.mirror ? -1 : 1;
+      const uBase = f.mirror ? u + uw : u;
+      const uvs = [
+        [uBase, v + uh],
+        [uBase + uw * uSign, v + uh],
+        [uBase + uw * uSign, v],
+        [uBase, v],
+      ];
+      const xs = [
+        f.pts[0]! * scale + offX,
+        f.pts[2]! * scale + offX,
+        f.pts[4]! * scale + offX,
+        f.pts[6]! * scale + offX,
+      ];
+      const ys = [
+        f.pts[1]! * scale + offY,
+        f.pts[3]! * scale + offY,
+        f.pts[5]! * scale + offY,
+        f.pts[7]! * scale + offY,
+      ];
+      const verts = [0, 1, 2, 0, 2, 3];
+      for (let i = 0; i < verts.length; i++) {
+        const corner = verts[i]!;
+        const off = i * 6;
+        data[off] = xs[corner]!;
+        data[off + 1] = ys[corner]!;
+        data[off + 2] = f.zs[corner]!;
+        data[off + 3] = uvs[corner]![0]! / tw;
+        data[off + 4] = uvs[corner]![1]! / th;
+        data[off + 5] = picking ? faceIndex + 1 : 0;
+      }
+      gl.bindTexture(gl.TEXTURE_2D, texSrc);
+      gl.uniform1f(state.shade, f.shade);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+      gl.vertexAttribPointer(state.pos, 2, gl.FLOAT, false, stride, 0);
+      gl.vertexAttribPointer(state.z, 1, gl.FLOAT, false, stride, 8);
+      gl.vertexAttribPointer(state.uv, 2, gl.FLOAT, false, stride, 12);
+      if (state.id >= 0) gl.vertexAttribPointer(state.id, 1, gl.FLOAT, false, stride, 20);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
-    gl.bindTexture(gl.TEXTURE_2D, texSrc);
-    gl.uniform1f(state.shade, f.shade);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-    gl.vertexAttribPointer(state.pos, 2, gl.FLOAT, false, stride, 0);
-    gl.vertexAttribPointer(state.z, 1, gl.FLOAT, false, stride, 8);
-    gl.vertexAttribPointer(state.uv, 2, gl.FLOAT, false, stride, 12);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }
-  gl.deleteTexture(skinTex);
-  if (capeTex) gl.deleteTexture(capeTex);
+  };
+
+  drawPass(false);
   ctx.clearRect(0, 0, target.width, target.height);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(state.canvas, 0, 0);
+
+  if (withPicking) {
+    // 面 ID 写入默认帧缓冲；拾取时只读 1×1，无需整张 readPixels。
+    drawPass(true);
+    PICK_STATE.set(target, {
+      gl,
+      width: state.canvas.width,
+      height: state.canvas.height,
+      faceCount: faces.length,
+      pixel: new Uint8Array(4),
+    });
+  } else {
+    PICK_STATE.delete(target);
+  }
+  gl.deleteTexture(skinTex);
+  if (capeTex) gl.deleteTexture(capeTex);
   return true;
+}
+
+/** 读取最近一次 WebGL 绘制写入的面 ID；`undefined` = 该画布没有硬件拾取，`null` = 该点无面。 */
+export function pickSkinPixel(
+  target: HTMLCanvasElement,
+  dx: number,
+  dy: number,
+): number | null | undefined {
+  const state = PICK_STATE.get(target);
+  if (!state) return undefined;
+  const x = Math.floor(dx);
+  const y = Math.floor(dy);
+  if (x < 0 || y < 0 || x >= state.width || y >= state.height) return null;
+  if (state.gl.isContextLost()) return undefined;
+  state.gl.readPixels(
+    x,
+    state.height - 1 - y,
+    1,
+    1,
+    state.gl.RGBA,
+    state.gl.UNSIGNED_BYTE,
+    state.pixel,
+  );
+  const p = state.pixel;
+  const id = p[0]! | (p[1]! << 8) | (p[2]! << 16) | (p[3]! << 24);
+  return id > 0 && id <= state.faceCount ? id - 1 : null;
 }
 
 const SKIN_UV = {
@@ -706,8 +782,10 @@ interface PaintOpts {
   hits?: PickFace[];
   /** z-buffer 面 ID（0=空，i=命中 hits[i-1]）；与 hits 配合给 3D 直绘做逐像素拾取。 */
   hitMap?: Uint32Array;
-  /** 全身预览优先使用 WebGL MSAA；带 hits/hitMap 的直绘路径仍走软件 z-buffer。 */
+  /** 全身预览优先使用 WebGL MSAA；失败时回退软件 z-buffer。 */
   webgl?: boolean;
+  /** WebGL 路径额外渲染面 ID，供 `pickSkinPixel` 做硬件拾取。 */
+  pick?: boolean;
 }
 
 /** 大面细分步长（体素）：面平均深度排序在斜视 + 部分重叠时失效（披风挡腿反被判远），
@@ -915,8 +993,31 @@ function paint(
 
   faces.sort((a, b) => a.depth - b.depth); // 画家算法：depth 小 = 远，先画
 
-  if (opts.webgl && fit === "fixed" && !opts.hits && !opts.hitMap) {
-    if (paintWebGL(canvas, ctx, skin, opts.capeTex, faces, scale, offX, offY)) {
+  // 拾取面与 faces 同序：软件路径用于回填 hitMap，WebGL 路径用于把面 ID 映射回仿射矩阵。
+  if (hits) {
+    hits.length = 0;
+    for (const f of faces) {
+      const [x0, y0, x1, y1, x2, y2, x3, y3] = f.pts;
+      if (x0 === undefined || y0 === undefined || x1 === undefined || y1 === undefined ||
+          x2 === undefined || y2 === undefined || x3 === undefined || y3 === undefined) continue;
+      const sxp = [x0 * scale + offX, x1 * scale + offX, x2 * scale + offX, x3 * scale + offX];
+      const syp = [y0 * scale + offY, y1 * scale + offY, y2 * scale + offY, y3 * scale + offY];
+      const [u, v, uw, uh] = f.uv;
+      const uSign = f.mirror ? -1 : 1;
+      const uBase = f.mirror ? u + uw : u;
+      const m11 = (sxp[1]! - sxp[0]!) / (uw * uSign);
+      const m12 = (syp[1]! - syp[0]!) / (uw * uSign);
+      const m21 = (sxp[3]! - sxp[0]!) / -uh;
+      const m22 = (syp[3]! - syp[0]!) / -uh;
+      const tx = sxp[0]! - m11 * uBase - m21 * (v + uh);
+      const ty = syp[0]! - m12 * uBase - m22 * (v + uh);
+      hits.push({ uv: f.uv, m: [m11, m12, m21, m22, tx, ty], layer: f.layer, cape: f.cape });
+    }
+  }
+
+  PICK_STATE.delete(canvas);
+  if (opts.webgl && fit === "fixed") {
+    if (paintWebGL(canvas, ctx, skin, opts.capeTex, faces, scale, offX, offY, opts.pick === true)) {
       return true;
     }
   }
@@ -955,7 +1056,7 @@ function paint(
     ctx.imageSmoothingEnabled = false;
   }
 
-  for (const f of faces) {
+  for (const [faceIndex, f] of faces.entries()) {
     const [x0, y0, x1, y1, x2, y2, x3, y3] = f.pts;
     if (x0 === undefined || y0 === undefined || x1 === undefined || y1 === undefined ||
         x2 === undefined || y2 === undefined || x3 === undefined || y3 === undefined) continue;
@@ -973,12 +1074,8 @@ function paint(
     const tx = sxp[0]! - m11 * uBase - m21 * (v + uh);
     const ty = syp[0]! - m12 * uBase - m22 * (v + uh);
 
-    // 逐面回填拾取信息：与绘制同源（同一组矩阵），直绘反查不会与画面错位
-    let faceId = 0;
-    if (hits) {
-      hits.push({ uv: f.uv, m: [m11, m12, m21, m22, tx, ty], layer: f.layer, cape: f.cape });
-      faceId = hits.length;
-    }
+    // face ID 与 hits 同序（上方已按 faces 顺序回填）；软件回退时写入 hitMap。
+    const faceId = hits ? faceIndex + 1 : 0;
 
     if (zImage && zBuffer && useZBuffer) {
       const tex = zTexture(f.tex ? harden(f.tex) : hardenedSkin);
@@ -1129,6 +1226,7 @@ export function drawFullCanvas(
     hits?: PickFace[];
     hitMap?: Uint32Array;
     webgl?: boolean;
+    pick?: boolean;
   },
 ): boolean {
   let boxes = buildPlayer(opts.slim, opts.legacy ?? false);
@@ -1160,6 +1258,7 @@ export function drawFullCanvas(
     hits: opts.hits,
     hitMap: opts.hitMap,
     webgl: opts.webgl,
+    pick: opts.pick,
   });
 }
 
