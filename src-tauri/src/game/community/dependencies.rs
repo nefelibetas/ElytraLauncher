@@ -2,6 +2,7 @@
 //! 选兼容版本；`visited` 去重与去环，节点上限 512。
 
 use futures_util::stream::{self, StreamExt};
+use parking_lot::Mutex;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
@@ -15,6 +16,8 @@ const MAX_DEPENDENCY_NODES: usize = 512;
 const MAX_DEPENDENCY_CANDIDATES: usize = 40;
 /// 请求最大并发数量
 const FETCH_CONCURRENCY: usize = 4;
+
+type VersionsCache = Mutex<HashMap<(String, String, String, String), Vec<CommunityVersion>>>;
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[ts(export_to = "community/")]
@@ -95,8 +98,48 @@ fn hint_conflict(
     None
 }
 
-/// 解析主 Mod 的全部前置（required + optional）。主版本不适用/依赖链过大走 `errors`，
-/// 单个前置无兼容版本走 `item.error`（不阻断其他节点）。
+/// 从本轮依赖要求推导下一轮需要强制指定的版本；多版本要求留给冲突报告。
+fn next_forced_versions(
+    root_project: &str,
+    requirements: &HashMap<String, HashSet<String>>,
+    items: &[ModDependencyItem],
+    user_overrides: &HashMap<String, String>,
+    previous: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut next = HashMap::new();
+    for (project, hints) in requirements {
+        if project == root_project || user_overrides.contains_key(project) || hints.len() != 1 {
+            continue;
+        }
+        let Some(hint) = hints.iter().next() else {
+            continue;
+        };
+        let selected = items
+            .iter()
+            .find(|item| item.project_id == *project)
+            .map(|item| item.version_id.as_str());
+        // 已满足且之前没有被强制时不必固定；已强制且 hint 仍在时必须保留，否则会被默认选择覆盖。
+        if selected != Some(hint.as_str()) || previous.get(project) == Some(hint) {
+            next.insert(project.clone(), hint.clone());
+        }
+    }
+    next
+}
+
+#[derive(Clone, Copy)]
+struct ResolveCtx<'a> {
+    source: &'a str,
+    project_id: &'a str,
+    version_id: &'a str,
+    mc_version: &'a str,
+    loader: &'a str,
+    overrides: &'a HashMap<String, String>,
+    mods_dir: &'a Path,
+    versions_cache: &'a VersionsCache,
+}
+
+/// 解析主 Mod 的全部前置（required + optional）。先按用户覆盖解析；若依赖图里发现
+/// 唯一具体版本要求与当前选择不一致，则把该要求加入下一轮覆盖并重跑，最多 8 轮。
 pub(crate) async fn resolve_mod_dependencies(
     source: &str,
     project_id: &str,
@@ -106,6 +149,68 @@ pub(crate) async fn resolve_mod_dependencies(
     version_overrides: &HashMap<String, String>,
     mods_dir: &Path,
 ) -> Result<ModDependencyPlan, String> {
+    let cache: VersionsCache = Mutex::new(HashMap::new());
+    let mut forced: HashMap<String, String> = HashMap::new();
+    let mut last_plan: Option<ModDependencyPlan> = None;
+    for _ in 0..8 {
+        let mut effective = version_overrides.clone();
+        for (project, hint) in &forced {
+            effective
+                .entry(project.clone())
+                .or_insert_with(|| hint.clone());
+        }
+        let (mut plan, requirements) = resolve_pass(ResolveCtx {
+            source,
+            project_id,
+            version_id,
+            mc_version,
+            loader,
+            overrides: &effective,
+            mods_dir,
+            versions_cache: &cache,
+        })
+        .await?;
+
+        let next = next_forced_versions(
+            project_id,
+            &requirements,
+            &plan.items,
+            version_overrides,
+            &forced,
+        );
+
+        if next == forced {
+            fill_names(source, &mut plan.items).await;
+            return Ok(plan);
+        }
+        forced = next;
+        last_plan = Some(plan);
+    }
+    if let Some(mut plan) = last_plan {
+        fill_names(source, &mut plan.items).await;
+        Ok(plan)
+    } else {
+        Err(keyed_msg!(
+            "errors.community.dependencyTooLarge",
+            "依赖链过大，已停止解析"
+        ))
+    }
+}
+
+/// 单次解析：在 `overrides`（用户覆盖 + 迭代学到的版本约束）下展开依赖图。
+async fn resolve_pass(
+    ctx: ResolveCtx<'_>,
+) -> Result<(ModDependencyPlan, HashMap<String, HashSet<String>>), String> {
+    let ResolveCtx {
+        source,
+        project_id,
+        version_id,
+        mc_version,
+        loader,
+        overrides,
+        mods_dir,
+        versions_cache,
+    } = ctx;
     let installed = installed_filenames(mods_dir);
     let mut installed_files: Vec<String> = installed.iter().cloned().collect();
     installed_files.sort();
@@ -116,8 +221,10 @@ pub(crate) async fn resolve_mod_dependencies(
         errors: Vec::new(),
         installed_files,
     };
+    let mut requirements: HashMap<String, HashSet<String>> = HashMap::new();
 
-    let root_versions = fetch_versions(source, project_id, mc_version, loader).await?;
+    let root_versions =
+        fetch_versions_cached(versions_cache, source, project_id, mc_version, loader).await?;
     let Some(root) = root_versions
         .iter()
         .find(|version| version.version_id == version_id)
@@ -126,7 +233,7 @@ pub(crate) async fn resolve_mod_dependencies(
             "errors.community.dependencyMainVersionMismatch",
             "主 Mod 版本不适用于当前实例"
         ));
-        return Ok(plan);
+        return Ok((plan, requirements));
     };
 
     let mut seen: HashMap<String, SeenNode> = HashMap::new();
@@ -155,13 +262,19 @@ pub(crate) async fn resolve_mod_dependencies(
             };
             while let Some(pending) = queue.pop_front() {
                 let incoming = pending.version_hint.as_deref();
+                if let Some(hint) = incoming {
+                    requirements
+                        .entry(pending.project_id.clone())
+                        .or_default()
+                        .insert(hint.to_string());
+                }
                 if let Some(state) = seen.get_mut(&pending.project_id) {
                     let conflict =
                         hint_conflict(state.hint.as_deref(), state.selected.as_deref(), incoming);
                     if state.hint.is_none() {
                         state.hint = incoming.map(str::to_string);
                     }
-                    if !version_overrides.contains_key(&pending.project_id) {
+                    if !overrides.contains_key(&pending.project_id) {
                         if let Some((first, second)) = conflict {
                             record_conflict(
                                 &mut plan,
@@ -206,8 +319,14 @@ pub(crate) async fn resolve_mod_dependencies(
 
         let mut results: Vec<_> = stream::iter(batch.into_iter().enumerate())
             .map(|(index, pending)| async move {
-                let versions =
-                    fetch_versions(source, &pending.project_id, mc_version, loader).await;
+                let versions = fetch_versions_cached(
+                    versions_cache,
+                    source,
+                    &pending.project_id,
+                    mc_version,
+                    loader,
+                )
+                .await;
                 (index, pending, versions)
             })
             .buffer_unordered(FETCH_CONCURRENCY)
@@ -232,9 +351,7 @@ pub(crate) async fn resolve_mod_dependencies(
             };
             let selected = match pick_version(
                 &versions,
-                version_overrides
-                    .get(&pending.project_id)
-                    .map(String::as_str),
+                overrides.get(&pending.project_id).map(String::as_str),
                 pending.version_hint.as_deref(),
                 &installed,
             ) {
@@ -249,7 +366,7 @@ pub(crate) async fn resolve_mod_dependencies(
 
             if let Some(state) = seen.get_mut(&pending.project_id) {
                 state.selected = Some(selected.version_id.clone());
-                if !version_overrides.contains_key(&pending.project_id) {
+                if !overrides.contains_key(&pending.project_id) {
                     if let Some(hint) = state.hint.as_deref() {
                         if hint != selected.version_id {
                             record_conflict(
@@ -340,8 +457,7 @@ pub(crate) async fn resolve_mod_dependencies(
         }
     }
 
-    fill_names(source, &mut plan.items).await;
-    Ok(plan)
+    Ok((plan, requirements))
 }
 
 /// 同一批次里后到的具体 hint 回填到尚未解析的 pending，避免先按“任意版本”选完再报假冲突。
@@ -371,6 +487,27 @@ fn record_conflict(
         ),
         "前置版本冲突\n{project_id} 同时要求 {first} 与 {second}"
     ));
+}
+
+async fn fetch_versions_cached(
+    cache: &VersionsCache,
+    source: &str,
+    project_id: &str,
+    mc_version: &str,
+    loader: &str,
+) -> Result<Vec<CommunityVersion>, String> {
+    let key = (
+        source.to_string(),
+        project_id.to_string(),
+        mc_version.to_string(),
+        loader.to_string(),
+    );
+    if let Some(hit) = cache.lock().get(&key) {
+        return Ok(hit.clone());
+    }
+    let versions = fetch_versions(source, project_id, mc_version, loader).await?;
+    cache.lock().insert(key, versions.clone());
+    Ok(versions)
 }
 
 async fn fetch_versions(
@@ -661,6 +798,49 @@ mod tests {
         backfill_hints(&mut batch, &seen);
         assert_eq!(batch[0].version_hint.as_deref(), Some("picked"));
         assert_eq!(batch[1].version_hint.as_deref(), Some("keep"));
+    }
+
+    #[test]
+    fn next_forced_versions_only_for_single_unmet_hints() {
+        let mut requirements = HashMap::new();
+        requirements.insert("one".to_string(), HashSet::from(["v1".to_string()]));
+        requirements.insert("met".to_string(), HashSet::from(["v1".to_string()]));
+        requirements.insert(
+            "multi".to_string(),
+            HashSet::from(["v1".into(), "v2".into()]),
+        );
+        requirements.insert("pinned".to_string(), HashSet::from(["v1".to_string()]));
+        requirements.insert("root".to_string(), HashSet::from(["other".to_string()]));
+        let mut met = missing_item(
+            &Pending {
+                project_id: "met".into(),
+                version_hint: None,
+                relation: "required".into(),
+                root_optional: None,
+            },
+            "1.20.1",
+            "fabric",
+            "x",
+            &[],
+        );
+        met.version_id = "v1".into();
+        let items = vec![met];
+        let overrides = HashMap::from([("pinned".to_string(), "v0".to_string())]);
+        let next = next_forced_versions("root", &requirements, &items, &overrides, &HashMap::new());
+        assert_eq!(next.get("one").map(String::as_str), Some("v1"));
+        assert!(!next.contains_key("met"));
+        assert!(!next.contains_key("multi"));
+        assert!(!next.contains_key("pinned"));
+        assert!(!next.contains_key("root"));
+
+        let retained = next_forced_versions(
+            "root",
+            &requirements,
+            &items,
+            &overrides,
+            &HashMap::from([("met".to_string(), "v1".to_string())]),
+        );
+        assert_eq!(retained.get("met").map(String::as_str), Some("v1"));
     }
 
     #[test]
