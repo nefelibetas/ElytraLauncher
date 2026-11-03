@@ -20,7 +20,10 @@ use crate::config::downloader::{infer_resource_class, DownloadSourceMode, Resour
 use crate::constants;
 use crate::downloader::hash::{file_sha1_matches, SHA1_EMPTY};
 use crate::downloader::probe::{probe_domain, ProbeResult};
-use crate::downloader::segmented::{requested_segment_count, transfer_with_ranges, RangeTransfer};
+use crate::downloader::segmented::{
+    record_single_stream_speed, requested_segment_count_for_url, transfer_with_ranges,
+    RangeTransfer,
+};
 
 /// 全局限速（bytes/s，0 = 不限）。
 static SPEED_LIMIT: AtomicU64 = AtomicU64::new(0);
@@ -328,10 +331,10 @@ async fn fetch_once<F: Fn(u64, u64) + Send + Sync>(
     eprintln!("[fetch] {url} → HTTP {status}");
 
     // 大文件 Range 并行：官方源 + 服务端声明支持 Range 时按时间预算推导段数（见
-    // `requested_segment_count`）。镜像走 302 调度链（主控→节点→MinIO 预签名），
+    // `requested_segment_count_for_url`）。镜像走 302 调度链（主控→节点→MinIO 预签名），
     // 同 hash 分段会重复打两跳 TLS 且节点按 hash 限流，保持单连接。
     let content_len = response.content_length().unwrap_or(0);
-    let seg_k = requested_segment_count(content_len);
+    let seg_k = requested_segment_count_for_url(url, content_len);
     let ranged_supported = !is_mirror_url(url)
         && content_len > 0
         && seg_k >= 2
@@ -456,6 +459,7 @@ async fn fetch_once<F: Fn(u64, u64) + Send + Sync>(
         }
     }
 
+    record_single_stream_speed(url, speed);
     Ok(FetchOnceOutput {
         dl: DownloadResult {
             bytes: downloaded,

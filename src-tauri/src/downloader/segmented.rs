@@ -1,16 +1,18 @@
 //! 分段（多线程）下载：1MB 工作块 + 工作窃取，单文件按 HTTP Range 并发写入同一文件，支持断点续传。
 //! 仅当服务端返回 206 且总长可解析、总长 ≥ `CHUNK_BYTES`、URL 非镜像源时启用，否则回退单连接 `fetch_with_c`；内容写 `<dest>.part`、元数据写 `<dest>.part.json`，全部块成功后 `rename` 到 `dest` 并删元数据。暂停/失败保留二者供续传。
 
+use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt as _;
 use parking_lot::Mutex;
 use reqwest::header::{CONTENT_RANGE, RANGE};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncSeekExt as _, AsyncWriteExt as _};
 
@@ -35,10 +37,56 @@ const MAX_FILE_SEGMENTS: usize = 8;
 /// 官方大文件的请求 worker 数：`ceil(total / (预算时间 × 单流吞吐))`，随文件大小生长
 /// （返回 `< 2` 表示不值得分段，调用方回退单流）；实际并发数仍由 `segment_count`
 /// 按 `CHUNK_BYTES` 二次收敛。
+#[cfg(test)]
 pub(crate) fn requested_segment_count(total: u64) -> usize {
-    let budget_bytes = TARGET_DOWNLOAD_SECS.saturating_mul(OFFICIAL_SINGLE_STREAM_BPS);
+    segment_count_for_speed(total, OFFICIAL_SINGLE_STREAM_BPS)
+}
+
+fn segment_count_for_speed(total: u64, single_stream_bps: u64) -> usize {
+    let bps = single_stream_bps.max(32 * 1024);
+    let budget_bytes = TARGET_DOWNLOAD_SECS.saturating_mul(bps);
     let k = (total as f64 / budget_bytes as f64).ceil() as usize;
     k.clamp(1, MAX_FILE_SEGMENTS)
+}
+
+/// 单流吞吐提示：只从真正的单连接下载采样，避免多段聚合计速把“每连接速度”估高。
+static HOST_SPEED_HINTS: LazyLock<Mutex<HashMap<String, u64>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn host_key(url: &str) -> String {
+    Url::parse(url)
+        .ok()
+        .and_then(|u| {
+            let host = u.host_str()?;
+            Some(format!("{host}:{}", u.port_or_known_default()?))
+        })
+        .unwrap_or_else(|| url.to_string())
+}
+
+pub(crate) fn requested_segment_count_for_url(url: &str, total: u64) -> usize {
+    let bps = HOST_SPEED_HINTS
+        .lock()
+        .get(&host_key(url))
+        .copied()
+        .unwrap_or(OFFICIAL_SINGLE_STREAM_BPS);
+    segment_count_for_speed(total, bps)
+}
+
+/// 记录单连接实测吞吐（EMA），供同一 host 后续大文件选 worker 数。
+pub(crate) fn record_single_stream_speed(url: &str, speed_bps: u64) {
+    if speed_bps == 0 {
+        return;
+    }
+    let key = host_key(url);
+    let mut map = HOST_SPEED_HINTS.lock();
+    let next = map
+        .get(&key)
+        .map(|old| (old.saturating_mul(3).saturating_add(speed_bps)) / 4)
+        .unwrap_or(speed_bps);
+    if map.len() > 64 {
+        map.clear();
+    }
+    map.insert(key, next);
 }
 
 /// 单次限速睡眠上限（秒）：保证暂停/取消能在一个小块间隔内被察觉。
@@ -503,6 +551,7 @@ where
     F: Fn(u64, u64) + Send + Sync,
 {
     let dl = fetcher::fetch_with_c(client, url, dest, progress, None, cancel).await?;
+    record_single_stream_speed(url, dl.speed);
     let elapsed = started.elapsed().as_secs_f64();
     Ok(SegmentedOutcome {
         bytes: dl.bytes,
@@ -716,6 +765,38 @@ mod tests {
     }
 
     /// 段数随文件大小生长（时间预算 × 单流吞吐推导）：< 预算不分段、大文件收敛到上限。
+    #[test]
+    fn segment_count_uses_measured_stream_speed() {
+        let total = 5 * 1024 * 1024;
+        assert_eq!(
+            segment_count_for_speed(total, OFFICIAL_SINGLE_STREAM_BPS),
+            1
+        );
+        assert_eq!(
+            segment_count_for_speed(total, OFFICIAL_SINGLE_STREAM_BPS / 4),
+            4
+        );
+        assert_eq!(
+            segment_count_for_speed(total, OFFICIAL_SINGLE_STREAM_BPS * 4),
+            1
+        );
+    }
+
+    #[test]
+    fn host_speed_hint_changes_future_worker_count() {
+        let url = format!("https://speed-hint-{}.example/file.bin", std::process::id());
+        assert_eq!(requested_segment_count_for_url(&url, 10 * 1024 * 1024), 2);
+        record_single_stream_speed(&url, 4 * 1024 * 1024);
+        assert_eq!(requested_segment_count_for_url(&url, 10 * 1024 * 1024), 1);
+
+        let slow_url = format!("https://slow-hint-{}.example/file.bin", std::process::id());
+        record_single_stream_speed(&slow_url, 64 * 1024);
+        assert_eq!(
+            requested_segment_count_for_url(&slow_url, 10 * 1024 * 1024),
+            8
+        );
+    }
+
     #[test]
     fn requested_segment_count_scales_with_size() {
         let budget = TARGET_DOWNLOAD_SECS.saturating_mul(OFFICIAL_SINGLE_STREAM_BPS);
