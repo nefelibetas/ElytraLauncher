@@ -249,7 +249,11 @@ pub(crate) async fn modrinth_projects_raw(
 pub(super) async fn modrinth_details(
     ids: &[String],
 ) -> Result<Vec<CommunityDependencyItem>, String> {
-    Ok(modrinth_projects_raw(ids)
+    let (cached, missing) = cache::get_details("modrinth", ids);
+    if missing.is_empty() {
+        return Ok(cache::merge_details(ids, cached, Vec::new()));
+    }
+    let fetched: Vec<CommunityDependencyItem> = modrinth_projects_raw(&missing)
         .await?
         .iter()
         .filter_map(|p| {
@@ -261,7 +265,9 @@ pub(super) async fn modrinth_details(
                 translated: None,
             })
         })
-        .collect())
+        .collect();
+    cache::put_details("modrinth", &fetched);
+    Ok(cache::merge_details(ids, cached, fetched))
 }
 
 #[cfg(test)]

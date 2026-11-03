@@ -700,17 +700,12 @@ async fn fill_names(source: &str, items: &mut [ModDependencyItem]) {
         return;
     }
     let names: HashMap<String, String> = match source {
-        "modrinth" => modrinth::modrinth_projects_raw(&ids)
+        "modrinth" => modrinth::modrinth_details(&ids)
             .await
-            .map(|projects| {
-                projects
-                    .iter()
-                    .filter_map(|project| {
-                        Some((
-                            project["id"].as_str()?.to_string(),
-                            project["title"].as_str()?.to_string(),
-                        ))
-                    })
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| (item.id, item.title))
                     .collect()
             })
             .unwrap_or_default(),

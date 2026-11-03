@@ -434,7 +434,11 @@ pub(super) async fn curseforge_versions(
 pub(super) async fn curseforge_details(
     ids: &[String],
 ) -> Result<Vec<CommunityDependencyItem>, String> {
-    let joined = ids.join(",");
+    let (cached, missing) = cache::get_details("curseforge", ids);
+    if missing.is_empty() {
+        return Ok(cache::merge_details(ids, cached, Vec::new()));
+    }
+    let joined = missing.join(",");
     let data = curseforge_get("/mods", &[("modIds", joined)]).await?;
     let arr = data["data"].as_array().ok_or_else(|| {
         keyed_msg!(
@@ -442,7 +446,7 @@ pub(super) async fn curseforge_details(
             "项目详情响应缺少 data"
         )
     })?;
-    Ok(arr
+    let fetched: Vec<CommunityDependencyItem> = arr
         .iter()
         .filter_map(|m| {
             Some(CommunityDependencyItem {
@@ -453,7 +457,9 @@ pub(super) async fn curseforge_details(
                 translated: None,
             })
         })
-        .collect())
+        .collect();
+    cache::put_details("curseforge", &fetched);
+    Ok(cache::merge_details(ids, cached, fetched))
 }
 
 #[cfg(test)]
