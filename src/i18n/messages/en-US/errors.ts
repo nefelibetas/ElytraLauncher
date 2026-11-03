@@ -282,6 +282,7 @@ export default {
     instanceNoLoader: "The target instance has no ModLoader",
     dependencyMainVersionMismatch: "The main mod version does not match this instance",
     dependencyVersionMismatch: "The pinned dependency version does not match this instance",
+    dependencyVersionConflict: "Dependency version conflict: {project} requires both {first} and {second}",
     dependencyNoCompatibleVersion: "No dependency version matches this instance",
     dependencyFetchFailed: "Could not fetch the dependency version",
     dependencyNoDownloadUrl: "No download URL (the author may forbid third-party distribution)",

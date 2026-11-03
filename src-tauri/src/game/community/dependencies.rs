@@ -68,6 +68,33 @@ struct Pending {
     root_optional: Option<String>,
 }
 
+#[derive(Default)]
+struct SeenNode {
+    /// 依赖声明里出现过的最严格版本提示。
+    hint: Option<String>,
+    /// 已经为该项目选定的版本。
+    selected: Option<String>,
+}
+
+/// 同一项目出现不同版本要求时的冲突（返回 first, second）。
+fn hint_conflict(
+    hint: Option<&str>,
+    selected: Option<&str>,
+    incoming: Option<&str>,
+) -> Option<(String, String)> {
+    if let (Some(a), Some(b)) = (hint, incoming) {
+        if a != b {
+            return Some((a.to_string(), b.to_string()));
+        }
+    }
+    if let (Some(selected), Some(incoming)) = (selected, incoming) {
+        if selected != incoming {
+            return Some((selected.to_string(), incoming.to_string()));
+        }
+    }
+    None
+}
+
 /// 解析主 Mod 的全部前置（required + optional）。主版本不适用/依赖链过大走 `errors`，
 /// 单个前置无兼容版本走 `item.error`（不阻断其他节点）。
 pub(crate) async fn resolve_mod_dependencies(
@@ -102,8 +129,15 @@ pub(crate) async fn resolve_mod_dependencies(
         return Ok(plan);
     };
 
-    let mut visited: HashSet<String> = HashSet::new();
-    visited.insert(project_id.to_string());
+    let mut seen: HashMap<String, SeenNode> = HashMap::new();
+    seen.insert(
+        project_id.to_string(),
+        SeenNode {
+            hint: None,
+            selected: Some(version_id.to_string()),
+        },
+    );
+    let mut conflicted: HashSet<String> = HashSet::new();
 
     let mut required_queue: VecDeque<Pending> = VecDeque::new();
     let mut optional_queue: VecDeque<Pending> = VecDeque::new();
@@ -120,16 +154,41 @@ pub(crate) async fn resolve_mod_dependencies(
                 &mut required_queue
             };
             while let Some(pending) = queue.pop_front() {
-                if !visited.insert(pending.project_id.clone()) {
+                let incoming = pending.version_hint.as_deref();
+                if let Some(state) = seen.get_mut(&pending.project_id) {
+                    let conflict =
+                        hint_conflict(state.hint.as_deref(), state.selected.as_deref(), incoming);
+                    if state.hint.is_none() {
+                        state.hint = incoming.map(str::to_string);
+                    }
+                    if !version_overrides.contains_key(&pending.project_id) {
+                        if let Some((first, second)) = conflict {
+                            record_conflict(
+                                &mut plan,
+                                &mut conflicted,
+                                &pending.project_id,
+                                &first,
+                                &second,
+                            );
+                        }
+                    }
                     continue;
                 }
-                if visited.len() > MAX_DEPENDENCY_NODES {
+                seen.insert(
+                    pending.project_id.clone(),
+                    SeenNode {
+                        hint: incoming.map(str::to_string),
+                        selected: None,
+                    },
+                );
+                if seen.len() > MAX_DEPENDENCY_NODES {
                     overflow = true;
                     break;
                 }
                 batch.push(pending);
             }
         }
+        backfill_hints(&mut batch, &seen);
         if batch.is_empty() {
             if overflow {
                 plan.errors.push(keyed_msg!(
@@ -187,6 +246,23 @@ pub(crate) async fn resolve_mod_dependencies(
                     continue;
                 }
             };
+
+            if let Some(state) = seen.get_mut(&pending.project_id) {
+                state.selected = Some(selected.version_id.clone());
+                if !version_overrides.contains_key(&pending.project_id) {
+                    if let Some(hint) = state.hint.as_deref() {
+                        if hint != selected.version_id {
+                            record_conflict(
+                                &mut plan,
+                                &mut conflicted,
+                                &pending.project_id,
+                                hint,
+                                &selected.version_id,
+                            );
+                        }
+                    }
+                }
+            }
 
             let filename = selected.filename.clone();
             let url = selected.download_url.clone();
@@ -266,6 +342,35 @@ pub(crate) async fn resolve_mod_dependencies(
 
     fill_names(source, &mut plan.items).await;
     Ok(plan)
+}
+
+/// 同一批次里后到的具体 hint 回填到尚未解析的 pending，避免先按“任意版本”选完再报假冲突。
+fn backfill_hints(batch: &mut [Pending], seen: &HashMap<String, SeenNode>) {
+    for pending in batch {
+        if pending.version_hint.is_none() {
+            if let Some(state) = seen.get(&pending.project_id) {
+                pending.version_hint = state.hint.clone();
+            }
+        }
+    }
+}
+
+fn record_conflict(
+    plan: &mut ModDependencyPlan,
+    conflicted: &mut HashSet<String>,
+    project_id: &str,
+    first: &str,
+    second: &str,
+) {
+    if !conflicted.insert(project_id.to_string()) {
+        return;
+    }
+    plan.errors.push(keyed_msg!(
+        format!(
+            "errors.community.dependencyVersionConflict?project={project_id}&first={first}&second={second}"
+        ),
+        "前置版本冲突\n{project_id} 同时要求 {first} 与 {second}"
+    ));
 }
 
 async fn fetch_versions(
@@ -526,6 +631,51 @@ mod tests {
             relation: relation.to_string(),
             version_id: version_id.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn backfill_hints_fills_only_missing_hints() {
+        let pending = |project: &str, hint: Option<&str>| Pending {
+            project_id: project.to_string(),
+            version_hint: hint.map(str::to_string),
+            relation: "required".into(),
+            root_optional: None,
+        };
+        let mut batch = vec![pending("a", None), pending("b", Some("keep"))];
+        let seen = HashMap::from([
+            (
+                "a".to_string(),
+                SeenNode {
+                    hint: Some("picked".into()),
+                    selected: None,
+                },
+            ),
+            (
+                "b".to_string(),
+                SeenNode {
+                    hint: Some("other".into()),
+                    selected: None,
+                },
+            ),
+        ]);
+        backfill_hints(&mut batch, &seen);
+        assert_eq!(batch[0].version_hint.as_deref(), Some("picked"));
+        assert_eq!(batch[1].version_hint.as_deref(), Some("keep"));
+    }
+
+    #[test]
+    fn hint_conflicts_are_detected_against_hint_and_selected() {
+        assert_eq!(
+            hint_conflict(Some("a"), None, Some("b")),
+            Some(("a".into(), "b".into()))
+        );
+        assert_eq!(
+            hint_conflict(None, Some("a"), Some("b")),
+            Some(("a".into(), "b".into()))
+        );
+        assert_eq!(hint_conflict(None, Some("a"), Some("a")), None);
+        assert_eq!(hint_conflict(Some("a"), None, None), None);
+        assert_eq!(hint_conflict(None, None, Some("a")), None);
     }
 
     #[test]

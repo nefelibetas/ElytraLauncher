@@ -282,6 +282,7 @@ export default {
     instanceNoLoader: "目标实例没有可用的 ModLoader",
     dependencyMainVersionMismatch: "主 Mod 版本不适用于当前实例",
     dependencyVersionMismatch: "指定前置版本不适用于当前实例",
+    dependencyVersionConflict: "前置版本冲突：{project} 同时要求 {first} 与 {second}",
     dependencyNoCompatibleVersion: "没有适用于当前实例的前置版本",
     dependencyFetchFailed: "无法获取前置版本",
     dependencyNoDownloadUrl: "缺少下载地址（作者可能禁止第三方分发）",
