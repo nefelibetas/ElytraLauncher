@@ -16,7 +16,18 @@ export default defineConfig(() => ({
     rolldownOptions: {
       output: {
         codeSplitting: {
-          groups: [{ name: "vendor", test: /node_modules/ }],
+          groups: [
+            { name: "vendor", test: /node_modules/ },
+            { name: "page-launch", test: /[\\/]src[\\/]pages[\\/]Launch\.vue$/ },
+            { name: "page-download", test: /[\\/]src[\\/]pages[\\/]Download\.vue$/ },
+            { name: "page-settings", test: /[\\/]src[\\/]pages[\\/]Settings\.vue$/ },
+            { name: "page-task", test: /[\\/]src[\\/]pages[\\/]DownloadDetail\.vue$/ },
+            { name: "pages", test: /[\\/]src[\\/]pages[\\/]/ },
+            // tools 保持动态导入，不并入公共组件块；否则任意页面引用公共组件会把全部工具一起预加载。
+            { name: "components", test: /[\\/]src[\\/]component[\\/](?!tools[\\/])/ },
+            { name: "stores", test: /[\\/]src[\\/]store[\\/]/ },
+            { name: "i18n", test: /[\\/]src[\\/]i18n[\\/]/ },
+          ],
         },
       },
     },

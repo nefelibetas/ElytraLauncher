@@ -3,7 +3,7 @@
 //! 缓存位置 `config_dir()/mapcache/`（不污染存档目录；asset 协议 scope 静态声明）。
 //! 失效键 = 世界路径哈希 + 维度 + region 坐标 + 样式（top-down / 切片Y）。
 //! region 文件 mtime 参与键——存档更新后自动重渲染。
-//! 目录上限超限时按 mtime 淘汰最旧文件（简单 LRU 近似，无需精确计数）。
+//! 目录按键前缀分片；超限时各分片按 mtime 淘汰最旧文件（近似 LRU）。
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -38,7 +38,8 @@ fn short_hash(s: &str) -> String {
 /// 淘汰由容量治理兜底）。
 /// v4：loaded-only 地图，移除预测图层。
 /// v5：26.x 混合 palette 解析（旧版对 26.x 区块整块解析失败，缓存为全透明图）。
-const TILE_CACHE_FORMAT: &str = "v5-loaded-only";
+/// v6：按哈希前缀分片存放，降低单目录扫描成本。
+const TILE_CACHE_FORMAT: &str = "v6-sharded";
 
 /// 瓦片缓存键：格式版本 + 世界路径 + 维度 + region 坐标 + 样式 + region mtime。
 /// region 文件经 domain 维度解析定位（26.x 与旧布局一致）——与列表/渲染同源，
@@ -65,7 +66,10 @@ pub fn tile_cache_key(
         "{TILE_CACHE_FORMAT}|{}|{dimension}|{rx}|{rz}|{style_key}|{mtime}",
         world_path.to_string_lossy()
     );
-    Some(mapcache_dir().join(format!("{}.png", short_hash(&key))))
+    let name = short_hash(&key);
+    // 前缀分片；根目录只保留历史平铺文件，由首次治理清理。
+    let shard = &name[..1];
+    Some(mapcache_dir().join(shard).join(format!("{name}.png")))
 }
 
 /// 读取缓存瓦片；未命中返回 None。
@@ -128,9 +132,29 @@ fn evict_dir(dir: &Path, max_bytes: u64) {
     }
 }
 
-/// 超限淘汰：按 mtime 升序删最旧 PNG 直到总大小 ≤ 上限。
+/// 清理旧版根目录平铺 PNG，再按一级目录均分总预算、各自按 mtime 淘汰。
+fn evict_shards(root: &Path, max_total_bytes: u64) {
+    evict_dir(root, 0);
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    let dirs: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|entry| entry.path())
+        .collect();
+    if dirs.is_empty() {
+        return;
+    }
+    let per_dir = max_total_bytes / dirs.len() as u64;
+    for dir in dirs {
+        evict_dir(&dir, per_dir);
+    }
+}
+
+/// 超限淘汰入口。
 fn evict_if_oversize() {
-    evict_dir(&mapcache_dir(), MAPCACHE_MAX_BYTES);
+    evict_shards(&mapcache_dir(), MAPCACHE_MAX_BYTES);
 }
 
 #[cfg(test)]
@@ -159,6 +183,26 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("elytra_mapcache_m_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         assert!(tile_cache_key(&dir, "", 9, 9, "topdown").is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn tile_cache_key_uses_shard_dir() {
+        let dir = std::env::temp_dir().join(format!("elytra_mapcache_s_{}", std::process::id()));
+        let world = dir.join("world");
+        std::fs::create_dir_all(world.join("region")).unwrap();
+        std::fs::write(world.join("region").join("r.0.0.mca"), b"x").unwrap();
+        let key = tile_cache_key(&world, "", 0, 0, "topdown").unwrap();
+        assert_eq!(key.parent().unwrap().parent().unwrap(), mapcache_dir());
+        assert_eq!(
+            key.parent()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .len(),
+            1
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -201,6 +245,38 @@ mod tests {
         assert!(!dir.join("b.png").exists());
         assert!(dir.join("c.png").exists());
         assert!(dir.join("keep.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn evict_shards_cleans_root_and_respects_per_shard_cap() {
+        let dir = std::env::temp_dir().join(format!("elytra_evshard_{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("a")).unwrap();
+        std::fs::create_dir_all(dir.join("b")).unwrap();
+        let base = UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let touch = |path: &Path, secs: u64| {
+            std::fs::write(path, vec![0u8; 100]).unwrap();
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_modified(base + std::time::Duration::from_secs(secs))
+                .unwrap();
+        };
+        touch(&dir.join("legacy.png"), 0);
+        touch(&dir.join("a").join("old.png"), 0);
+        touch(&dir.join("a").join("new.png"), 10);
+        touch(&dir.join("b").join("keep.png"), 0);
+
+        evict_shards(&dir, 300);
+
+        assert!(!dir.join("legacy.png").exists(), "根目录旧格式 PNG 应清理");
+        assert!(
+            !dir.join("a").join("old.png").exists(),
+            "分片内应按 mtime 淘汰"
+        );
+        assert!(dir.join("a").join("new.png").exists());
+        assert!(dir.join("b").join("keep.png").exists());
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -10,7 +10,10 @@ pub fn tile_cache_path(version: &str, seed: i64, rx: i32, rz: i32) -> PathBuf {
     let key = format!("{RENDER_VERSION}|{version}|{seed}|{rx}|{rz}");
     let mut hasher = DefaultHasher::new();
     key.hash(&mut hasher);
-    mapcache_dir().join(format!("{:016x}.png", hasher.finish()))
+    // 独立子目录：mapcache 根目录的旧格式 PNG 会被治理清理，不能与地图瓦片混放。
+    mapcache_dir()
+        .join("seedmap")
+        .join(format!("{:016x}.png", hasher.finish()))
 }
 
 pub fn read_tile(path: &Path) -> Option<Vec<u8>> {

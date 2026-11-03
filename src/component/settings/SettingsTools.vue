@@ -6,14 +6,13 @@ import { useI18n } from "vue-i18n";
 import {
   Server, Type, Sword, PawPrint, Terminal, Paintbrush, Download, Map, MapPin, ArrowLeft,
 } from "@lucide/vue";
-import ServerStatusTool from "../tools/ServerStatusTool.vue";
-import MotdGeneratorTool from "../tools/MotdGeneratorTool.vue";
-import GiveGeneratorTool from "../tools/GiveGeneratorTool.vue";
-import EntityNbtTool from "../tools/EntityNbtTool.vue";
-import CommandGeneratorTool from "../tools/CommandGeneratorTool.vue";
-import SkinPainterTool from "../tools/SkinPainterTool.vue";
-import DownloadTool from "../tools/DownloadTool.vue";
-
+const ServerStatusTool = defineAsyncComponent(() => import("../tools/ServerStatusTool.vue"));
+const MotdGeneratorTool = defineAsyncComponent(() => import("../tools/MotdGeneratorTool.vue"));
+const GiveGeneratorTool = defineAsyncComponent(() => import("../tools/GiveGeneratorTool.vue"));
+const EntityNbtTool = defineAsyncComponent(() => import("../tools/EntityNbtTool.vue"));
+const CommandGeneratorTool = defineAsyncComponent(() => import("../tools/CommandGeneratorTool.vue"));
+const SkinPainterTool = defineAsyncComponent(() => import("../tools/SkinPainterTool.vue"));
+const DownloadTool = defineAsyncComponent(() => import("../tools/DownloadTool.vue"));
 const SeedMapTool = defineAsyncComponent(() => import("../tools/SeedMapTool.vue"));
 const MapFolderTool = defineAsyncComponent(() => import("../tools/MapFolderTool.vue"));
 

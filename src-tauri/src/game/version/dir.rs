@@ -105,13 +105,16 @@ struct VersionCache {
 static VERSION_LIST_CACHE: LazyLock<Mutex<HashMap<PathBuf, VersionCache>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn mtime_secs(path: &Path) -> u64 {
-    std::fs::metadata(path)
-        .and_then(|m| m.modified())
+fn meta_mtime(meta: &std::fs::Metadata) -> u64 {
+    meta.modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+fn mtime_secs(path: &Path) -> u64 {
+    std::fs::metadata(path).map(|m| meta_mtime(&m)).unwrap_or(0)
 }
 
 fn list_installed_in(versions_dir: &Path) -> Result<Vec<InstalledVersionInfo>, String> {
@@ -133,19 +136,69 @@ fn list_installed_in(versions_dir: &Path) -> Result<Vec<InstalledVersionInfo>, S
         .collect();
     dirs.sort_by(|a, b| a.0.cmp(&b.0));
 
+    let cached = VERSION_LIST_CACHE.lock().get(versions_dir).cloned();
     let mut stamps = Vec::with_capacity(dirs.len());
-    for (name, path) in &dirs {
-        let json = find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p)));
-        stamps.push(VersionStamp {
-            name: name.clone(),
-            dir_mtime: mtime_secs(path),
-            json,
-        });
+    {
+        let cached_stamps: HashMap<&str, &VersionStamp> = cached
+            .as_ref()
+            .map(|hit| {
+                hit.stamps
+                    .iter()
+                    .map(|stamp| (stamp.name.as_str(), stamp))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (name, path) in &dirs {
+            // 已缓存的命名 JSON 直接 stat 文件本身：命名文件优先，新增其它 json 不影响结果，
+            // 因此平时可省掉每个版本目录的一次 stat。
+            // 非命名路径或没有 JSON 的版本仍需检查目录，才能发现新增的命名 JSON。
+            let (dir_mtime, json) = match cached_stamps.get(name.as_str()) {
+                Some(prev) => match prev.json.as_ref() {
+                    Some((json_path, _))
+                        if json_path.file_stem().and_then(|s| s.to_str()) == Some(name) =>
+                    {
+                        match std::fs::metadata(json_path) {
+                            Ok(meta) => {
+                                (prev.dir_mtime, Some((json_path.clone(), meta_mtime(&meta))))
+                            }
+                            Err(_) => (
+                                mtime_secs(path),
+                                find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p))),
+                            ),
+                        }
+                    }
+                    Some((json_path, _)) => {
+                        let dir_mtime = mtime_secs(path);
+                        if prev.dir_mtime == dir_mtime {
+                            (dir_mtime, Some((json_path.clone(), mtime_secs(json_path))))
+                        } else {
+                            (
+                                dir_mtime,
+                                find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p))),
+                            )
+                        }
+                    }
+                    None => (
+                        mtime_secs(path),
+                        find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p))),
+                    ),
+                },
+                None => (
+                    mtime_secs(path),
+                    find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p))),
+                ),
+            };
+            stamps.push(VersionStamp {
+                name: name.clone(),
+                dir_mtime,
+                json,
+            });
+        }
     }
 
-    if let Some(hit) = VERSION_LIST_CACHE.lock().get(versions_dir) {
+    if let Some(hit) = cached {
         if hit.stamps == stamps {
-            return Ok(hit.items.clone());
+            return Ok(hit.items);
         }
     }
 
@@ -332,6 +385,50 @@ mod tests {
             .unwrap();
         let updated = list_installed_in(&versions).unwrap();
         assert_eq!(updated[0].loader, "forge");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[ignore = "性能测试"]
+    fn bench_list_installed_warm_500() {
+        let dir = tempfile::tempdir().unwrap();
+        let versions = dir.path().join("versions");
+        for i in 0..500 {
+            let name = format!("1.20.1-{i:03}");
+            let vdir = versions.join(&name);
+            fs::create_dir_all(&vdir).unwrap();
+            fs::write(
+                vdir.join(format!("{name}.json")),
+                r#"{"id":"1.20.1","type":"release"}"#,
+            )
+            .unwrap();
+        }
+        let first = std::time::Instant::now();
+        let _ = list_installed_in(&versions).unwrap();
+        let cold = first.elapsed();
+        let t = std::time::Instant::now();
+        for _ in 0..5 {
+            let _ = list_installed_in(&versions).unwrap();
+        }
+        let warm = t.elapsed() / 5;
+        eprintln!("list_installed 500: cold={cold:?} warm={warm:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn list_installed_cache_invalidates_on_json_added() {
+        let dir = tempfile::tempdir().unwrap();
+        let versions = dir.path().join("versions");
+        let vdir = versions.join("1.21.1");
+        fs::create_dir_all(&vdir).unwrap();
+        assert_eq!(list_installed_in(&versions).unwrap()[0].loader, "");
+
+        fs::write(
+            vdir.join("1.21.1.json"),
+            r#"{"id":"1.21.1","type":"release"}"#,
+        )
+        .unwrap();
+        assert_eq!(list_installed_in(&versions).unwrap()[0].loader, "vanilla");
         let _ = fs::remove_dir_all(dir);
     }
 }
