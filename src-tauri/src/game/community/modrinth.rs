@@ -1,11 +1,13 @@
 //! Modrinth 平台实现（无需 key）：搜索 / 版本列表 / 详情原始 JSON。
 
+use std::collections::HashMap;
+
 use super::cache;
 use super::shared::{api_urls, get_json_multi, version_range, ApiPlatform};
 use super::wiki_entry;
 use super::{
     CommunityDependency, CommunityDependencyItem, CommunitySearchPage, CommunitySearchResult,
-    CommunityVersion,
+    CommunityVersion, SearchQuery,
 };
 use crate::downloader::fetcher::http;
 
@@ -51,6 +53,17 @@ pub(super) async fn search_modrinth(
     offset: u64,
     page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
+    let cache_query = SearchQuery {
+        query: query.to_string(),
+        game_version: game_version.map(str::to_string),
+        loader: loader.map(str::to_string),
+        category: category.map(str::to_string),
+        offset,
+        page_size,
+    };
+    if let Some(page) = cache::get_search("modrinth", &cache_query) {
+        return Ok(page);
+    }
     let mut facets: Vec<Vec<String>> = Vec::new();
     if let Some(gv) = game_version {
         facets.push(vec![format!("versions:{}", gv)]);
@@ -67,10 +80,12 @@ pub(super) async fn search_modrinth(
             facets.push(vec!["categories:datapack".into()]);
         }
         Some("worlds") => {
-            return Ok(CommunitySearchPage {
+            let page = CommunitySearchPage {
                 items: Vec::new(),
                 total: 0,
-            });
+            };
+            cache::put_search("modrinth", &cache_query, &page);
+            return Ok(page);
         }
         _ => facets.push(vec![format!("project_type:{}", category.unwrap_or("mod"))]),
     }
@@ -130,7 +145,9 @@ pub(super) async fn search_modrinth(
         })
         .collect();
     let total = data["total_hits"].as_u64().unwrap_or(items.len() as u64);
-    Ok(CommunitySearchPage { items, total })
+    let page = CommunitySearchPage { items, total };
+    cache::put_search("modrinth", &cache_query, &page);
+    Ok(page)
 }
 
 pub(super) async fn modrinth_versions(
@@ -231,19 +248,39 @@ pub(super) async fn modrinth_versions(
 pub(crate) async fn modrinth_projects_raw(
     ids: &[String],
 ) -> Result<Vec<serde_json::Value>, String> {
-    let ids_json = serde_json::to_string(ids).map_err(common_err_ctx_key!(
-        "errors.community.serializeFailed",
-        "序列化数据失败"
-    ))?;
-    let urls: Vec<String> = api_urls(ApiPlatform::Modrinth, "/v2/projects", &[("ids", ids_json)])?;
-    let data = get_json_multi(&urls, |u| http().get(u.to_string())).await?;
-    let arr = data.as_array().ok_or_else(|| {
-        keyed_msg!(
-            "errors.community.modrinthDetailsFormatInvalid",
-            "项目详情响应格式错误"
-        )
-    })?;
-    Ok(arr.to_vec())
+    let mut resolved: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut missing: Vec<String> = Vec::new();
+    for id in ids {
+        match cache::get_raw("modrinth", id) {
+            Some(value) => {
+                resolved.insert(id.clone(), value);
+            }
+            None => missing.push(id.clone()),
+        }
+    }
+    if !missing.is_empty() {
+        let ids_json = serde_json::to_string(&missing).map_err(common_err_ctx_key!(
+            "errors.community.serializeFailed",
+            "序列化数据失败"
+        ))?;
+        let urls: Vec<String> =
+            api_urls(ApiPlatform::Modrinth, "/v2/projects", &[("ids", ids_json)])?;
+        let data = get_json_multi(&urls, |u| http().get(u.to_string())).await?;
+        let arr = data.as_array().ok_or_else(|| {
+            keyed_msg!(
+                "errors.community.modrinthDetailsFormatInvalid",
+                "项目详情响应格式错误"
+            )
+        })?;
+        for value in arr {
+            let Some(id) = value["id"].as_str() else {
+                continue;
+            };
+            cache::put_raw("modrinth", id, value);
+            resolved.insert(id.to_string(), value.clone());
+        }
+    }
+    Ok(ids.iter().filter_map(|id| resolved.remove(id)).collect())
 }
 
 pub(super) async fn modrinth_details(

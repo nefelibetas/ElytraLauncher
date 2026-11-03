@@ -9,7 +9,7 @@ use super::shared::{
 use super::wiki_entry;
 use super::{
     CommunityDependency, CommunityDependencyItem, CommunitySearchPage, CommunitySearchResult,
-    CommunityVersion,
+    CommunityVersion, SearchQuery,
 };
 
 use crate::constants;
@@ -266,6 +266,17 @@ pub(super) async fn search_curseforge(
     offset: u64,
     page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
+    let cache_query = SearchQuery {
+        query: query.to_string(),
+        game_version: game_version.map(str::to_string),
+        loader: loader.map(str::to_string),
+        category: category.map(str::to_string),
+        offset,
+        page_size,
+    };
+    if let Some(page) = cache::get_search("curseforge", &cache_query) {
+        return Ok(page);
+    }
     let mut params: Vec<(&str, String)> = vec![
         ("pageSize", page_size.to_string()),
         ("index", offset.to_string()),
@@ -340,7 +351,9 @@ pub(super) async fn search_curseforge(
     let total = data["pagination"]["totalCount"]
         .as_u64()
         .unwrap_or(items.len() as u64);
-    Ok(CommunitySearchPage { items, total })
+    let page = CommunitySearchPage { items, total };
+    cache::put_search("curseforge", &cache_query, &page);
+    Ok(page)
 }
 
 pub(super) async fn curseforge_versions(

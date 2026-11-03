@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use super::api::{CommunityDependencyItem, CommunityVersion};
+use super::api::{CommunityDependencyItem, CommunitySearchPage, CommunityVersion, SearchQuery};
 
 /// 版本列表 TTL：作者发布新版本不频繁；刷新/重开超过窗口后自然回源。
 const TTL: Duration = Duration::from_secs(60);
@@ -127,6 +127,44 @@ mod tests {
     }
 
     #[test]
+    fn search_cache_keys_are_filter_specific() {
+        let source = format!("search-{}", std::process::id());
+        let page = CommunitySearchPage {
+            items: Vec::new(),
+            total: 7,
+        };
+        let q = SearchQuery {
+            query: "jei".into(),
+            game_version: Some("1.21.1".into()),
+            loader: Some("fabric".into()),
+            category: None,
+            offset: 0,
+            page_size: 30,
+        };
+        put_search(&source, &q, &page);
+        assert_eq!(get_search(&source, &q).expect("命中缓存").total, 7);
+        let other_version = SearchQuery {
+            game_version: Some("1.20.1".into()),
+            ..q.clone()
+        };
+        assert!(get_search(&source, &other_version).is_none());
+        let other_offset = SearchQuery {
+            offset: 30,
+            ..q.clone()
+        };
+        assert!(get_search(&source, &other_offset).is_none());
+    }
+
+    #[test]
+    fn raw_cache_roundtrips() {
+        let source = format!("raw-{}", std::process::id());
+        let value = serde_json::json!({"id": "abc", "title": "JEI"});
+        put_raw(&source, "abc", &value);
+        assert_eq!(get_raw(&source, "abc"), Some(value));
+        assert!(get_raw(&source, "missing").is_none());
+    }
+
+    #[test]
     fn detail_cache_keeps_requested_order() {
         let source = format!("detail-{}", std::process::id());
         put_details(&source, &[detail("a"), detail("b")]);
@@ -235,4 +273,85 @@ pub(crate) fn merge_details(
         .map(|item| (item.id.clone(), item))
         .collect();
     ids.iter().filter_map(|id| by_id.remove(id)).collect()
+}
+
+type SearchKey = (String, String, String, String, String, u64, u32);
+type SearchEntry = (Instant, CommunitySearchPage);
+
+static SEARCH_CACHE: LazyLock<Mutex<HashMap<SearchKey, SearchEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+const SEARCH_TTL: Duration = Duration::from_secs(30);
+const MAX_SEARCH_PAGES: usize = 64;
+
+fn search_key(source: &str, q: &SearchQuery) -> SearchKey {
+    (
+        source.to_string(),
+        q.query.clone(),
+        q.game_version.clone().unwrap_or_default(),
+        q.loader.clone().unwrap_or_default(),
+        q.category.clone().unwrap_or_default(),
+        q.offset,
+        q.page_size,
+    )
+}
+
+pub(crate) fn get_search(source: &str, q: &SearchQuery) -> Option<CommunitySearchPage> {
+    let key = search_key(source, q);
+    let mut cache = SEARCH_CACHE.lock();
+    let hit = cache.get(&key)?;
+    if hit.0.elapsed() <= SEARCH_TTL {
+        return Some(hit.1.clone());
+    }
+    cache.remove(&key);
+    None
+}
+
+pub(crate) fn put_search(source: &str, q: &SearchQuery, page: &CommunitySearchPage) {
+    let key = search_key(source, q);
+    let mut cache = SEARCH_CACHE.lock();
+    if cache.len() >= MAX_SEARCH_PAGES {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, (at, _))| *at)
+            .map(|(k, _)| k.clone())
+        {
+            cache.remove(&oldest);
+        }
+    }
+    cache.insert(key, (Instant::now(), page.clone()));
+}
+
+type RawKey = (String, String);
+type RawEntry = (Instant, serde_json::Value);
+
+static RAW_CACHE: LazyLock<Mutex<HashMap<RawKey, RawEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+const MAX_RAW_PROJECTS: usize = 256;
+
+pub(crate) fn get_raw(source: &str, id: &str) -> Option<serde_json::Value> {
+    let key = (source.to_string(), id.to_string());
+    let mut cache = RAW_CACHE.lock();
+    let hit = cache.get(&key)?;
+    if hit.0.elapsed() <= TTL {
+        return Some(hit.1.clone());
+    }
+    cache.remove(&key);
+    None
+}
+
+pub(crate) fn put_raw(source: &str, id: &str, value: &serde_json::Value) {
+    let mut cache = RAW_CACHE.lock();
+    if cache.len() >= MAX_RAW_PROJECTS {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, (at, _))| *at)
+            .map(|(k, _)| k.clone())
+        {
+            cache.remove(&oldest);
+        }
+    }
+    cache.insert(
+        (source.to_string(), id.to_string()),
+        (Instant::now(), value.clone()),
+    );
 }
