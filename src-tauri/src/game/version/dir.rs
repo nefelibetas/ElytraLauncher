@@ -6,7 +6,11 @@ use crate::config::game_dirs;
 use crate::launcher::args::find_version_json;
 use crate::persist::downloader_config;
 use crate::util::{infer_loader_from_json, is_simple_name};
+use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::UNIX_EPOCH;
 
 /// 当前激活游戏目录（versions/ 父目录）绝对路径。
 pub fn active_minecraft_dir() -> PathBuf {
@@ -76,7 +80,7 @@ pub fn version_server_section(version_name: &str) -> Result<String, String> {
     Ok(format!("version_server_{version_name}"))
 }
 
-#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS, PartialEq)]
 #[ts(export_to = "game/")]
 pub struct InstalledVersionInfo {
     pub name: String,
@@ -84,13 +88,34 @@ pub struct InstalledVersionInfo {
     pub loader: String,
 }
 
-/// 枚举 versions/ 下子目录，loader 从目录内 json 推断（PCL2 实例名可能无 loader 标记），按名排序。
-pub fn list_installed() -> Result<Vec<InstalledVersionInfo>, String> {
-    let versions_dir = active_minecraft_dir().join("versions");
-    if !versions_dir.exists() {
-        return Ok(vec![]);
-    }
-    let mut items: Vec<InstalledVersionInfo> = std::fs::read_dir(&versions_dir)
+/// 版本列表缓存指纹：目录/JSON 任一变化都会失效。
+#[derive(Clone, PartialEq, Eq)]
+struct VersionStamp {
+    name: String,
+    dir_mtime: u64,
+    json: Option<(PathBuf, u64)>,
+}
+
+#[derive(Clone)]
+struct VersionCache {
+    stamps: Vec<VersionStamp>,
+    items: Vec<InstalledVersionInfo>,
+}
+
+static VERSION_LIST_CACHE: LazyLock<Mutex<HashMap<PathBuf, VersionCache>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn mtime_secs(path: &Path) -> u64 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn list_installed_in(versions_dir: &Path) -> Result<Vec<InstalledVersionInfo>, String> {
+    let mut dirs: Vec<(String, PathBuf)> = std::fs::read_dir(versions_dir)
         .map_err(common_err_ctx_key!(
             "errors.version.read",
             "读取版本目录失败"
@@ -100,17 +125,73 @@ pub fn list_installed() -> Result<Vec<InstalledVersionInfo>, String> {
             if !entry.file_type().ok()?.is_dir() {
                 return None;
             }
-            let name = entry.file_name().to_string_lossy().to_string();
-            // 目录名可能无 loader 标记，须读 json 推断
-            let loader = find_version_json(&entry.path(), &name)
-                .and_then(|p| std::fs::read_to_string(p).ok())
-                .map(|t| infer_loader_from_json(&t))
-                .unwrap_or_default();
-            Some(InstalledVersionInfo { name, loader })
+            Some((
+                entry.file_name().to_string_lossy().to_string(),
+                entry.path(),
+            ))
         })
         .collect();
-    items.sort_by(|a, b| a.name.cmp(&b.name));
+    dirs.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut stamps = Vec::with_capacity(dirs.len());
+    for (name, path) in &dirs {
+        let json = find_version_json(path, name).map(|p| (p.clone(), mtime_secs(&p)));
+        stamps.push(VersionStamp {
+            name: name.clone(),
+            dir_mtime: mtime_secs(path),
+            json,
+        });
+    }
+
+    if let Some(hit) = VERSION_LIST_CACHE.lock().get(versions_dir) {
+        if hit.stamps == stamps {
+            return Ok(hit.items.clone());
+        }
+    }
+
+    let mut cacheable = true;
+    let items: Vec<InstalledVersionInfo> = dirs
+        .into_iter()
+        .zip(stamps.iter())
+        .map(|((name, _), stamp)| {
+            let loader = stamp
+                .json
+                .as_ref()
+                .and_then(|(path, _)| match std::fs::read_to_string(path) {
+                    Ok(text) => Some(infer_loader_from_json(&text)),
+                    Err(_) => {
+                        cacheable = false;
+                        None
+                    }
+                })
+                .unwrap_or_default();
+            InstalledVersionInfo { name, loader }
+        })
+        .collect();
+
+    if cacheable {
+        let mut cache = VERSION_LIST_CACHE.lock();
+        if cache.len() > 8 {
+            cache.clear();
+        }
+        cache.insert(
+            versions_dir.to_path_buf(),
+            VersionCache {
+                stamps,
+                items: items.clone(),
+            },
+        );
+    }
     Ok(items)
+}
+
+/// 枚举 versions/ 下子目录，loader 从目录内 json 推断（PCL2 实例名可能无 loader 标记），按名排序。
+pub fn list_installed() -> Result<Vec<InstalledVersionInfo>, String> {
+    let versions_dir = active_minecraft_dir().join("versions");
+    if !versions_dir.exists() {
+        return Ok(vec![]);
+    }
+    list_installed_in(&versions_dir)
 }
 
 /// 确保版本文件夹存在（不存在则创建）并返回绝对路径（快捷方式按钮用）。
@@ -203,7 +284,8 @@ pub fn resolve_version_dir(mc: &Path, version_id: &str) -> (String, PathBuf) {
 
 #[cfg(test)]
 mod tests {
-    use super::version_server_section;
+    use super::{list_installed_in, version_server_section};
+    use std::fs;
 
     #[test]
     fn version_server_section_rejects_unsafe_names() {
@@ -217,5 +299,39 @@ mod tests {
             version_server_section("1.20.1-fabric-0.15.0").unwrap(),
             "version_server_1.20.1-fabric-0.15.0"
         );
+    }
+
+    #[test]
+    fn list_installed_cache_invalidates_on_json_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let versions = dir.path().join("versions");
+        for (name, body) in [
+            ("1.20.1", r#"{"id":"1.20.1","type":"release"}"#),
+            (
+                "1.20.1-fabric-0.15.0",
+                r#"{"id":"x","inheritsFrom":"net.fabricmc:fabric-loader"}"#,
+            ),
+        ] {
+            let vdir = versions.join(name);
+            fs::create_dir_all(&vdir).unwrap();
+            fs::write(vdir.join(format!("{name}.json")), body).unwrap();
+        }
+        let first = list_installed_in(&versions).unwrap();
+        assert_eq!(first[0].name, "1.20.1");
+        assert_eq!(first[0].loader, "vanilla");
+        assert_eq!(first[1].loader, "fabric");
+        assert_eq!(list_installed_in(&versions).unwrap(), first);
+
+        let json = versions.join("1.20.1").join("1.20.1.json");
+        fs::write(&json, r#"{"inheritsFrom":"net.minecraftforge:forge"}"#).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&json)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(2))
+            .unwrap();
+        let updated = list_installed_in(&versions).unwrap();
+        assert_eq!(updated[0].loader, "forge");
+        let _ = fs::remove_dir_all(dir);
     }
 }

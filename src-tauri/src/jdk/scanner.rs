@@ -1,5 +1,7 @@
-use std::collections::HashSet;
-use std::path::Path;
+use parking_lot::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use crate::jdk::model::JdkInfo;
 #[cfg(target_os = "windows")]
@@ -99,6 +101,27 @@ fn probe_home(dir: &Path, found: &mut Vec<JdkInfo>, seen: &mut HashSet<String>, 
     }
 }
 
+/// `java -version` 结果缓存：同一可执行文件（mtime/长度不变）不重复起子进程。
+struct JdkCacheEntry {
+    mtime: u64,
+    len: u64,
+    info: JdkInfo,
+}
+
+static JDK_INSPECT_CACHE: LazyLock<Mutex<HashMap<PathBuf, JdkCacheEntry>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn file_stamp(path: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some((mtime, meta.len()))
+}
+
 /// 探测单个 JAVA_HOME 目录的版本信息（jdk/download.rs 的 managed runtime 注册复用）。
 pub(crate) fn inspect(java_home: &Path) -> Result<JdkInfo, String> {
     let java_bin = java_bin_path(java_home);
@@ -109,7 +132,15 @@ pub(crate) fn inspect(java_home: &Path) -> Result<JdkInfo, String> {
             java_bin.display()
         );
     }
-    let mut cmd = std::process::Command::new(java_bin);
+    let stamp = file_stamp(&java_bin);
+    if let Some((mtime, len)) = stamp {
+        if let Some(hit) = JDK_INSPECT_CACHE.lock().get(&java_bin) {
+            if hit.mtime == mtime && hit.len == len {
+                return Ok(hit.info.clone());
+            }
+        }
+    }
+    let mut cmd = std::process::Command::new(&java_bin);
     cmd.arg("-version");
     // java 是控制台程序：应用运行期探版本不得弹出命令行窗口
     cmd.no_window();
@@ -119,12 +150,27 @@ pub(crate) fn inspect(java_home: &Path) -> Result<JdkInfo, String> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let version = parse_version(&stderr)
         .ok_or_else(|| keyed_msg!("errors.jdk.versionParse", "无法解析 Java 版本\n{stderr}"))?;
-    Ok(JdkInfo {
+    let info = JdkInfo {
         path: java_home.to_string_lossy().to_string(),
         version,
         vendor: detect_vendor(&stderr),
         bits: if stderr.contains("64-Bit") { 64 } else { 32 },
-    })
+    };
+    if let Some((mtime, len)) = stamp {
+        let mut cache = JDK_INSPECT_CACHE.lock();
+        if cache.len() > 64 {
+            cache.clear();
+        }
+        cache.insert(
+            java_bin,
+            JdkCacheEntry {
+                mtime,
+                len,
+                info: info.clone(),
+            },
+        );
+    }
+    Ok(info)
 }
 
 // 从 java -version 输出解析带引号的版本号
