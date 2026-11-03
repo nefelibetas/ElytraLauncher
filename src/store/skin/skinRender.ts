@@ -170,6 +170,32 @@ function expandedClip(
 /** 纹理像素缓存：HTMLImageElement 不可变，可跨帧复用；Canvas 源可能被原地编辑，只在本次绘制内复用。 */
 const TEXTURE_PIXELS = new WeakMap<object, ImageData>();
 
+interface ZCache {
+  width: number;
+  height: number;
+  image: ImageData;
+  depth: Float32Array;
+}
+
+const Z_CACHE = new WeakMap<HTMLCanvasElement, ZCache>();
+
+function zCacheFor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): ZCache {
+  const old = Z_CACHE.get(canvas);
+  if (old && old.width === canvas.width && old.height === canvas.height) {
+    old.image.data.fill(0);
+    old.depth.fill(-Infinity);
+    return old;
+  }
+  const cache = {
+    width: canvas.width,
+    height: canvas.height,
+    image: ctx.createImageData(canvas.width, canvas.height),
+    depth: new Float32Array(canvas.width * canvas.height).fill(-Infinity),
+  };
+  Z_CACHE.set(canvas, cache);
+  return cache;
+}
+
 function texturePixels(src: CanvasImageSource): ImageData | null {
   const cacheable = src instanceof HTMLImageElement;
   if (cacheable) {
@@ -203,6 +229,8 @@ function rasterizeFace(
   mirror: boolean,
   shade: number,
   tex: ImageData,
+  faceId: number,
+  idMap?: Uint32Array,
 ): void {
   const [u, v, uw, uh] = uv;
   const uSign = mirror ? -1 : 1;
@@ -217,7 +245,7 @@ function rasterizeFace(
     [0, 1, 2],
     [0, 2, 3],
   ] as const) {
-    rasterizeTriangle(image, zbuf, width, height, xs, ys, zs, uvs, a, b, c, shade, tex);
+    rasterizeTriangle(image, zbuf, width, height, xs, ys, zs, uvs, a, b, c, shade, tex, faceId, idMap);
   }
 }
 
@@ -235,6 +263,8 @@ function rasterizeTriangle(
   ic: number,
   shade: number,
   tex: ImageData,
+  faceId: number,
+  idMap?: Uint32Array,
 ): void {
   const ax = xs[ia]!;
   const ay = ys[ia]!;
@@ -273,6 +303,7 @@ function rasterizeTriangle(
       image.data[di + 2] = Math.min(255, tex.data[si + 2]! * shade);
       image.data[di + 3] = 255;
       zbuf[idx] = z;
+      if (idMap) idMap[idx] = faceId;
     }
   }
 }
@@ -464,6 +495,8 @@ interface PaintOpts {
   hiddenParts?: readonly SkinPart[];
   /** 传入则回填本次绘制的可拾取面（清空后按绘制顺序追加），供 3D 直绘反查。 */
   hits?: PickFace[];
+  /** z-buffer 面 ID（0=空，i=命中 hits[i-1]）；与 hits 配合给 3D 直绘做逐像素拾取。 */
+  hitMap?: Uint32Array;
 }
 
 /** 大面细分步长（体素）：面平均深度排序在斜视 + 部分重叠时失效（披风挡腿反被判远），
@@ -684,10 +717,13 @@ function paint(
 
   // 全身预览用软件 z-buffer：逐像素深度测试替代画家排序，消除斜视/换肤时的面块消失。
   const useZBuffer = fit === "fixed";
-  const zImage = useZBuffer ? ctx.createImageData(canvas.width, canvas.height) : null;
-  const zBuffer = zImage
-    ? new Float32Array(canvas.width * canvas.height).fill(-Infinity)
+  const zCache = useZBuffer ? zCacheFor(canvas, ctx) : null;
+  const zImage = zCache?.image ?? null;
+  const zBuffer = zCache?.depth ?? null;
+  const hitMap = zImage && opts.hitMap && opts.hitMap.length === canvas.width * canvas.height
+    ? opts.hitMap
     : null;
+  if (hitMap) hitMap.fill(0);
   const zTextures = new Map<CanvasImageSource, ImageData>();
   const zTexture = (src: CanvasImageSource): ImageData | null => {
     const hit = zTextures.get(src);
@@ -721,8 +757,10 @@ function paint(
     const ty = syp[0]! - m12 * uBase - m22 * (v + uh);
 
     // 逐面回填拾取信息：与绘制同源（同一组矩阵），直绘反查不会与画面错位
+    let faceId = 0;
     if (hits) {
       hits.push({ uv: f.uv, m: [m11, m12, m21, m22, tx, ty], layer: f.layer, cape: f.cape });
+      faceId = hits.length;
     }
 
     if (zImage && zBuffer && useZBuffer) {
@@ -740,6 +778,8 @@ function paint(
           f.mirror,
           f.shade,
           tex,
+          faceId,
+          hitMap ?? undefined,
         );
       }
       continue;
@@ -870,6 +910,7 @@ export function drawFullCanvas(
     offsetY?: number;
     hiddenParts?: readonly SkinPart[];
     hits?: PickFace[];
+    hitMap?: Uint32Array;
   },
 ): boolean {
   let boxes = buildPlayer(opts.slim, opts.legacy ?? false);
@@ -899,6 +940,7 @@ export function drawFullCanvas(
     offsetY: opts.offsetY,
     hiddenParts: opts.hiddenParts,
     hits: opts.hits,
+    hitMap: opts.hitMap,
   });
 }
 

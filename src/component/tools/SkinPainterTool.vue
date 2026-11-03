@@ -124,6 +124,10 @@ let checkerTex: HTMLCanvasElement | null = null;
 let checkerPattern: CanvasPattern | null = null;
 /** 最近一次预览绘制的可拾取面（绘制顺序：远 → 近），3D 直绘靠它做屏幕 → 贴图反查。 */
 let previewHits: PickFace[] = [];
+/** z-buffer 逐像素面 ID（1 基索引 previewHits），与 previewHits 同帧生成。 */
+let previewHitMap: Uint32Array | null = null;
+let previewHitWidth = 0;
+let previewHitHeight = 0;
 /** 指针最近一次的画布设备像素坐标：相机变化后按同一点重算光标。 */
 let lastPointer: { x: number; y: number } | null = null;
 /** 当前悬停命中的贴图像素（决定光标是十字准星还是手型）。 */
@@ -306,6 +310,10 @@ function drawPreview() {
   const box = previewBox.value;
   if (!fitCanvas(el, box ?? el)) return;
   previewHits = [];
+  const pixels = el.width * el.height;
+  if (!previewHitMap || previewHitMap.length !== pixels) previewHitMap = new Uint32Array(pixels);
+  previewHitWidth = el.width;
+  previewHitHeight = el.height;
   drawFullCanvas(el, src, {
     yaw: preview.yaw,
     pitch: preview.pitch,
@@ -320,6 +328,7 @@ function drawPreview() {
     offsetY: preview.offsetY,
     hiddenParts: preview.hiddenParts,
     hits: previewHits,
+    hitMap: previewHitMap,
   });
   // 相机 / 模型变化后按新矩阵重算悬停像素
   hoverPick.value = lastPointer ? pickAtDevice(lastPointer.x, lastPointer.y) : null;
@@ -365,19 +374,43 @@ function devicePoint(e: { clientX: number; clientY: number }): { x: number; y: n
   return { x: (e.clientX - r.left) * dpr, y: (e.clientY - r.top) * dpr };
 }
 
-/** 设备像素坐标 → 命中的面 + 贴图像素：求面仿射逆，落在其 uv 矩形内即命中（等价于点在四边形内）；previewHits 远 → 近排列，从后往前第一个即最前可见面。 */
+/** 设备像素坐标 → 命中的面 + 贴图像素：求面仿射逆，落在其 uv 矩形内即命中（等价于点在四边形内）。 */
+function pickFaceAt(
+  face: PickFace,
+  dx: number,
+  dy: number,
+): { face: PickFace; x: number; y: number } | null {
+  const [a, b, c, d, e, f] = face.m;
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-9) return null;
+  const ux = ((dx - e) * d - (dy - f) * c) / det;
+  const uy = ((dy - f) * a - (dx - e) * b) / det;
+  const [u, v, uw, uh] = face.uv;
+  if (ux < u || ux >= u + uw || uy < v || uy >= v + uh) return null;
+  return { face, x: Math.floor(ux), y: Math.floor(uy) };
+}
+
+/** 优先用 z-buffer 的逐像素 face ID；透明/非当前图层时回退到远→近遍历。 */
 function pickAtDevice(dx: number, dy: number): { face: PickFace; x: number; y: number } | null {
+  const map = previewHitMap;
+  const ix = Math.floor(dx);
+  const iy = Math.floor(dy);
+  if (map && previewHitWidth > 0 && previewHitHeight > 0 &&
+      ix >= 0 && iy >= 0 && ix < previewHitWidth && iy < previewHitHeight) {
+    const id = map[iy * previewHitWidth + ix]!;
+    if (id) {
+      const face = previewHits[id - 1];
+      if (face && !face.cape && face.layer === paintLayer.value) {
+        const hit = pickFaceAt(face, dx, dy);
+        if (hit) return hit;
+      }
+    }
+  }
   for (let i = previewHits.length - 1; i >= 0; i--) {
     const face = previewHits[i]!;
     if (face.cape || face.layer !== paintLayer.value) continue;
-    const [a, b, c, d, e, f] = face.m;
-    const det = a * d - b * c;
-    if (Math.abs(det) < 1e-9) continue;
-    const ux = ((dx - e) * d - (dy - f) * c) / det;
-    const uy = ((dy - f) * a - (dx - e) * b) / det;
-    const [u, v, uw, uh] = face.uv;
-    if (ux < u || ux >= u + uw || uy < v || uy >= v + uh) continue;
-    return { face, x: Math.floor(ux), y: Math.floor(uy) };
+    const hit = pickFaceAt(face, dx, dy);
+    if (hit) return hit;
   }
   return null;
 }
