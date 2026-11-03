@@ -49,6 +49,7 @@ function drawStage(): void {
     phase: (performance.now() - animStart) / 1000,
     fill: BASE_FILL * skinStudio.zoom,
     capeTex: stageCape ?? undefined,
+    webgl: true,
   })) {
     stageDrawn.value = true;
   }

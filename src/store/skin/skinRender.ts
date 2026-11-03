@@ -308,6 +308,215 @@ function rasterizeTriangle(
   }
 }
 
+interface GlState {
+  canvas: HTMLCanvasElement;
+  gl: WebGLRenderingContext;
+  program: WebGLProgram;
+  buffer: WebGLBuffer;
+  pos: number;
+  z: number;
+  uv: number;
+  size: WebGLUniformLocation;
+  tex: WebGLUniformLocation;
+  shade: WebGLUniformLocation;
+}
+
+const GL_CACHE = new WeakMap<HTMLCanvasElement, GlState | null>();
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("createShader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader) ?? "";
+    gl.deleteShader(shader);
+    throw new Error(`skin shader: ${log}`);
+  }
+  return shader;
+}
+
+function glStateFor(target: HTMLCanvasElement): GlState | null {
+  const cached = GL_CACHE.get(target);
+  if (cached !== undefined) {
+    if (cached && (cached.canvas.width !== target.width || cached.canvas.height !== target.height)) {
+      cached.canvas.width = target.width;
+      cached.canvas.height = target.height;
+      cached.gl.viewport(0, 0, target.width, target.height);
+    }
+    return cached;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const gl = canvas.getContext("webgl", {
+    antialias: true,
+    alpha: true,
+    premultipliedAlpha: false,
+  });
+  if (!gl) {
+    GL_CACHE.set(target, null);
+    return null;
+  }
+  try {
+    const vs = compileShader(
+      gl,
+      gl.VERTEX_SHADER,
+      `attribute vec2 aPos; attribute float aZ; attribute vec2 aUv;
+       uniform vec2 uSize; varying vec2 vUv;
+       void main() {
+         vec2 p = vec2(aPos.x / uSize.x * 2.0 - 1.0, 1.0 - aPos.y / uSize.y * 2.0);
+         gl_Position = vec4(p, -aZ * 0.02, 1.0);
+         vUv = aUv;
+       }`,
+    );
+    const fs = compileShader(
+      gl,
+      gl.FRAGMENT_SHADER,
+      `precision mediump float; uniform sampler2D uTex; uniform float uShade;
+       varying vec2 vUv;
+       void main() {
+         vec4 c = texture2D(uTex, vUv);
+         if (c.a < 0.1) discard;
+         gl_FragColor = vec4(c.rgb * uShade, 1.0);
+       }`,
+    );
+    const program = gl.createProgram();
+    if (!program) throw new Error("createProgram");
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(`skin program: ${gl.getProgramInfoLog(program) ?? ""}`);
+    }
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    const buffer = gl.createBuffer();
+    if (!buffer) throw new Error("createBuffer");
+    const state: GlState = {
+      canvas,
+      gl,
+      program,
+      buffer,
+      pos: gl.getAttribLocation(program, "aPos"),
+      z: gl.getAttribLocation(program, "aZ"),
+      uv: gl.getAttribLocation(program, "aUv"),
+      size: gl.getUniformLocation(program, "uSize")!,
+      tex: gl.getUniformLocation(program, "uTex")!,
+      shade: gl.getUniformLocation(program, "uShade")!,
+    };
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LESS);
+    gl.clearColor(0, 0, 0, 0);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    GL_CACHE.set(target, state);
+    return state;
+  } catch (e) {
+    console.warn("WebGL skin render unavailable:", e);
+    GL_CACHE.set(target, null);
+    return null;
+  }
+}
+
+function glTexture(gl: WebGLRenderingContext, src: CanvasImageSource): WebGLTexture | null {
+  const texture = gl.createTexture();
+  if (!texture) return null;
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src as TexImageSource);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return texture;
+}
+
+/** WebGL MSAA 路径：无拾取需求时用硬件深度/边缘抗锯齿渲染。 */
+function paintWebGL(
+  target: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  skin: CanvasImageSource,
+  cape: CanvasImageSource | undefined,
+  faces: PaintFace[],
+  scale: number,
+  offX: number,
+  offY: number,
+): boolean {
+  const state = glStateFor(target);
+  if (!state || state.gl.isContextLost()) {
+    if (state) GL_CACHE.set(target, null);
+    return false;
+  }
+  const { gl, program, buffer } = state;
+  const skinTex = glTexture(gl, skin);
+  const capeTex = cape ? glTexture(gl, cape) : null;
+  if (!skinTex) return false;
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(program);
+  gl.uniform2f(state.size, target.width, target.height);
+  gl.uniform1i(state.tex, 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.enableVertexAttribArray(state.pos);
+  gl.enableVertexAttribArray(state.z);
+  gl.enableVertexAttribArray(state.uv);
+  const stride = 5 * 4;
+  const data = new Float32Array(6 * 5);
+  for (const f of faces) {
+    const texSrc = f.tex ? capeTex : skinTex;
+    if (!texSrc) continue;
+    const src = f.tex ?? skin;
+    const tw = (src as HTMLImageElement).naturalWidth || (src as HTMLCanvasElement).width;
+    const th = (src as HTMLImageElement).naturalHeight || (src as HTMLCanvasElement).height;
+    if (!tw || !th) continue;
+    const [u, v, uw, uh] = f.uv;
+    const uSign = f.mirror ? -1 : 1;
+    const uBase = f.mirror ? u + uw : u;
+    const uvs = [
+      [uBase, v + uh],
+      [uBase + uw * uSign, v + uh],
+      [uBase + uw * uSign, v],
+      [uBase, v],
+    ];
+    const xs = [
+      f.pts[0]! * scale + offX,
+      f.pts[2]! * scale + offX,
+      f.pts[4]! * scale + offX,
+      f.pts[6]! * scale + offX,
+    ];
+    const ys = [
+      f.pts[1]! * scale + offY,
+      f.pts[3]! * scale + offY,
+      f.pts[5]! * scale + offY,
+      f.pts[7]! * scale + offY,
+    ];
+    const verts = [0, 1, 2, 0, 2, 3];
+    for (let i = 0; i < verts.length; i++) {
+      const corner = verts[i]!;
+      const off = i * 5;
+      data[off] = xs[corner]!;
+      data[off + 1] = ys[corner]!;
+      data[off + 2] = f.zs[corner]!;
+      data[off + 3] = uvs[corner]![0]! / tw;
+      data[off + 4] = uvs[corner]![1]! / th;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, texSrc);
+    gl.uniform1f(state.shade, f.shade);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(state.pos, 2, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(state.z, 1, gl.FLOAT, false, stride, 8);
+    gl.vertexAttribPointer(state.uv, 2, gl.FLOAT, false, stride, 12);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+  gl.deleteTexture(skinTex);
+  if (capeTex) gl.deleteTexture(capeTex);
+  ctx.clearRect(0, 0, target.width, target.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(state.canvas, 0, 0);
+  return true;
+}
+
 const SKIN_UV = {
   head: [0, 0],
   hat: [32, 0],
@@ -497,6 +706,8 @@ interface PaintOpts {
   hits?: PickFace[];
   /** z-buffer 面 ID（0=空，i=命中 hits[i-1]）；与 hits 配合给 3D 直绘做逐像素拾取。 */
   hitMap?: Uint32Array;
+  /** 全身预览优先使用 WebGL MSAA；带 hits/hitMap 的直绘路径仍走软件 z-buffer。 */
+  webgl?: boolean;
 }
 
 /** 大面细分步长（体素）：面平均深度排序在斜视 + 部分重叠时失效（披风挡腿反被判远），
@@ -703,6 +914,12 @@ function paint(
   offY += opts.offsetY ?? 0;
 
   faces.sort((a, b) => a.depth - b.depth); // 画家算法：depth 小 = 远，先画
+
+  if (opts.webgl && fit === "fixed" && !opts.hits && !opts.hitMap) {
+    if (paintWebGL(canvas, ctx, skin, opts.capeTex, faces, scale, offX, offY)) {
+      return true;
+    }
+  }
 
   // 同一帧内同源贴图只硬化一次；画布源不跨帧缓存（会被原地重绘）。
   const hardened = new Map<CanvasImageSource, CanvasImageSource>();
@@ -911,6 +1128,7 @@ export function drawFullCanvas(
     hiddenParts?: readonly SkinPart[];
     hits?: PickFace[];
     hitMap?: Uint32Array;
+    webgl?: boolean;
   },
 ): boolean {
   let boxes = buildPlayer(opts.slim, opts.legacy ?? false);
@@ -941,6 +1159,7 @@ export function drawFullCanvas(
     hiddenParts: opts.hiddenParts,
     hits: opts.hits,
     hitMap: opts.hitMap,
+    webgl: opts.webgl,
   });
 }
 
