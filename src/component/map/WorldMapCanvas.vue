@@ -75,37 +75,16 @@ interface TileEntry {
   img: HTMLImageElement;
   url: string;
   mtime: number;
-  /** 按 2 的幂缓存缩小后的瓦片，避免每帧把 512×512 重采样到小尺寸。 */
-  levels?: Map<number, HTMLCanvasElement>;
 }
 
-const LOD_MAX = 4;
-/** 仅在瓦片显示尺寸 ≥128px 时启用；64px 实测预缩放开销高于收益。 */
-const LOD_MIN_SIZE = 128;
+/** 后端瓦片最多 1/4 边长（128×128）。 */
+const LOD_MAX = 2;
 
-/** 目标显示尺寸对应的瓦片层级；源尺寸保持 >= 目标尺寸。 */
+/** 目标显示尺寸对应的后端瓦片层级（0=512, 1=256, 2=128）。 */
 function tileLod(size: number): number {
-  if (size < LOD_MIN_SIZE || size >= REGION_BLOCKS) return 0;
-  const raw = Math.floor(Math.log2(REGION_BLOCKS / size));
+  if (size >= REGION_BLOCKS) return 0;
+  const raw = Math.floor(Math.log2(REGION_BLOCKS / Math.max(size, 1)));
   return Math.min(LOD_MAX, Math.max(0, raw));
-}
-
-/** 取瓦片的缩小层级；首次访问时生成并缓存。 */
-function tileLevel(entry: TileEntry, lod: number): CanvasImageSource {
-  if (lod <= 0) return entry.img;
-  const cached = entry.levels?.get(lod);
-  if (cached) return cached;
-  const px = REGION_BLOCKS >> lod;
-  const canvas = document.createElement("canvas");
-  canvas.width = px;
-  canvas.height = px;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return entry.img;
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(entry.img, 0, 0, px, px);
-  if (!entry.levels) entry.levels = new Map();
-  entry.levels.set(lod, canvas);
-  return canvas;
 }
 
 interface MapBounds {
@@ -147,6 +126,19 @@ let styleTimer: number | null = null;
 
 function regionKey(r: MapRegionInfo): string {
   return `${r.x},${r.z}`;
+}
+
+function tileKey(r: MapRegionInfo, lod: number): string {
+  return `${regionKey(r)}@${lod}`;
+}
+
+/** 该 region 已缓存的任意 LOD（测量内容范围用）。 */
+function tileForRegion(r: MapRegionInfo): TileEntry | undefined {
+  const prefix = `${regionKey(r)}@`;
+  for (const [key, entry] of tiles) {
+    if (key.startsWith(prefix)) return entry;
+  }
+  return undefined;
 }
 
 function setState(value: "loading" | "ready" | "empty" | "error", detail?: string) {
@@ -308,7 +300,7 @@ function measureContentBounds(): MapBounds | null {
   let maxX = -Infinity;
   let maxZ = -Infinity;
   for (const region of regions.value) {
-    const entry = tiles.get(regionKey(region));
+    const entry = tileForRegion(region);
     if (!entry) continue;
     ctx.clearRect(0, 0, REGION_BLOCKS, REGION_BLOCKS);
     ctx.drawImage(entry.img, 0, 0, REGION_BLOCKS, REGION_BLOCKS);
@@ -372,8 +364,8 @@ function maybeAutoFit() {
   fitContent();
 }
 
-function requestTile(region: MapRegionInfo) {
-  const key = regionKey(region);
+function requestTile(region: MapRegionInfo, lod = 0) {
+  const key = tileKey(region, lod);
   const existing = tiles.get(key);
   if (existing && existing.mtime === region.mtime) return;
   if (loading.has(key) || inFlight >= MAX_INFLIGHT) return;
@@ -390,6 +382,7 @@ function requestTile(region: MapRegionInfo) {
         region.z,
         props.maxY,
         props.modColors,
+        lod,
       )
     : getMapTile(
         props.versionName,
@@ -399,6 +392,7 @@ function requestTile(region: MapRegionInfo) {
         region.z,
         props.maxY,
         props.modColors,
+        lod,
       );
   tile
     .then((blob) => {
@@ -524,15 +518,15 @@ function draw() {
 
   for (const region of regions.value) {
     if (region.x < rx0 || region.x > rx1 || region.z < rz0 || region.z > rz1) continue;
-    const key = regionKey(region);
+    const key = tileKey(region, lod);
     const entry = tiles.get(key);
     const x = toScreenX(region.x * REGION_BLOCKS);
     const y = toScreenY(region.z * REGION_BLOCKS);
     if (entry && entry.mtime === region.mtime) {
-      ctx.drawImage(tileLevel(entry, lod), x, y, size, size);
+      ctx.drawImage(entry.img, x, y, size, size);
     } else {
       drawChecker(ctx, x, y, size);
-      requestTile(region);
+      requestTile(region, lod);
     }
   }
 
@@ -645,10 +639,11 @@ async function refreshRegions() {
         fitRegions();
         autoFitPending = true;
       }
-      for (const r of list) requestTile(r);
+      const lod = tileLod(REGION_BLOCKS * cam.scale);
+      for (const r of list) requestTile(r, lod);
     }
     for (const [key, entry] of [...tiles]) {
-      const still = list.some((r) => regionKey(r) === key && r.mtime === entry.mtime);
+      const still = list.some((r) => key.startsWith(`${regionKey(r)}@`) && r.mtime === entry.mtime);
       if (!still) {
         URL.revokeObjectURL(entry.url);
         tiles.delete(key);
@@ -668,7 +663,8 @@ function resetForStyle() {
   clearProbe();
   lastHoverKey = "";
   emitHover(null);
-  for (const r of regions.value) requestTile(r);
+  const lod = tileLod(REGION_BLOCKS * cam.scale);
+  for (const r of regions.value) requestTile(r, lod);
   invalidate();
 }
 

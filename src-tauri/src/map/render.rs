@@ -354,6 +354,8 @@ struct TopDownView<'a> {
     heights: Option<&'a [i16]>,
     hx0: usize,
     hz0: usize,
+    stride: usize,
+    step: usize,
     max_y: isize,
 }
 
@@ -376,6 +378,8 @@ pub fn render_chunk(
             heights,
             hx0,
             hz0,
+            stride: 512,
+            step: 1,
             max_y,
         },
         &mut out,
@@ -456,6 +460,129 @@ fn surface_height_field(parsed: &[Option<ParsedChunk>], max_y: isize) -> Vec<i16
     heights
 }
 
+/// LOD 高度场：每 `step` 列采样一次，返回 `size×size`。
+fn surface_height_field_lod(
+    parsed: &[Option<ParsedChunk>],
+    max_y: isize,
+    step: usize,
+    size: usize,
+) -> Vec<i16> {
+    let mut heights = vec![0i16; size * size];
+    for (i, slot) in parsed.iter().enumerate() {
+        let Some(p) = slot else { continue };
+        let (cx, cz) = ChunkPos::from_index(i as u16).coords_in_region();
+        let ox = cx as usize * 16;
+        let oz = cz as usize * 16;
+        let chunk = &p.chunk;
+        let y_range = chunk.y_range();
+        if y_range.is_empty() {
+            continue;
+        }
+        let top_y = (y_range.end - 1).min(max_y);
+        if top_y < y_range.start {
+            continue;
+        }
+        for z in (0..16usize).step_by(step) {
+            for x in (0..16usize).step_by(step) {
+                let mut top = 0i16;
+                for y in (y_range.start..=top_y).rev() {
+                    let Some(block) = chunk.block(x, y, z) else {
+                        continue;
+                    };
+                    let name = block.name();
+                    if name != "minecraft:air" && name != "minecraft:cave_air" {
+                        top = y as i16;
+                        break;
+                    }
+                }
+                heights[((oz + z) / step) * size + (ox + x) / step] = top;
+            }
+        }
+    }
+    heights
+}
+
+fn render_chunk_lod(
+    chunk: &ChunkData,
+    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    view: TopDownView<'_>,
+    cx: usize,
+    cz: usize,
+) -> Vec<Rgba> {
+    let side = 16 / view.step;
+    let mut out = vec![[0u8, 0, 0, 0]; side * side];
+    let pal = palette();
+    for z in (0..16usize).step_by(view.step) {
+        for x in (0..16usize).step_by(view.step) {
+            out[(z / view.step) * side + x / view.step] =
+                render_column(chunk, pal, overlay, view, x, z);
+        }
+    }
+    let _ = (cx, cz);
+    out
+}
+
+fn compose_region_lod(
+    parsed: &[Option<ParsedChunk>],
+    style: RenderStyle,
+    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    step: usize,
+) -> (Vec<Rgba>, bool) {
+    let size = 512 / step;
+    let mut out = vec![[0u8, 0, 0, 0]; size * size];
+    let mut any_opaque = false;
+    let RenderStyle::TopDown { max_y } = style;
+    let heights = surface_height_field_lod(parsed, max_y, step, size);
+    for (i, slot) in parsed.iter().enumerate() {
+        let Some(p) = slot else { continue };
+        let (cx, cz) = ChunkPos::from_index(i as u16).coords_in_region();
+        let view = TopDownView {
+            heights: Some(&heights),
+            hx0: cx as usize * 16 / step,
+            hz0: cz as usize * 16 / step,
+            stride: size,
+            step,
+            max_y,
+        };
+        let px = render_chunk_lod(&p.chunk, overlay, view, cx as usize, cz as usize);
+        let side = 16 / step;
+        let ox = cx as usize * 16 / step;
+        let oz = cz as usize * 16 / step;
+        for y in 0..side {
+            for x in 0..side {
+                let c = px[y * side + x];
+                if c[3] != 0 {
+                    any_opaque = true;
+                }
+                out[(oz + y) * size + ox + x] = c;
+            }
+        }
+    }
+    (out, any_opaque)
+}
+
+/// 低分辨率 region 瓦片（step = 1/2/4，输出 512/size）。
+pub fn render_region_tile_lod(
+    region_file: &Path,
+    style: RenderStyle,
+    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    step: usize,
+) -> Result<Vec<u8>, String> {
+    let step = step.clamp(1, 4).next_power_of_two();
+    if step == 1 {
+        return render_region_tile(region_file, style, overlay);
+    }
+    let parsed = super::region_io::parse_region(region_file);
+    let (pixels, any_opaque) = compose_region_lod(&parsed, style, overlay, step);
+    let size = (512 / step) as u32;
+    if any_opaque {
+        encode_png(&pixels, size, size)
+    } else {
+        let empty = vec![[0u8, 0, 0, 0]; (size * size) as usize];
+        encode_png(&empty, size, size)
+    }
+}
+
 /// 渲染单个 region 的 512×512 地图瓦片 PNG（俯视，自 max_y 向下）。
 /// 全 region 32×32 chunk 逐个解析后合成；region 存在但无有效 chunk（如仅含
 /// 边缘模拟区块）→ 全透明 PNG（合法 PNG，前端 <img> 可渲染）。
@@ -484,87 +611,101 @@ fn render_top_down(
     view: TopDownView<'_>,
     out: &mut [Rgba; 256],
 ) {
+    for z in 0..16usize {
+        for x in 0..16usize {
+            out[z * 16 + x] = render_column(chunk, pal, overlay, view, x, z);
+        }
+    }
+}
+
+/// 单列 top-down 颜色；`hx/hz` 是高度场（可能是 LOD 网格）中的坐标。
+fn render_column(
+    chunk: &ChunkData,
+    pal: &NaturalPalette,
+    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    view: TopDownView<'_>,
+    x: usize,
+    z: usize,
+) -> Rgba {
+    let hx = view.hx0 + x / view.step;
+    let hz = view.hz0 + z / view.step;
     let y_range = chunk.y_range();
     if y_range.is_empty() {
-        return;
+        return [0, 0, 0, 0];
     }
     let top_y = (y_range.end - 1).min(view.max_y);
     if top_y < y_range.start {
-        return;
+        return [0, 0, 0, 0];
     }
-    for z in 0..16usize {
-        for x in 0..16usize {
-            // 高度场已给出首个非空气列；从该高度起扫，避免从 max_y 穿过整段空气。
-            let start_y = view
-                .heights
-                .map(|h| h[(view.hz0 + z) * 512 + view.hx0 + x] as isize)
-                .unwrap_or(top_y)
-                .clamp(y_range.start, top_y);
-            let mut y = start_y;
-            let mut colour: Rgba = [0, 0, 0, 0];
-            let mut surface_seen = false;
-            let mut water_depth: Option<i32> = None;
-            while colour[3] != 255 && y >= y_range.start {
-                let Some(block) = chunk.block(x, y, z) else {
-                    y -= 1;
-                    continue;
-                };
-                let name = block.name();
-                if name == "minecraft:air" || name == "minecraft:cave_air" {
-                    y -= 1;
-                    continue;
-                }
-                let biome = chunk.biome(x, y, z);
-                if !surface_seen {
-                    surface_seen = true;
-                    if name == "minecraft:water" || name == "minecraft:bubble_column" {
-                        // 水面按列深浅分层；最终色只看水柱深度，无需再往下混合方块。
-                        let mut depth = 1;
-                        for dy in (y_range.start..y).rev() {
-                            let Some(b) = chunk.block(x, dy, z) else {
-                                break;
-                            };
-                            let bn = b.name();
-                            if bn == "minecraft:water" || bn == "minecraft:bubble_column" {
-                                depth += 1;
-                            } else {
-                                break;
-                            }
-                            if depth > 40 {
-                                break;
-                            }
-                        }
-                        water_depth = Some(depth);
-                        colour = grade(water_depth_color(pal.water(biome), depth));
+    // 高度场已给出首个非空气列；从该高度起扫，避免从 max_y 穿过整段空气。
+    let start_y = view
+        .heights
+        .map(|h| h[hz * view.stride + hx] as isize)
+        .unwrap_or(top_y)
+        .clamp(y_range.start, top_y);
+    let mut y = start_y;
+    let mut colour: Rgba = [0, 0, 0, 0];
+    let mut surface_seen = false;
+    let mut water_depth: Option<i32> = None;
+    while colour[3] != 255 && y >= y_range.start {
+        let Some(block) = chunk.block(x, y, z) else {
+            y -= 1;
+            continue;
+        };
+        let name = block.name();
+        if name == "minecraft:air" || name == "minecraft:cave_air" {
+            y -= 1;
+            continue;
+        }
+        let biome = chunk.biome(x, y, z);
+        if !surface_seen {
+            surface_seen = true;
+            if name == "minecraft:water" || name == "minecraft:bubble_column" {
+                // 水面按列深浅分层；最终色只看水柱深度，无需再往下混合方块。
+                let mut depth = 1;
+                for dy in (y_range.start..y).rev() {
+                    let Some(b) = chunk.block(x, dy, z) else {
+                        break;
+                    };
+                    let bn = b.name();
+                    if bn == "minecraft:water" || bn == "minecraft:bubble_column" {
+                        depth += 1;
+                    } else {
+                        break;
+                    }
+                    if depth > 40 {
                         break;
                     }
                 }
-                let c = pal.pick_with(&block, biome, overlay);
-                colour = if c[3] == 255 { c } else { blend(c, colour) };
-                if colour[3] == 255 {
-                    break;
-                }
-                y -= 1;
+                water_depth = Some(depth);
+                colour = grade(water_depth_color(pal.water(biome), depth));
+                break;
             }
-            if water_depth.is_none() {
-                if let Some(heights) = view.heights {
-                    if colour[3] != 0 {
-                        // 坡面光影（水面已走分层，陆地/植被乘亮度因子）
-                        let f = shade_factor(heights, 512, view.hx0 + x, view.hz0 + z);
-                        if (f - 1.0).abs() > 0.004 {
-                            colour = [
-                                ((colour[0] as f32) * f).round().clamp(0.0, 255.0) as u8,
-                                ((colour[1] as f32) * f).round().clamp(0.0, 255.0) as u8,
-                                ((colour[2] as f32) * f).round().clamp(0.0, 255.0) as u8,
-                                colour[3],
-                            ];
-                        }
-                    }
+        }
+        let c = pal.pick_with(&block, biome, overlay);
+        colour = if c[3] == 255 { c } else { blend(c, colour) };
+        if colour[3] == 255 {
+            break;
+        }
+        y -= 1;
+    }
+    if water_depth.is_none() {
+        if let Some(heights) = view.heights {
+            if colour[3] != 0 {
+                // 坡面光影（水面已走分层，陆地/植被乘亮度因子）
+                let f = shade_factor(heights, view.stride, hx, hz);
+                if (f - 1.0).abs() > 0.004 {
+                    colour = [
+                        ((colour[0] as f32) * f).round().clamp(0.0, 255.0) as u8,
+                        ((colour[1] as f32) * f).round().clamp(0.0, 255.0) as u8,
+                        ((colour[2] as f32) * f).round().clamp(0.0, 255.0) as u8,
+                        colour[3],
+                    ];
                 }
             }
-            out[z * 16 + x] = colour;
         }
     }
+    colour
 }
 
 /// 简单 alpha 混合：上色叠下色（src 在上）。三通道按 alpha 加权，dst alpha 取大。
@@ -623,7 +764,7 @@ mod tests {
         let mca = synthetic_region_mca();
         let dir = std::env::temp_dir().join(format!("elytra_map_fixture_{}", std::process::id()));
         fs::create_dir_all(dir.join("region")).unwrap();
-        let path = dir.join("region").join("r.0.0.mca");
+        let path = dir.join("region").join("r.-1.-1.mca");
         fs::write(&path, &mca).unwrap();
 
         // 组合层读回
@@ -714,7 +855,7 @@ mod tests {
         writer.write(&mut buf).unwrap();
         let dir = std::env::temp_dir().join(format!("elytra_map_modern_{}", std::process::id()));
         fs::create_dir_all(dir.join("region")).unwrap();
-        let path = dir.join("region").join("r.0.0.mca");
+        let path = dir.join("region").join("r.-1.-1.mca");
         fs::write(&path, &buf).unwrap();
 
         let parsed = super::super::region_io::parse_region(&path);
@@ -754,7 +895,7 @@ mod tests {
         writer.write(&mut buf).unwrap();
         let dir = std::env::temp_dir().join(format!("elytra_map_compose_{}", std::process::id()));
         fs::create_dir_all(dir.join("region")).unwrap();
-        let path = dir.join("region").join("r.0.0.mca");
+        let path = dir.join("region").join("r.-1.-1.mca");
         fs::write(&path, &buf).unwrap();
 
         let parsed = super::super::region_io::parse_region(&path);
@@ -801,6 +942,25 @@ mod tests {
         // 未收录方块（Mod 内容）→ 中性灰，不再是洋红占位
         assert_eq!(pal.table.get("minecraft:modded_block"), None);
         let _ = super::UNKNOWN_COLOR;
+    }
+
+    #[test]
+    fn lod_tile_is_scaled_png() {
+        let mca = synthetic_region_mca();
+        let dir = std::env::temp_dir().join(format!("elytra_map_lod_{}", std::process::id()));
+        fs::create_dir_all(dir.join("region")).unwrap();
+        let path = dir.join("region").join("r.0.0.mca");
+        fs::write(&path, &mca).unwrap();
+        for (step, size) in [(2usize, 256u32), (4, 128)] {
+            let png =
+                render_region_tile_lod(&path, RenderStyle::TopDown { max_y: 319 }, None, step)
+                    .expect("LOD 瓦片应可渲染");
+            let decoder = png::Decoder::new(std::io::Cursor::new(&png));
+            let reader = decoder.read_info().unwrap();
+            assert_eq!(reader.info().width, size);
+            assert_eq!(reader.info().height, size);
+        }
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

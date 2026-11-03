@@ -3,19 +3,28 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::game::version::dir::version_dir_path;
 use crate::map::folder::{discover_worlds, MapFolderEntry};
 use crate::map::region_io::{
     dimension_dir, list_region_files, region_file_for, surface_info, MapRegionInfo,
 };
-use crate::map::render::{render_region_tile, RenderStyle};
+use crate::map::render::{render_region_tile_lod, RenderStyle};
 use crate::map::search::{find_biome, list_biomes, MapBiomeHit, MapBiomeSummary};
 use crate::map::tile_cache::{read_cached_tile, tile_cache_key, write_tile};
 use crate::map::world_info::{world_info, MapWorldInfo};
 use crate::seedmap;
 use crate::util::is_simple_name;
+
+/// 地图瓦片请求的可选参数（避免命令参数超过 7 个）。
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MapTileOptions {
+    pub mod_colors: bool,
+    /// 0=512, 1=256, 2=128。
+    pub lod: u8,
+}
 
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[ts(export_to = "map/")]
@@ -87,11 +96,16 @@ fn map_tile(
     rz: i32,
     max_y: i32,
     mod_colors: bool,
+    lod: u8,
 ) -> Result<Vec<u8>, String> {
     validate_dimension(world, dimension)?;
     let max_y = max_y.clamp(-512, 512) as isize;
+    let lod = lod.min(2);
     let render_style = RenderStyle::TopDown { max_y };
-    let cache_style = format!("topdown{max_y}|mod{}", if mod_colors { 1 } else { 0 });
+    let cache_style = format!(
+        "topdown{max_y}|mod{}|lod{lod}",
+        if mod_colors { 1 } else { 0 }
+    );
 
     let Some(cache_path) = tile_cache_key(world, dimension, rx, rz, &cache_style) else {
         bail_key!(
@@ -109,7 +123,12 @@ fn map_tile(
     let overlay = mod_colors
         .then(|| crate::map::mod_color::overlay_for_world(world))
         .flatten();
-    let png = render_region_tile(&region_file, render_style, overlay.as_deref())?;
+    let png = render_region_tile_lod(
+        &region_file,
+        render_style,
+        overlay.as_deref(),
+        1usize << lod,
+    )?;
     write_tile(&cache_path, &png)?;
     Ok(png)
 }
@@ -151,11 +170,19 @@ pub async fn get_map_tile(
     rx: i32,
     rz: i32,
     max_y: i32,
-    mod_colors: bool,
+    options: MapTileOptions,
 ) -> Result<tauri::ipc::Response, String> {
     let png = tauri::async_runtime::spawn_blocking(move || {
         let world = world_root(&version_name, &world_name)?;
-        map_tile(&world, &dimension, rx, rz, max_y, mod_colors)
+        map_tile(
+            &world,
+            &dimension,
+            rx,
+            rz,
+            max_y,
+            options.mod_colors,
+            options.lod,
+        )
     })
     .await
     .map_err(common_err_ctx_key!(
@@ -225,11 +252,19 @@ pub async fn get_map_folder_tile(
     rx: i32,
     rz: i32,
     max_y: i32,
-    mod_colors: bool,
+    options: MapTileOptions,
 ) -> Result<tauri::ipc::Response, String> {
     let png = tauri::async_runtime::spawn_blocking(move || {
         let world = folder_root(&root)?;
-        map_tile(&world, &dimension, rx, rz, max_y, mod_colors)
+        map_tile(
+            &world,
+            &dimension,
+            rx,
+            rz,
+            max_y,
+            options.mod_colors,
+            options.lod,
+        )
     })
     .await
     .map_err(common_err_ctx_key!(

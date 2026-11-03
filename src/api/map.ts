@@ -66,6 +66,7 @@ export async function getMapTile(
   rz: number,
   maxY: number,
   modColors: boolean,
+  lod: number,
 ): Promise<Blob> {
   const payload = await invoke<ArrayBuffer>("get_map_tile", {
     versionName,
@@ -74,7 +75,7 @@ export async function getMapTile(
     rx,
     rz,
     maxY,
-    modColors,
+    options: { modColors, lod },
   });
   const bytes = bytesOf(payload);
   const copy = new Uint8Array(bytes.byteLength);
@@ -107,6 +108,7 @@ export async function getMapFolderTile(
   rz: number,
   maxY: number,
   modColors: boolean,
+  lod: number,
 ): Promise<Blob> {
   const payload = await invoke<ArrayBuffer>("get_map_folder_tile", {
     root,
@@ -114,7 +116,7 @@ export async function getMapFolderTile(
     rx,
     rz,
     maxY,
-    modColors,
+    options: { modColors, lod },
   });
   const bytes = bytesOf(payload);
   const copy = new Uint8Array(bytes.byteLength);
