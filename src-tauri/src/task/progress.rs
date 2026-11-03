@@ -17,12 +17,17 @@ fn b2u(b: &AtomicBool) -> u32 {
     }
 }
 
-/// EMA 速度采样器：差分 + 指数平滑（0.6/0.4，≥300ms 采样窗）；停滞 >4s 或速度 <1KB/s 时 ETA 置 None；各处心跳共用。
+/// EMA 速度采样器：差分 + 时间常数平滑（≥300ms 采样窗）；停滞 >4s 或速度 <1KB/s 时 ETA 置 None；各处心跳共用。
 pub(crate) struct SpeedSampler {
     last_bytes: u64,
     last_sample: Instant,
     last_progress_at: Instant,
     speed_ema: f64,
+}
+
+/// 采样间隔越长，越信任新样本；固定 0.4 权重会在心跳抖动时引入偏差。
+fn ema_alpha(dt: f64, tau: f64) -> f64 {
+    1.0 - (-dt / tau.max(0.001)).exp()
 }
 
 impl SpeedSampler {
@@ -46,7 +51,8 @@ impl SpeedSampler {
             self.speed_ema = if self.speed_ema <= 0.0 {
                 instant
             } else {
-                self.speed_ema * 0.6 + instant * 0.4
+                let alpha = ema_alpha(dt, 0.75);
+                self.speed_ema * (1.0 - alpha) + instant * alpha
             };
             self.last_bytes = cur_bytes;
             self.last_sample = now;
@@ -855,5 +861,14 @@ mod tests {
         p.completed_bytes = 50;
         update_progress(&mut p);
         assert_eq!(p.steps[0].progress, 0.0, "多步任务的步骤进度不由总进度改写");
+    }
+
+    #[test]
+    fn ema_alpha_grows_with_sample_interval() {
+        let short = ema_alpha(0.3, 0.75);
+        let long = ema_alpha(3.0, 0.75);
+        assert!(short > 0.25 && short < 0.4);
+        assert!(long > 0.9);
+        assert!(ema_alpha(0.0, 0.75) < 1e-9);
     }
 }
