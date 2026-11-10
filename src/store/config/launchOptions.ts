@@ -3,6 +3,9 @@ import { ref, computed, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { memState } from "../app/memory";
 import { useConfigSection } from "../../utils/useConfigSection";
+import {
+  autoAllocMb, memCeilMb, snapMemMb, MEM_FLOOR_MB, MEM_STEP_MB,
+} from "../../utils/memory";
 import type { LaunchOptions } from "../../types/launcher/LaunchOptions";
 import type { GcType } from "../../types/launcher/GcType";
 
@@ -19,19 +22,35 @@ export const loGameLang = ref("auto_zh_CN");
 export const loServer = ref("");
 export const loPort = ref("");
 
-export const loMemMode = ref<"Auto" | "Custom">("Auto");
+export const loMemAuto = ref(true);
+/** 手动模式的上界（-Xmx）；自动模式下不参与保存。 */
 export const loMemMb = ref(4096);
-export const loMinMem = ref<number | null>(null);
+/** 手动模式的下界（-Xms）。 */
+export const loMinMem = ref(MEM_FLOOR_MB);
 export const loMemOptimize = ref(false);
 
-export const memUsedMb = computed(() => Math.max(0, memState.totalMb - memState.availMb));
-export const memGameMb = computed(() => {
-  // 自动配置：显示 0 mod 基准值（启动时后端按实际 mod 数量动态调整）
-  const g = loMemMode.value === "Custom"
-    ? loMemMb.value
-    : Math.max(2048, Math.floor(memState.availMb * 0.60));
-  return Math.min(g, memState.availMb || Number.MAX_SAFE_INTEGER);
+/** 滑块轨道上限（随可用内存变化，按步进对齐）。 */
+export const memLimitMb = computed(() => memCeilMb(memState.availMb));
+/** 自动分配基准：0 mod 的估算值（启动时后端按实际 mod 数动态上调）。 */
+export const memAutoMb = computed(() =>
+  snapMemMb(autoAllocMb(memState.availMb), memLimitMb.value));
+
+export const memUpperMb = computed(() => {
+  const raw = loMemAuto.value
+    ? memAutoMb.value
+    : snapMemMb(loMemMb.value, memLimitMb.value);
+  return Math.max(MEM_FLOOR_MB + MEM_STEP_MB, raw);
 });
+
+export const memLowerMb = computed(() => {
+  if (loMemAuto.value) return MEM_FLOOR_MB;
+  const raw = snapMemMb(loMinMem.value, memLimitMb.value);
+  return Math.min(memUpperMb.value - MEM_STEP_MB, raw);
+});
+
+export const memUsedMb = computed(() => Math.max(0, memState.totalMb - memState.availMb));
+export const memGameMb = computed(() =>
+  Math.min(memUpperMb.value, memState.availMb || Number.MAX_SAFE_INTEGER));
 export const memUsedPct = computed(() =>
   memState.totalMb ? (memUsedMb.value / memState.totalMb) * 100 : 0);
 export const memGamePct = computed(() => {
@@ -44,9 +63,10 @@ export const memGamePct = computed(() => {
 watch(
   () => memState.availMb,
   (avail) => {
-    if (avail > 0 && loMemMb.value > avail) {
-      loMemMb.value = Math.max(1024, avail);
-    }
+    if (!avail) return;
+    const ceil = memCeilMb(avail);
+    if (loMemMb.value > ceil) loMemMb.value = ceil;
+    if (loMinMem.value > loMemMb.value) loMinMem.value = loMemMb.value;
   },
 );
 
@@ -89,9 +109,9 @@ export async function loadLaunchOptions() {
     loGameLang.value = cfg.game_language ?? "auto_zh_CN";
     loServer.value = cfg.server ?? "";
     loPort.value = cfg.port != null ? String(cfg.port) : "";
-    loMemMode.value = cfg.memory === "Auto" ? "Auto" : "Custom";
+    loMemAuto.value = cfg.memory === "Auto";
     if (cfg.memory !== "Auto") loMemMb.value = cfg.memory.Custom ?? 4096;
-    loMinMem.value = cfg.min_memory ?? null;
+    loMinMem.value = cfg.min_memory ?? MEM_FLOOR_MB;
     loMemOptimize.value = !!cfg.pre_launch_memory_optimize;
     // 内存快照由全局监听提供；首帧未就绪时补拉一次
     if (!memState.availMb) {
@@ -101,9 +121,6 @@ export async function loadLaunchOptions() {
         memState.availMb = avail;
       } catch {
       }
-    }
-    if (loMemMode.value === "Auto") {
-      loMemMb.value = Math.max(2048, Math.min(Math.floor(memState.availMb * 0.60), memState.availMb || Number.MAX_SAFE_INTEGER));
     }
   } catch {
   }
@@ -121,8 +138,8 @@ export async function saveLaunchOptions() {
         : "Default";
     cfg.jvm_args = loJvmArgs.value.split(/\n/).map(s => s.trim()).filter(Boolean);
     cfg.game_args = loGameArgs.value.split(/\n/).map(s => s.trim()).filter(Boolean);
-    cfg.memory = loMemMode.value === "Custom" ? { Custom: loMemMb.value } : "Auto";
-    cfg.min_memory = loMinMem.value;
+    cfg.memory = loMemAuto.value ? "Auto" : { Custom: memUpperMb.value };
+    cfg.min_memory = loMemAuto.value ? null : memLowerMb.value;
     cfg.pre_launch_memory_optimize = loMemOptimize.value;
     cfg.gc_type = loGc.value as GcType;
     cfg.disable_launch_wrapper = loDisableWrapper.value;

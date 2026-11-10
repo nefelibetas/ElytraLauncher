@@ -6,9 +6,13 @@ import { useI18n } from "vue-i18n";
 import { RefreshCw, Undo2 } from "@lucide/vue";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import CheckToggle from "../common/CheckToggle.vue";
+import RangeSlider from "../common/RangeSlider.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import { memState } from "../../store/app/memory";
 import { fmtGb, memLabelLeft } from "../../utils/format";
+import {
+  autoAllocMb, memCeilMb, snapMemMb, MEM_FLOOR_MB, MEM_STEP_MB,
+} from "../../utils/memory";
 import { jdkList, loadConfig, refreshJdks } from "../../store/config/jdkOptions";
 import { gcOptions } from "../../store/config/launchOptions";
 import {
@@ -188,45 +192,43 @@ function pickJava(value: string) {
 
 // ── 内存 ──
 
-const memMode = computed<"Auto" | "Custom">({
-  get: () => (draft.value?.memory === "Auto" ? "Auto" : "Custom"),
-  set: (mode) => {
+const memCeil = computed(() => memCeilMb(memState.availMb));
+
+/** 上界（-Xmx）：自动模式取 0 mod 估算值。 */
+const memUpperMb = computed(() => {
+  const mem = draft.value?.memory;
+  const raw = !mem || mem === "Auto" ? autoAllocMb(memState.availMb) : mem.Custom;
+  return Math.max(MEM_FLOOR_MB + MEM_STEP_MB, snapMemMb(raw, memCeil.value));
+});
+
+/** 下界（-Xms）。 */
+const memLowerMb = computed(() => {
+  const raw = snapMemMb(draft.value?.min_memory ?? MEM_FLOOR_MB, memCeil.value);
+  return Math.min(memUpperMb.value - MEM_STEP_MB, raw);
+});
+
+const memAuto = computed<boolean>({
+  get: () => draft.value?.memory === "Auto",
+  set: (auto) => {
     if (!draft.value) return;
-    draft.value.memory = mode === "Auto"
-      ? "Auto"
-      : { Custom: memMb.value };
+    // 取消自动：上下界冻结在当前自动值上，下界交还用户拖动
+    draft.value.memory = auto ? "Auto" : { Custom: memUpperMb.value };
+    if (!auto) draft.value.min_memory = MEM_FLOOR_MB;
   },
 });
 
-const memMb = computed<number>({
-  get: () => (draft.value && draft.value.memory !== "Auto" ? draft.value.memory.Custom : 4096),
-  set: (value) => {
-    if (draft.value && draft.value.memory !== "Auto") {
-      draft.value.memory = { Custom: value };
-    }
+const memRange = computed<[number, number]>({
+  get: (): [number, number] => [memLowerMb.value, memUpperMb.value],
+  set: (value: [number, number]) => {
+    if (!draft.value) return;
+    draft.value.min_memory = value[0];
+    draft.value.memory = { Custom: value[1] };
   },
 });
-
-const minMem = computed<number | null>({
-  get: () => draft.value?.min_memory ?? null,
-  set: (value) => {
-    if (draft.value) draft.value.min_memory = value;
-  },
-});
-
-function toggleMinMem() {
-  minMem.value = minMem.value === null ? Math.min(512, memMb.value) : null;
-  scheduleSave();
-}
 
 const memUsedMb = computed(() => Math.max(0, memState.totalMb - memState.availMb));
-const memGameMb = computed(() => {
-  const configured = draft.value?.memory;
-  const requested = configured && configured !== "Auto"
-    ? configured.Custom
-    : Math.max(2048, Math.floor(memState.availMb * 0.60));
-  return Math.min(requested, memState.availMb || Number.MAX_SAFE_INTEGER);
-});
+const memGameMb = computed(() =>
+  Math.min(memUpperMb.value, memState.availMb || Number.MAX_SAFE_INTEGER));
 const memUsedPct = computed(() =>
   memState.totalMb ? (memUsedMb.value / memState.totalMb) * 100 : 0);
 const memGamePct = computed(() => {
@@ -435,6 +437,11 @@ function setWindowMode(value: string) {
                 {{ t("settings.launch.verifySsl") }}
               </CheckToggle>
             </div>
+            <div class="lo-row">
+              <CheckToggle v-model="draft.pre_launch_memory_optimize" @change="scheduleSave">
+                {{ t("settings.launch.memoryOptimize") }}
+              </CheckToggle>
+            </div>
           </div>
         </div>
 
@@ -445,57 +452,24 @@ function setWindowMode(value: string) {
           </div>
           <div class="launch-opts">
             <div class="lo-row">
-              <CheckToggle v-model="memMode" type="radio" value="Auto" @change="scheduleSave">
-                {{ t("settings.launch.memoryAuto") }}
-              </CheckToggle>
-            </div>
-            <div class="lo-row">
-              <CheckToggle v-model="memMode" type="radio" value="Custom" @change="scheduleSave">
-                {{ t("settings.launch.memoryCustom") }}
-              </CheckToggle>
-              <input
-                v-model.number="memMb"
-                class="mem-slider"
-                :class="{ disabled: memMode !== 'Custom' }"
-                type="range"
-                :min="1024"
-                :max="memState.availMb || 4096"
-                step="256"
-                :disabled="memMode !== 'Custom'"
-                :style="{ '--range-pct': ((memMb - 1024) / ((memState.availMb || 4096) - 1024) * 100) + '%' }"
-                autocomplete="off"
+              <div class="mem-auto">
+                <CheckToggle v-model="memAuto" @change="scheduleSave">
+                  {{ t("settings.launch.memoryAuto") }}
+                </CheckToggle>
+              </div>
+              <span class="mem-bound" :title="t('settings.launch.memoryMin')">{{ fmtGb(memLowerMb) }}</span>
+              <RangeSlider
+                :model-value="memRange"
+                :min="MEM_FLOOR_MB"
+                :max="memCeil"
+                :step="MEM_STEP_MB"
+                :disabled="memAuto"
+                :low-label="t('settings.launch.memoryMin')"
+                :high-label="t('settings.launch.memoryMax')"
+                @update:model-value="memRange = $event"
                 @change="scheduleSave"
               />
-              <span class="mem-slider-val" :class="{ disabled: memMode !== 'Custom' }">{{ fmtGb(memMb) }}</span>
-            </div>
-            <div class="lo-row">
-              <CheckToggle
-                :model-value="minMem !== null"
-                :disabled="memMode !== 'Custom'"
-                :dim="memMode !== 'Custom'"
-                @change="toggleMinMem"
-              >
-                {{ t("settings.launch.minMemory") }}
-              </CheckToggle>
-              <input
-                v-if="minMem !== null"
-                v-model.number="minMem"
-                class="mem-slider"
-                type="range"
-                :min="256"
-                :max="memMb"
-                step="128"
-                :disabled="memMode !== 'Custom'"
-                :style="{ '--range-pct': ((minMem - 256) / (memMb - 256) * 100) + '%' }"
-                autocomplete="off"
-                @change="scheduleSave"
-              />
-              <span v-if="minMem !== null" class="mem-slider-val">{{ minMem }} MB</span>
-            </div>
-            <div class="lo-row">
-              <CheckToggle v-model="draft.pre_launch_memory_optimize" @change="scheduleSave">
-                {{ t("settings.launch.memoryOptimize") }}
-              </CheckToggle>
+              <span class="mem-bound" :title="t('settings.launch.memoryMax')">{{ fmtGb(memUpperMb) }}</span>
             </div>
             <div class="mem-status">
               <div class="mem-bar-labels">
@@ -621,26 +595,19 @@ function setWindowMode(value: string) {
   color: var(--text-tertiary);
 }
 
-.mem-slider {
-  flex: 1;
-  cursor: pointer;
-}
-
-.mem-slider.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.mem-slider-val {
+.mem-auto {
   flex: none;
-  width: 72px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  text-align: right;
+  width: 96px;
 }
 
-.mem-slider-val.disabled {
-  opacity: 0.45;
+.mem-bound {
+  flex: none;
+  width: 56px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .mem-status {

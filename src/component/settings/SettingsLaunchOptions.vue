@@ -6,10 +6,13 @@ import { memState } from "../../store/app/memory";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import AutoTasksEditor from "./AutoTasksEditor.vue";
 import CheckToggle from "../common/CheckToggle.vue";
+import RangeSlider from "../common/RangeSlider.vue";
+import { MEM_FLOOR_MB, MEM_STEP_MB } from "../../utils/memory";
 import {
   loWindowTitle, loPriority, loWinMode, loWinW, loWinH, loGameLang,
-  loMemMode, loMemMb, loMinMem, loMemOptimize, loVerifySsl, launchError,
+  loMemAuto, loMemMb, loMinMem, loMemOptimize, loVerifySsl, launchError,
   memUsedMb, memGameMb, memUsedPct, memGamePct,
+  memLimitMb, memAutoMb, memLowerMb, memUpperMb,
   saveLaunchOptions, loadLaunchOptions,
 } from "../../store/config/launchOptions";
 import { memLabelLeft, fmtGb } from "../../utils/format";
@@ -18,9 +21,20 @@ const { t } = useI18n();
 
 onMounted(loadLaunchOptions);
 
-/** 最小内存开关：null = 不设置（JVM 默认），开启取 512MB。 */
-function toggleMinMem() {
-  loMinMem.value = loMinMem.value === null ? Math.min(512, loMemMb.value) : null;
+const memRange = computed<[number, number]>(() => [memLowerMb.value, memUpperMb.value]);
+
+/** 双端滑块：下界 -Xms / 上界 -Xmx。 */
+function setMemRange(value: [number, number]) {
+  loMinMem.value = value[0];
+  loMemMb.value = value[1];
+}
+
+/** 取消自动配置：手动上下界冻结在当前自动值上，随后可自由拖动。 */
+function onMemAutoChange() {
+  if (!loMemAuto.value) {
+    loMemMb.value = memAutoMb.value;
+    loMinMem.value = MEM_FLOOR_MB;
+  }
   saveLaunchOptions();
 }
 
@@ -125,6 +139,9 @@ const gameLangOptions = computed<SelOption[]>(() => [
       <div class="lo-row">
         <CheckToggle v-model="loVerifySsl" @change="saveLaunchOptions">{{ t("settings.launch.verifySsl") }}</CheckToggle>
       </div>
+      <div class="lo-row">
+        <CheckToggle v-model="loMemOptimize" @change="saveLaunchOptions">{{ t("settings.launch.memoryOptimize") }}</CheckToggle>
+      </div>
     </div>
     <div v-if="launchError" class="err">{{ launchError }}</div>
   </div>
@@ -136,44 +153,22 @@ const gameLangOptions = computed<SelOption[]>(() => [
     </div>
     <div class="launch-opts">
       <div class="lo-row">
-        <CheckToggle type="radio" value="Auto" v-model="loMemMode" @change="saveLaunchOptions">{{ t("settings.launch.memoryAuto") }}</CheckToggle>
-      </div>
-      <div class="lo-row">
-        <CheckToggle type="radio" value="Custom" v-model="loMemMode" @change="saveLaunchOptions">{{ t("settings.launch.memoryCustom") }}</CheckToggle>
-        <input
-          v-model.number="loMemMb"
-          class="mem-slider"
-          :class="{ disabled: loMemMode !== 'Custom' }"
-          type="range"
-          :min="1024"
-          :max="memState.availMb || 4096"
-          step="256"
-          :disabled="loMemMode !== 'Custom'"
-          :style="{ '--range-pct': ((loMemMb - 1024) / ((memState.availMb || 4096) - 1024) * 100) + '%' }"
+        <div class="mem-auto">
+          <CheckToggle v-model="loMemAuto" @change="onMemAutoChange">{{ t("settings.launch.memoryAuto") }}</CheckToggle>
+        </div>
+        <span class="mem-bound" :title="t('settings.launch.memoryMin')">{{ fmtGb(memLowerMb) }}</span>
+        <RangeSlider
+          :model-value="memRange"
+          :min="MEM_FLOOR_MB"
+          :max="memLimitMb"
+          :step="MEM_STEP_MB"
+          :disabled="loMemAuto"
+          :low-label="t('settings.launch.memoryMin')"
+          :high-label="t('settings.launch.memoryMax')"
+          @update:model-value="setMemRange"
           @change="saveLaunchOptions"
-          autocomplete="off"
         />
-        <span class="mem-slider-val" :class="{ disabled: loMemMode !== 'Custom' }">{{ fmtGb(loMemMb) }}</span>
-      </div>
-      <div class="lo-row">
-        <CheckToggle :model-value="loMinMem !== null" :disabled="loMemMode !== 'Custom'" :dim="loMemMode !== 'Custom'" @change="toggleMinMem">{{ t("settings.launch.minMemory") }}</CheckToggle>
-        <input
-          v-if="loMinMem !== null"
-          v-model.number="loMinMem"
-          class="mem-slider"
-          type="range"
-          :min="256"
-          :max="loMemMb"
-          step="128"
-          :disabled="loMemMode !== 'Custom'"
-          :style="{ '--range-pct': ((loMinMem - 256) / (loMemMb - 256) * 100) + '%' }"
-          @change="saveLaunchOptions"
-          autocomplete="off"
-        />
-        <span v-if="loMinMem !== null" class="mem-slider-val" :class="{ disabled: loMemMode !== 'Custom' }">{{ loMinMem }} MB</span>
-      </div>
-      <div class="lo-row">
-        <CheckToggle v-model="loMemOptimize" @change="saveLaunchOptions">{{ t("settings.launch.memoryOptimize") }}</CheckToggle>
+        <span class="mem-bound" :title="t('settings.launch.memoryMax')">{{ fmtGb(memUpperMb) }}</span>
       </div>
       <div class="mem-status">
         <div class="mem-bar-labels">
@@ -199,26 +194,19 @@ const gameLangOptions = computed<SelOption[]>(() => [
 
 <style scoped>
 /* ===== 内存分配 ===== */
-.mem-slider {
-  flex: 1;
-  cursor: pointer;
-}
-
-.mem-slider.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.mem-slider-val {
+.mem-auto {
   flex: none;
-  width: 72px;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  text-align: right;
+  width: 96px;
 }
 
-.mem-slider-val.disabled {
-  opacity: 0.45;
+.mem-bound {
+  flex: none;
+  width: 56px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .mem-status {
