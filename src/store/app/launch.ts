@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { StepStatus } from "../task/download";
 import type { InstalledVersionInfo } from "../config/gameDirs";
+import type { VersionState } from "../../types/game/VersionState";
 import { GAME_EXITED, GAME_WINDOW_VISIBLE } from "../app/events";
 import { authMode, msAccount, username, externalAccount, refreshExternalAccount, type MsAccountInfo } from "../auth/auth";
 import { selectedVersion, setSelected, getSavedDir } from "../app/selectedVersion";
@@ -54,25 +55,21 @@ export async function cancelLaunch() {
 
 export async function loadVersions() {
   try {
-    const list: InstalledVersionInfo[] = await invoke("get_installed_versions");
+    // 激活目录与版本列表一次取回：启动页少一次 IPC，也避免两次枚举之间目录被切换
+    const state: VersionState = await invoke("get_version_state");
+    const list: InstalledVersionInfo[] = state.versions;
     // 仅在所属目录仍是当前激活目录时才恢复（版本选择页同时写入两者）
     const savedDir = getSavedDir();
-    if (savedDir) {
-      try {
-        const active = await invoke<{ path: string }>("get_active_game_dir");
-        if (active.path !== savedDir) selectedVersion.value = "";
-      } catch {
-      }
-    }
+    if (savedDir && state.active_dir !== savedDir) selectedVersion.value = "";
     if (!list.some(v => v.name === selectedVersion.value) || list.length === 0) {
       try {
         const r = await invoke<{ dir_path: string; version: string }>(
           "auto_activate_version",
         );
-        const newList: InstalledVersionInfo[] = await invoke("get_installed_versions");
-        selectedVersion.value = newList.some(v => v.name === r.version)
+        const fresh: VersionState = await invoke("get_version_state");
+        selectedVersion.value = fresh.versions.some(v => v.name === r.version)
           ? r.version
-          : newList[0]?.name ?? "";
+          : fresh.versions[0]?.name ?? "";
         setSelected(selectedVersion.value, r.dir_path);
       } catch {
         selectedVersion.value = list.some(v => v.name === selectedVersion.value)

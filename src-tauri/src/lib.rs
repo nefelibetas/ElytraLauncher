@@ -41,8 +41,8 @@ use commands::community::{
 };
 use commands::config::take_config_recovery_notice;
 use commands::downloader::{
-    get_downloader_config, get_installed_versions, get_version_list, resolve_version_name,
-    save_downloader_config,
+    get_downloader_config, get_installed_versions, get_version_list, get_version_state,
+    resolve_version_name, save_downloader_config,
 };
 use commands::gamedirs::{
     add_game_dir, auto_activate_version, delete_version_dir, ensure_game_folder,
@@ -116,12 +116,7 @@ pub fn run() {
     util::ensure_hidden_console();
     // 启动器日志落盘（stdout/stderr → Elytra/launcher.log）
     util::init_file_logging();
-    task::init();
-    tooldl::init();
-    // 启动时后台自动扫描 JDK（已有持久化结果则跳过）
-    std::thread::spawn(|| {
-        jdk::init();
-    });
+    // 任务数据库恢复与工具箱配置均为首次访问惰性初始化；窗口创建前不碰 SQLite/TOML。
 
     tauri::Builder::default()
         // 单实例须最先注册（其窗口过程在插件初始化时挂钩）
@@ -143,6 +138,11 @@ pub fn run() {
             });
             // 游戏目录变化监听（激活目录的 versions/ 与聚焦版本子目录 → 事件推送）
             game::version::watch::init(app.handle().clone());
+            // JDK 首扫放到窗口创建后：首次启动的递归扫盘 + java -version 子进程不与 WebView 争资源。
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                jdk::init();
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -214,6 +214,7 @@ pub fn run() {
             get_downloader_config,
             save_downloader_config,
             get_installed_versions,
+            get_version_state,
             resolve_version_name,
             get_forge_versions,
             get_fabric_versions,

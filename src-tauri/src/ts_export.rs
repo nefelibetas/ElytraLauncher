@@ -9,6 +9,7 @@ use ts_rs::TS;
 use crate::auth::external::{ExternalAccount, ExternalConfig, ExternalProfile, ExternalServer};
 use crate::auth::model::MsAccount;
 use crate::commands::auto_tasks::InstanceAutoTasksState;
+use crate::commands::downloader::VersionState;
 use crate::commands::launch_options::InstanceLaunchState;
 use crate::commands::map::MapBlockInfo;
 use crate::commands::version::InstanceModTarget;
@@ -53,6 +54,7 @@ pub fn export_all() {
     JdkSourceMode::export().unwrap();
     GameDir::export().unwrap();
     GameDirsConfig::export().unwrap();
+    VersionState::export().unwrap();
     OnlineConfig::export().unwrap();
     ToolDlConfig::export().unwrap();
     ToolDlStatus::export().unwrap();

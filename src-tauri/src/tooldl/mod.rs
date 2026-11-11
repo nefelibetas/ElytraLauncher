@@ -8,7 +8,5 @@ mod manager;
 mod model;
 mod runner;
 
-pub use manager::{
-    cancel, clear_finished, enqueue, init, list, pause, remove, resume, set_max_files,
-};
+pub use manager::{cancel, clear_finished, enqueue, list, pause, remove, resume, set_max_files};
 pub use model::{ToolDlSnapshot, ToolDlStatus};

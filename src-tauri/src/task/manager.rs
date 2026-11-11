@@ -12,11 +12,6 @@ use super::store;
 /// 全局任务管理器（首次访问即构造，无独立初始化路径）。
 static TM: LazyLock<Arc<TaskManager>> = LazyLock::new(|| Arc::new(TaskManager::default()));
 
-/// 启动期钩子（`lib.rs` 调一次）：残留 running 快照 → interrupted（前端拉取后询问恢复）。
-pub fn init() {
-    store::mark_crashed_as_interrupted();
-}
-
 pub fn global() -> &'static Arc<TaskManager> {
     &TM
 }

@@ -13,7 +13,6 @@ use parking_lot::Mutex;
 
 use super::model::{StopReason, ToolDlSnapshot, ToolDlStatus, ToolDlTask};
 use super::runner;
-use crate::config::tooldl::{ToolDlConfig, DEFAULT_MAX_FILES};
 use crate::downloader::segmented;
 use crate::task::EventSink;
 use crate::{persist, util};
@@ -24,14 +23,9 @@ static TASKS: LazyLock<Mutex<Vec<Arc<ToolDlTask>>>> = LazyLock::new(|| Mutex::ne
 static RUNNING: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
 /// 任务 id 序号（同一秒内多次入队不撞号）。
 static SEQ: LazyLock<Mutex<u64>> = LazyLock::new(|| Mutex::new(0));
-/// 并发上限缓存：避免调度轮询反复读盘；保存配置与进程启动时同步。
-static MAX_FILES: AtomicU32 = AtomicU32::new(DEFAULT_MAX_FILES);
-
-/// 进程启动时把持久化的并发上限载入缓存。
-pub fn init() {
-    let config: ToolDlConfig = persist::tooldl_config();
-    set_max_files(config.max_files);
-}
+/// 并发上限缓存：避免调度轮询反复读盘；首次调度时惰性读取配置，启动路径不碰 TOML。
+static MAX_FILES: LazyLock<AtomicU32> =
+    LazyLock::new(|| AtomicU32::new(persist::tooldl_config().max_files.max(1)));
 
 /// 更新并发上限缓存（保存配置后调用）。
 pub fn set_max_files(max_files: u32) {

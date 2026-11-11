@@ -19,7 +19,7 @@ mod emit;
 mod manager;
 mod spawn;
 
-pub use manager::{global, init, TaskManager, WaitingDecision};
+pub use manager::{global, TaskManager, WaitingDecision};
 pub use model::{
     DownloadFileItem, DownloadFileKind, DownloadFileTask, DownloadFilesTask, DownloadTask,
     FabricApi, LoaderChoice, LoaderKind, ModpackInstallSpec, StepInfo, StepKind, StepStatus,

@@ -1,8 +1,8 @@
 //! ── 安装任务持久化：任务快照 SQLite 存储，崩溃/重启不丢任务 ──
-//! "恢复" = 用快照 JobSpec 重跑（下载任务天然幂等：文件级 sha1 + 已存在跳过 + 残缺目录复用）；生命周期：spawn 写 running → 终态经 TaskManager::fail/cancel 收口 → 崩溃残留 running → 启动 task::init() 标 interrupted。
+//! "恢复" = 用快照 JobSpec 重跑（下载任务天然幂等：文件级 sha1 + 已存在跳过 + 残缺目录复用）；生命周期：spawn 写 running → 终态经 TaskManager::fail/cancel 收口 → 崩溃残留 running → 首次访问数据库时标 interrupted。
 //! 库文件：`config_dir()/tasks.db`（Win/Linux exe 旁 `Elytra/`，macOS `~/Library/Application Support/Elytra/`）。
 
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Once};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,7 @@ fn db_path() -> std::path::PathBuf {
 }
 
 /// 同步执行异步 DB 操作（复用 util::block_on；低频、阻塞毫秒级）；block_on 内不得再嵌套 block_on（tokio 禁止 runtime 内启动 runtime）。
-fn pool() -> Result<&'static SqlitePool, String> {
+fn pool_raw() -> Result<&'static SqlitePool, String> {
     POOL.as_ref().map_err(|e| {
         // 池初始化失败仅留痕一次；DB 不可用不影响任务执行，仅停用快照/崩溃恢复。
         static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -77,6 +77,15 @@ fn pool() -> Result<&'static SqlitePool, String> {
         }
         e.clone()
     })
+}
+
+/// 首次数据库访问时执行崩溃恢复：把上次残留的 running 快照标为 interrupted。
+/// 放在首次访问而非进程启动，窗口创建不再等待 SQLite 打开/建表/UPDATE。
+fn pool() -> Result<&'static SqlitePool, String> {
+    let pool = pool_raw()?;
+    static RECOVERY: Once = Once::new();
+    RECOVERY.call_once(|| mark_running_as_interrupted(pool));
+    Ok(pool)
 }
 
 static POOL: LazyLock<Result<SqlitePool, String>> = LazyLock::new(|| {
@@ -176,14 +185,19 @@ pub fn update_status(id: &str, status: TaskStatus) {
     });
 }
 
-/// 启动时把残留 running 标为 interrupted，供 `list_interrupted_tasks` 拉取询问恢复。
+/// 把残留 running 标为 interrupted，供 `list_interrupted_tasks` 拉取询问恢复。
+/// 仅由首次 `pool()` 调用与测试直接触发；不要放回启动路径。
 pub fn mark_crashed_as_interrupted() {
-    let Ok(pool) = pool() else {
+    let Ok(pool) = pool_raw() else {
         return;
     };
+    mark_running_as_interrupted(pool);
+}
+
+fn mark_running_as_interrupted(pool: &'static SqlitePool) {
     let ts = now();
     block_on(async move {
-        // DB 写带 2s 超时（同 update_status）：启动路径不被 sqlite 锁卡住
+        // DB 写带 2s 超时（同 update_status）：抓取路径不被 sqlite 锁卡住
         let _ = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             sqlx::query(
@@ -215,7 +229,7 @@ const LIST_INTERRUPTED_SQL: &str = "SELECT id, name, updated_at FROM install_job
      ORDER BY updated_at DESC";
 
 /// 异步查询：命令层直接 await，不在 UI/主线程 block_on。
-/// 连接池由启动期 `task::init()` 预热，此处不会触发阻塞初始化。
+/// 连接池与崩溃恢复在首次数据库访问时惰性初始化。
 pub async fn list_interrupted_async() -> Vec<InterruptedJob> {
     let Ok(pool) = pool() else {
         return Vec::new();
