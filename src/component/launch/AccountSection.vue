@@ -7,14 +7,13 @@ import {
   authMode, msAccount, msAccounts, offlineAccounts, username, setAuthMode, msLoginState,
   startMsLogin, cancelMsLogin, switchMsAccount, removeMsAccount,
   saveOfflineAccount, removeOfflineAccount,
-  externalAccount, loadExternalAccounts, switchExternalRole, refreshExternalAccount,
+  externalAccount, switchExternalRole, refreshExternalAccount,
   type MsAccountInfo,
 } from "../../store/auth/auth";
-import { avatarState, scheduleOfflineRender, renderAccountHead, renderOfflineHead, accountHeads, offlineHeads, renderSkinHead3D, renderExternalAvatar, renderPremiumAvatar } from "../../store/auth/avatar";
+import { avatarState, scheduleOfflineRender, renderAccountHead, renderOfflineHead, accountHeads, offlineHeads, renderExternalHead, renderExternalAvatar, renderPremiumAvatar } from "../../store/auth/avatar";
 import { accountUi } from "../../store/auth/accountUi";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
-import { invoke } from "@tauri-apps/api/core";
 import { settingsTab } from "../../store/app/settingsTab";
 import { showError } from "../../store/app/alert";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -107,11 +106,8 @@ function onExtLeave() { extHover.value = false; }
 const roleHeads = reactive<Record<string, string>>({});
 async function loadRoleHead(apiUrl: string, roleId: string) {
   if (roleHeads[roleId]) return;
-  try {
-    const b64 = await invoke<string>("fetch_external_skin", { apiUrl, uuid: roleId });
-    roleHeads[roleId] = await renderSkinHead3D(b64);
-  } catch {
-  }
+  const head = await renderExternalHead(apiUrl, roleId);
+  if (head) roleHeads[roleId] = head;
 }
 // 打开面板：先 refresh 账号（同步最新角色列表），再懒加载角色头像
 watch(showRoles, async (open) => {
@@ -161,7 +157,6 @@ async function doSwitchRole(profileId: string, profileName: string) {
 
 onMounted(() => {
   window.addEventListener("click", closeHandler);
-  void loadExternalAccounts();
 });onUnmounted(() => {
   window.clearTimeout(offlineSaveTimer);
   window.removeEventListener("click", closeHandler);

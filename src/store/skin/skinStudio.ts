@@ -3,9 +3,10 @@ import { reactive } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { authMode, ensureAuthReady, externalAccount, msAccount } from "../auth/auth";
-import { renderPremiumAvatar } from "../auth/avatar";
+import { cachedExternalSkin, cachedPremiumSkin, renderPremiumAvatar } from "../auth/avatar";
 import { DEFAULT_VIEW_PITCH, DEFAULT_VIEW_YAW } from "../skin/skinRender";
 import type { Animation } from "../skin/skinRender";
+import { readCache, writeCache } from "../../utils/localCache";
 import { showError } from "../app/alert";
 import { showToast } from "../../utils/toast";
 import { t } from "../../i18n";
@@ -66,28 +67,31 @@ function delay(ms: number): Promise<void> {
 let lastX = 0;
 let lastY = 0;
 
-/** 披风贴图缓存键（localStorage，内容为 `{ 贴图 url: base64 }`）。 */
-const CAPE_CACHE_KEY = "elytra.capeTextures";
-
-function readCapeCache(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(CAPE_CACHE_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-  } catch {
-    return {};
-  }
+/** 衣柜当前皮肤缓存：带账号键，换账号后不误用上一账号的皮肤。 */
+interface OfficialSkinCache {
+  key: string;
+  skin: string;
+  model: string;
+  at: number;
 }
 
-function writeCapeCache(list: StudioCape[]): void {
-  const map: Record<string, string> = {};
-  for (const c of list) {
-    if (c.url && c.texture) map[c.url] = c.texture;
-  }
-  try {
-    localStorage.setItem(CAPE_CACHE_KEY, JSON.stringify(map));
-  } catch {
-    // 配额不足 / 隐私模式：缓存只是优化项，失败不影响功能
-  }
+/** 衣柜披风列表缓存：含贴图与启用态，离线时仍可预览与切换入口展示。 */
+interface CapeListCache {
+  key: string;
+  list: StudioCape[];
+  at: number;
+}
+
+const OFFICIAL_CACHE_KEY = "studio.official";
+const CAPE_CACHE_KEY = "studio.capes";
+
+/** 衣柜缓存键：正版 uuid / 第三方 api_url+uuid / 离线；账号切换后自然失效。 */
+function accountCacheKey(): string {
+  const ext = externalAccount.value;
+  if (authMode.value === "external" && ext) return `ext:${ext.api_url}|${ext.uuid}`;
+  const acc = msAccount.value;
+  if (authMode.value === "premium" && acc) return `ms:${acc.uuid}`;
+  return "offline";
 }
 
 const ZOOM_MIN = 0.4;
@@ -166,45 +170,108 @@ export const skinStudio = reactive({
 
   // ── 加载 ──
 
+  /** 首帧缓存：当前账号皮肤 + 披风列表同步就绪；账号键不匹配的旧缓存直接忽略。 */
+  hydrateCache() {
+    const key = accountCacheKey();
+    const official = readCache<OfficialSkinCache>(OFFICIAL_CACHE_KEY);
+    const studioSkin = official?.key === key && official.skin ? official : null;
+    // 头像已在启动时拉过：直接借用其贴图，首次进衣柜也不用再等一轮网络
+    const acc = msAccount.value;
+    const ext = externalAccount.value;
+    const avatarSkin = this.premium && acc
+      ? cachedPremiumSkin(acc.uuid)
+      : authMode.value === "external" && ext
+        ? cachedExternalSkin(ext.api_url, ext.uuid)
+        : null;
+    const cachedSkin = studioSkin && (!avatarSkin || studioSkin.at >= avatarSkin.at) ? studioSkin : avatarSkin;
+    if (cachedSkin) {
+      this.officialSkin = cachedSkin.skin;
+      this.officialModel = cachedSkin.model || "classic";
+    }
+    if (!this.premium) {
+      this.capes = [];
+      this.selectedCapeId = "";
+      return;
+    }
+    const capes = readCache<CapeListCache>(CAPE_CACHE_KEY);
+    if (capes?.key === key && Array.isArray(capes.list)) {
+      this.capes = capes.list;
+      this.selectedCapeId = capes.list.find((c) => c.active)?.id ?? "";
+    }
+  },
+
   async load() {
     this.yaw = DEFAULT_VIEW_YAW;
     this.pitch = DEFAULT_VIEW_PITCH;
     this.zoom = 1;
     this.phase = "loading";
-    // 披风贴图冷启动要访问 textures.minecraft.net（1~3s）；首帧只等皮肤主体，披风后台补齐，
-    // 否则 currentSkin 已就绪但画布要等披风解码，加载态消失后空白数秒。
+    // 账号列表是异步 IPC：未就绪就判定来源会把正版账号误判为离线
+    await ensureAuthReady();
+    this.officialSkin = "";
+    this.officialModel = "classic";
+    this.officialError = "";
+    this.capes = [];
+    this.selectedCapeId = "";
+    this.hydrateCache();
+    // 有缓存 → 立即放行首帧，网络刷新在后台无缝替换；无缓存才等首轮网络
+    if (this.officialSkin) {
+      this.phase = "ready";
+      void this.refreshData();
+    } else {
+      await this.refreshData();
+      this.phase = "ready";
+    }
+  },
+
+  /** 皮肤 / 本地衣柜 / 披风的后台刷新；已有缓存时首帧不等待它。 */
+  async refreshData() {
     await Promise.allSettled([this.loadOfficial(), this.loadSkins()]);
     this.phase = "ready";
     void this.cacheCurrent(); // 自动缓存当前皮肤（后台进行，不阻塞首帧）
     void this.loadCapes();
   },
 
-  /** 拉取账号当前皮肤（正版 / 第三方 / 离线各自来源）；失败回退内置 Steve 保证预览可用。 */
+  /** 拉取账号当前皮肤（正版 / 第三方 / 离线各自来源）；失败保留缓存，无缓存才回退内置 Steve。 */
   async loadOfficial() {
     this.officialError = "";
-    // 账号列表是异步 IPC，未就绪会误判为离线：先渲染一张带「默认」角标的 Steve 卡，随后被真实皮肤替换。
     await ensureAuthReady();
+    const key = accountCacheKey();
+    const cachedEntry = readCache<OfficialSkinCache>(OFFICIAL_CACHE_KEY);
+    const cached = cachedEntry?.key === key && cachedEntry.skin ? cachedEntry : null;
     const acc = msAccount.value;
     const ext = externalAccount.value;
     try {
+      let skin = "";
+      let model = "classic";
       if (this.premium && acc) {
         const p = await invoke<{ skin: string; model: string }>("fetch_account_skin_profile", {
           uuid: acc.uuid,
         });
-        this.officialSkin = p.skin;
-        this.officialModel = p.model || "classic";
+        skin = p.skin;
+        model = p.model || "classic";
       } else if (authMode.value === "external" && ext) {
         const p = await invoke<{ skin: string; model: string }>("fetch_external_skin_profile", {
           apiUrl: ext.api_url,
           uuid: ext.uuid,
         });
-        this.officialSkin = p.skin;
-        this.officialModel = p.model || "classic";
+        skin = p.skin;
+        model = p.model || "classic";
       } else {
-        this.officialSkin = await invoke<string>("fetch_default_skin", { skin: "steve" });
-        this.officialModel = "classic";
+        skin = await invoke<string>("fetch_default_skin", { skin: "steve" });
       }
+      if (accountCacheKey() !== key) return; // 请求期间切换账号：丢弃旧结果
+      this.officialSkin = skin;
+      this.officialModel = model;
+      const entry: OfficialSkinCache = { key, skin, model, at: Date.now() };
+      writeCache(OFFICIAL_CACHE_KEY, entry);
     } catch (e) {
+      if (accountCacheKey() !== key) return;
+      if (cached) {
+        this.officialSkin = cached.skin;
+        this.officialModel = cached.model || "classic";
+        console.warn("衣柜皮肤刷新失败，沿用本地缓存:", e);
+        return;
+      }
       this.officialError = t("skin.studio.errors.officialLoad", { error: String(e) });
       try {
         this.officialSkin = await invoke<string>("fetch_default_skin", { skin: "steve" });
@@ -212,7 +279,6 @@ export const skinStudio = reactive({
       } catch {
         this.officialSkin = "";
       }
-    } finally {
     }
   },
 
@@ -237,19 +303,30 @@ export const skinStudio = reactive({
       this.selectedCapeId = "";
       return;
     }
+    const key = accountCacheKey();
+    const cachedEntry = readCache<CapeListCache>(CAPE_CACHE_KEY);
+    const cached = cachedEntry?.key === key && Array.isArray(cachedEntry.list) ? cachedEntry : null;
     try {
       const list = await invoke<StudioCape[]>("fetch_capes");
-      // 后端拉贴图需访问 textures.minecraft.net（冷启动 1~3 秒）；贴图按 url 不变，用本地缓存补齐缺失，二次进入即刻可见。
-      const cache = readCapeCache();
+      if (accountCacheKey() !== key) return; // 请求期间切换账号：丢弃旧结果
+      // 贴图按 url 稳定：单个下载失败时用上次缓存补齐
+      const textureByUrl = new Map((cached?.list ?? []).map((c) => [c.url, c.texture]));
       for (const c of list) {
-        if (!c.texture && c.url && cache[c.url]) c.texture = cache[c.url];
+        if (!c.texture && c.url) c.texture = textureByUrl.get(c.url) ?? "";
       }
       this.capes = list;
       this.selectedCapeId = list.find((c) => c.active)?.id ?? "";
-      writeCapeCache(list);
+      const entry: CapeListCache = { key, list, at: Date.now() };
+      writeCache(CAPE_CACHE_KEY, entry);
     } catch (e) {
+      if (accountCacheKey() !== key) return;
+      if (cached) {
+        this.capes = cached.list;
+        this.selectedCapeId = cached.list.find((c) => c.active)?.id ?? "";
+        console.warn("披风列表刷新失败，沿用本地缓存:", e);
+        return;
+      }
       this.capesError = t("skin.studio.errors.capesLoad", { error: String(e) });
-    } finally {
     }
   },
 
