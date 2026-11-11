@@ -511,11 +511,6 @@ function savePickedSkin() {
             </div>
           </div>
 
-          <!-- 空态只看「有没有实时卡」：账号当前皮肤即使没进本地衣柜也已有卡片，算不得空 -->
-          <EmptyState v-if="!visibleSkinCount && !skinStudio.officialSkin">
-            <p>{{ t("skin.studio.wardrobeEmpty") }}</p>
-            <p>{{ t("skin.studio.wardrobeEmptyHint") }}</p>
-          </EmptyState>
           <p v-if="skinStudio.skinsError" class="err">{{ skinStudio.skinsError }}</p>
           </template>
         </div>
@@ -552,9 +547,6 @@ function savePickedSkin() {
               </div>
             </div>
 
-            <EmptyState v-if="!skinStudio.capes.length">
-              <p>{{ t("skin.studio.noCapes") }}</p>
-            </EmptyState>
             <p v-if="skinStudio.capesError" class="err">{{ skinStudio.capesError }}</p>
           </template>
           <EmptyState v-else>
