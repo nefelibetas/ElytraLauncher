@@ -15,6 +15,8 @@ import ErrorState from "../common/ErrorState.vue";
 import BatchActionBar from "./BatchActionBar.vue";
 import { useSelectable } from "../../utils/useSelectable";
 import { useBatchDelete } from "../../utils/useBatchDelete";
+import { copyText } from "../../utils/clipboard";
+import { showNativeActionMenu } from "../../utils/contextMenu";
 import {
   mods, modsLoading, modsError, modsNetworkError, disabledMods,
   updates, updatesChecked, checkingUpdates, updatesError, updatingFiles,
@@ -134,6 +136,22 @@ async function doCheckUpdates() {
   }
 }
 
+/** 行级右键菜单：复制文件名 / 打开目录 / 删除。 */
+async function openRowMenu(m: { file_name: string }) {
+  await showNativeActionMenu(
+    [
+      { id: "copy", label: t("common.contextMenu.copyFileName") },
+      { id: "folder", label: t("common.contextMenu.openFolder") },
+      { id: "delete", label: t("common.action.delete") },
+    ],
+    (id) => {
+      if (id === "copy") void copyText(m.file_name);
+      else if (id === "folder") void openModsFolder();
+      else if (id === "delete") openDelete([m.file_name]);
+    },
+  );
+}
+
 /** 打开 mods 文件夹（目录不存在先创建）。 */
 async function openModsFolder() {
   await openGameFolder("mods", versionName.value);
@@ -211,6 +229,7 @@ async function openModsFolder() {
                   class="vsm-item-body"
                   :class="{ selected: selectedSet.has(m.file_name), 'is-disabled': disabledMods.has(m.file_name) }"
                   @click="toggle(m.file_name)"
+                  @contextmenu.prevent.stop="openRowMenu(m)"
                 >
                   <CommunityFileMeta :item="m" :local-icon="Puzzle">
                     <template #meta>

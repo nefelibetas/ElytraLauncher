@@ -3,8 +3,10 @@ import { ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { MS_LOGIN_COMPLETE } from "../app/events";
+import { notifyIfUnfocused } from "../../utils/notify";
 import { showError } from "../app/alert";
 import { t } from "../../i18n";
+import { errMsg } from "../../utils/error";
 import { avatarState, renderPremiumAvatar, renderExternalAvatar } from "../auth/avatar";
 import type { MsAccount as MsAccountInfo } from "../../types/auth/MsAccount";
 import type { ExternalAccount as ExternalAccountInfo } from "../../types/auth/ExternalAccount";
@@ -230,8 +232,11 @@ export async function ensureLoginListener() {
       if (ev.payload.ok && ev.payload.account) {
         msAccount.value = ev.payload.account;
         await loadMsAccounts(); // 新账号已 upsert 进列表（置为末尾）
+        void notifyIfUnfocused(t("common.notify.loginDone"), ev.payload.account.name);
       } else {
-        showError(ev.payload.error || t("launch.error.loginFailed"), true);
+        const message = ev.payload.error || t("launch.error.loginFailed");
+        showError(message, true);
+        void notifyIfUnfocused(t("common.notify.loginFailed"), errMsg(message));
       }
     },
   );

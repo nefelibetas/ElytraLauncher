@@ -24,6 +24,19 @@ export default {
   dialog: {
     tip: "提示",
   },
+  contextMenu: {
+    copyFileName: "复制文件名",
+    copyUrl: "复制下载地址",
+    openFolder: "打开文件夹",
+    remove: "移除任务",
+  },
+  notify: {
+    downloadDone: "下载完成",
+    downloadFailed: "下载失败",
+    loginDone: "登录成功",
+    loginFailed: "登录失败",
+    gameCrashed: "游戏异常退出",
+  },
   tray: {
     show: "显示主窗口",
     quit: "退出",

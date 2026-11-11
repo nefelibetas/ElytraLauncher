@@ -1,4 +1,4 @@
-import { reactive, ref } from "vue"
+import { reactive, ref, watch } from "vue"
 import { listen } from "@tauri-apps/api/event"
 import { TASK_PROGRESS, TASK_WAITING_USER } from "../app/events";
 import type { StepStatus, StepInfo, ProgressPayload, WaitingUserPayload } from "../app/events";
@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { showToast } from "../../utils/toast"
 import { errMsg } from "../../utils/error"
 import { t } from "../../i18n"
+import { setTaskbarSource } from "../app/taskbar"
 
 export type TaskKind = "jdk";
 
@@ -33,6 +34,22 @@ export interface TaskItem {
   error?: string
   kind?: TaskKind
 }
+
+// 任务栏进度：汇总运行中/暂停中的任务（后端任务中心）。
+watch(
+  () => {
+    const running = dlState.tasks.filter(t => t.status === "running");
+    const paused = dlState.tasks.filter(t => t.status === "paused");
+    const progress = running.length > 0
+      ? running.reduce((sum, t) => sum + t.progress, 0) / running.length
+      : paused.length > 0
+        ? paused.reduce((sum, t) => sum + t.progress, 0) / paused.length
+        : 0;
+    return { running: running.length, paused: paused.length, progress };
+  },
+  state => setTaskbarSource("task", state),
+  { immediate: true },
+);
 
 /** 任务名优先用后端 key；旧任务回退原文。 */
 export function taskLabel(task: TaskItem): string {

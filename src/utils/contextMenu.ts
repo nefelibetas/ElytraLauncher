@@ -1,6 +1,6 @@
 // 原生文本右键菜单：WebView 自带的 Chromium 菜单太"网页"，改用 Tauri 系统菜单。
 // 仅用于输入框/可选中文本；非文本区域仍由 App.vue 屏蔽浏览器菜单。
-import { Menu, PredefinedMenuItem } from "@tauri-apps/api/menu";
+import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 
 function isEditable(el: Element | null): boolean {
   if (!el) return false;
@@ -38,4 +38,35 @@ export async function showNativeTextMenu(): Promise<boolean> {
   const menu = await Menu.new({ items });
   await menu.popup();
   return true;
+}
+
+export interface NativeActionItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  separator?: boolean;
+}
+
+/** 行级原生上下文菜单：菜单项由调用方给文案，选中后回调 id。 */
+export async function showNativeActionMenu(
+  items: NativeActionItem[],
+  onSelect: (id: string) => void,
+): Promise<void> {
+  const menuItems: (MenuItem | PredefinedMenuItem)[] = [];
+  for (const item of items) {
+    if (item.separator) {
+      menuItems.push(await PredefinedMenuItem.new({ item: "Separator" }));
+      continue;
+    }
+    menuItems.push(
+      await MenuItem.new({
+        id: item.id,
+        text: item.label,
+        enabled: !item.disabled,
+        action: (id) => onSelect(id),
+      }),
+    );
+  }
+  const menu = await Menu.new({ items: menuItems });
+  await menu.popup();
 }

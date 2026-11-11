@@ -22,7 +22,8 @@
         "shadow": false,
         "minWidth": 900,
         "minHeight": 560,
-        "scrollBarStyle": "fluentOverlay"
+        "scrollBarStyle": "fluentOverlay",
+        "visible": false
       }
     ],
     "security": {

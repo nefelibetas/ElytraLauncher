@@ -12,6 +12,7 @@ import { showError } from "../app/alert";
 import { t } from "../../i18n";
 import { errMsg, formatError } from "../../utils/error";
 import { showToast } from "../../utils/toast";
+import { notifyIfUnfocused } from "../../utils/notify";
 
 export const launchState = reactive({
   /** 启动流程："" 空闲 | "running" 启动中 | "done" 完成 */
@@ -315,7 +316,9 @@ export async function ensureGameExitListener() {
     if (waitingLabel === label) return;
     // 取消启动会终止已拉起的进程（非零退出码）：不算崩溃
     if (exitCode !== null && exitCode !== 0 && !cancelledLabels.has(label)) {
-      showError(crashMessage(label, exitCode, crashReport, cause), true);
+      const message = crashMessage(label, exitCode, crashReport, cause);
+      showError(message, true);
+      void notifyIfUnfocused(t("common.notify.gameCrashed"), errMsg(message));
     }
   });
 }

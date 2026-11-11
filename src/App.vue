@@ -17,6 +17,8 @@ import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/fo
 import { errMsg, formatError } from "./utils/error";
 import { showNativeTextMenu } from "./utils/contextMenu";
 import { currentLocale } from "./i18n";
+import { flashTaskbarAttention } from "./store/app/taskbar";
+import { notifyIfUnfocused } from "./utils/notify";
 import {
   closeAction, setCloseAction, trayAvailable, initCloseBehavior, syncTrayLabels,
 } from "./store/app/closeBehavior";
@@ -61,12 +63,16 @@ dlState.onTaskDone = (message: string, kind?: TaskKind, versionDir?: string) => 
   if (versionDir) setSelected(versionDir);
   // 文案由 download.ts 统一格式化（资源名映射）
   showToast(message);
+  void flashTaskbarAttention("info");
+  void notifyIfUnfocused(t("common.notify.downloadDone"), message);
   // 完成不自动退出任务中心
 };
 
 dlState.onTaskError = (_taskName: string, error: string) => {
   errorMessage.value = error;
   errorDialog.value = true;
+  void flashTaskbarAttention("critical");
+  void notifyIfUnfocused(t("common.notify.downloadFailed"), errMsg(error));
 };
 
 /** 复制挂起任务错误全文（中文首行 + 技术细节）。 */
@@ -90,6 +96,8 @@ watch(waitingUser, async (w) => {
     waitingRestore = null;
     return;
   }
+  void flashTaskbarAttention("critical");
+  void notifyIfUnfocused(t("common.notify.downloadFailed"), errMsg(w.error));
   await nextTick();
   if (waitingOverlay.value) waitingRestore = focusDialog(waitingOverlay.value);
 });

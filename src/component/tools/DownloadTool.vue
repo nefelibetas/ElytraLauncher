@@ -22,6 +22,8 @@ import {
 } from "../../store/config/toolDownload";
 import type { ToolDlSnapshot } from "../../store/config/toolDownload";
 import { showToast } from "../../utils/toast";
+import { copyText } from "../../utils/clipboard";
+import { showNativeActionMenu } from "../../utils/contextMenu";
 import { errMsg } from "../../utils/error";
 import { fmtEta, fmtSize, fmtSpeed } from "../../utils/format";
 import DropSelect from "../common/DropSelect.vue";
@@ -160,6 +162,26 @@ async function handleOpenFolder(task: ToolDlSnapshot) {
   }
 }
 
+/** 行级右键菜单：复制下载地址 / 打开目录 / 取消 / 移除。 */
+async function openTaskMenu(task: ToolDlSnapshot) {
+  const items = [
+    { id: "copy", label: t("common.contextMenu.copyUrl") },
+    { id: "folder", label: t("common.contextMenu.openFolder"), disabled: task.status !== "done" },
+  ];
+  if (task.status === "downloading" || task.status === "queued") {
+    items.push({ id: "cancel", label: t("tools.download.cancel") });
+  }
+  if (isFinished(task)) {
+    items.push({ id: "remove", label: t("common.contextMenu.remove") });
+  }
+  await showNativeActionMenu(items, (id) => {
+    if (id === "copy") void copyText(task.url);
+    else if (id === "folder") void handleOpenFolder(task);
+    else if (id === "cancel") void handleCancel(task);
+    else if (id === "remove") void handleRemove(task);
+  });
+}
+
 function isFinished(task: ToolDlSnapshot): boolean {
   return task.status === "done" || task.status === "error" || task.status === "cancelled";
 }
@@ -274,7 +296,12 @@ function modeText(task: ToolDlSnapshot): string {
       </div>
 
       <TransitionGroup v-else name="tdl" tag="div" class="tdl-list">
-        <div v-for="task in toolDlState.tasks" :key="task.id" class="tdl-item">
+        <div
+          v-for="task in toolDlState.tasks"
+          :key="task.id"
+          class="tdl-item"
+          @contextmenu.prevent.stop="openTaskMenu(task)"
+        >
           <div class="tdl-item-hdr">
             <span class="tdl-name" :title="task.file_name">{{ task.file_name }}</span>
             <span class="tdl-chip" :class="'is-' + task.status">{{ statusText(task) }}</span>

@@ -24,6 +24,19 @@ export default {
   dialog: {
     tip: "Notice",
   },
+  contextMenu: {
+    copyFileName: "Copy file name",
+    copyUrl: "Copy download URL",
+    openFolder: "Open folder",
+    remove: "Remove task",
+  },
+  notify: {
+    downloadDone: "Download complete",
+    downloadFailed: "Download failed",
+    loginDone: "Signed in",
+    loginFailed: "Sign-in failed",
+    gameCrashed: "Game crashed",
+  },
   tray: {
     show: "Show main window",
     quit: "Quit",

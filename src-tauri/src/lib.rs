@@ -121,7 +121,7 @@ const TRAY_ID: &str = "main";
 /// 托盘是否创建成功：Linux 缺少 appindicator 等环境时前端需回退为直接退出。
 static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
-fn show_main_window(app: &tauri::AppHandle) {
+fn focus_main_window(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
         let _ = win.show();
         let _ = win.unminimize();
@@ -150,7 +150,7 @@ fn init_tray(app: &tauri::App) -> Result<(), String> {
         // Windows/Linux 左键恢复窗口、右键菜单；macOS 保持系统惯例（左键菜单）。
         .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => show_main_window(app),
+            "show" => focus_main_window(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -163,7 +163,7 @@ fn init_tray(app: &tauri::App) -> Result<(), String> {
             | TrayIconEvent::DoubleClick {
                 button: MouseButton::Left,
                 ..
-            } => show_main_window(tray.app_handle()),
+            } => focus_main_window(tray.app_handle()),
             _ => {}
         })
         .build(app)
@@ -210,6 +210,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         // 自管窗口几何：统一写入 Elytra 配置目录，避免插件另建 identifier 目录。
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -224,6 +225,17 @@ pub fn run() {
                 }
                 _ => {}
             }
+        })
+        // 页面加载完成后恢复几何并显示窗口：启动时隐藏，避免默认位置闪一下。
+        .on_page_load(|webview, payload| {
+            if webview.label() != "main"
+                || payload.event() != tauri::webview::PageLoadEvent::Finished
+            {
+                return;
+            }
+            let app = webview.app_handle();
+            window_state::restore(app);
+            focus_main_window(app);
         })
         .setup(|app| {
             // 配置损坏恢复：运行期经事件推送（启动期由前端 take_config_recovery_notice 拉取兜底）
@@ -421,12 +433,20 @@ pub fn run() {
     app.run(|app_handle, event| match event {
         // Ready 在窗口创建/居中完成后触发，此时设置几何才不会被随后创建流程覆盖。
         tauri::RunEvent::Ready => {
-            // Ready 时配置窗口的尺寸/居中可能尚未最终落定；推迟到首帧后恢复几何。
+            // 主窗口启动时隐藏，由前端首帧后调用 show_main_window 显示；
+            // 前端加载失败时兜底显示，避免应用不可见。
             let handle = app_handle.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(180));
+                std::thread::sleep(std::time::Duration::from_secs(4));
                 let target = handle.clone();
-                let _ = handle.run_on_main_thread(move || window_state::restore(&target));
+                let _ = handle.run_on_main_thread(move || {
+                    if let Some(win) = target.get_webview_window("main") {
+                        if !win.is_visible().unwrap_or(false) {
+                            window_state::restore(&target);
+                            focus_main_window(&target);
+                        }
+                    }
+                });
             });
         }
         tauri::RunEvent::ExitRequested { .. } => window_state::save(app_handle),
