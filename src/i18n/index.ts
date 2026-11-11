@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { createI18n } from "vue-i18n";
 
-import enUS from "./messages/en-US";
+import type { MessageSchema } from "./types";
 import zhCN from "./messages/zh-CN";
 
 export type LanguageSetting = "auto" | "zh-CN" | "en-US";
@@ -27,12 +27,21 @@ export function detectLocale(): ResolvedLocale {
 export const languageSetting = ref<LanguageSetting>(readSetting());
 const initialLocale = languageSetting.value === "auto" ? detectLocale() : languageSetting.value;
 
+/** 英文包拆成独立 chunk：中文用户启动时不必解析/加载 en-US。 */
+let englishMessages: MessageSchema | null = null;
+if (initialLocale === "en-US") {
+  englishMessages = (await import("./messages/en-US")).default;
+}
+
 export const i18n = createI18n({
   legacy: false,
   globalInjection: true,
   locale: initialLocale,
   fallbackLocale: "zh-CN",
-  messages: { "zh-CN": zhCN, "en-US": enUS },
+  messages: {
+    "zh-CN": zhCN,
+    "en-US": englishMessages ?? zhCN, // 切到英文前由 setLanguage 先补载
+  },
   missingWarn: import.meta.env.DEV,
   fallbackWarn: import.meta.env.DEV,
 });
@@ -83,7 +92,18 @@ function suppressTransitions() {
   setTimeout(clear, 120);
 }
 
-export function setLanguage(setting: LanguageSetting) {
+export async function setLanguage(setting: LanguageSetting) {
+  const locale = setting === "auto" ? detectLocale() : setting;
+  if (locale === "en-US" && !englishMessages) {
+    // 按需补载英文包；失败时保持中文兜底，不阻断设置保存。
+    try {
+      const mod = await import("./messages/en-US");
+      englishMessages = mod.default;
+      i18n.global.mergeLocaleMessage("en-US", englishMessages);
+    } catch {
+      return;
+    }
+  }
   suppressTransitions();
   languageSetting.value = setting;
   try {
@@ -91,6 +111,6 @@ export function setLanguage(setting: LanguageSetting) {
   } catch {
     // 存储不可用时仅本会话生效
   }
-  i18n.global.locale.value = setting === "auto" ? detectLocale() : setting;
+  i18n.global.locale.value = locale;
   applyLocaleMeta();
 }
