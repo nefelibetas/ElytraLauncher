@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 
@@ -21,6 +21,16 @@ const isDetail = computed(
     route.path === "/custom-theme" ||
     route.path === "/skin-studio" ||
     route.path === "/world-preview",
+);
+
+/** 详情 ↔ 主导航的方向：进入详情时主栏左退、详情右进；返回时反向。 */
+const barDirection = ref<"forward" | "back">("forward");
+watch(isDetail, (detail, wasDetail) => {
+  if (detail && !wasDetail) barDirection.value = "forward";
+  else if (!detail && wasDetail) barDirection.value = "back";
+});
+const barTransition = computed(() =>
+  barDirection.value === "back" ? "bar-slide-back" : "bar-slide",
 );
 
 /** 次级页面标题栏文案。 */
@@ -68,7 +78,7 @@ function onMouseDown(e: MouseEvent) {
 
 <template>
   <header class="titlebar" @mousedown="onMouseDown">
-    <Transition name="bar-slide" mode="out-in">
+    <Transition :name="barTransition">
       <div v-if="isDetail" key="detail" class="bar-inner">
         <div class="tl">
           <button class="back-btn" @click="goBack">
@@ -264,13 +274,51 @@ function onMouseDown(e: MouseEvent) {
   width: 100%; height: 100%;
 }
 
-.bar-slide-enter-active, .bar-slide-leave-active {
-  transition: all 0.2s ease;
+.bar-slide-enter-active,
+.bar-slide-leave-active,
+.bar-slide-back-enter-active,
+.bar-slide-back-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
 }
 .bar-slide-enter-from {
-  opacity: 0; transform: translateX(24px);
+  opacity: 0;
+  transform: translateX(24px);
 }
 .bar-slide-leave-to {
-  opacity: 0; transform: translateX(-24px);
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.bar-slide-back-enter-from {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.bar-slide-back-leave-to {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
+/* 旧栏绝对定位退出，新栏留在文档流；避免 out-in 期间标题栏整体空一拍。 */
+.bar-slide-leave-active,
+.bar-slide-back-leave-active {
+  position: absolute;
+  inset: 0;
+  padding: 0 12px;
+  pointer-events: none;
+  z-index: 0;
+}
+.bar-slide-enter-active,
+.bar-slide-back-enter-active {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-slide-enter-active,
+  .bar-slide-leave-active,
+  .bar-slide-back-enter-active,
+  .bar-slide-back-leave-active {
+    transition: none;
+  }
 }
 </style>

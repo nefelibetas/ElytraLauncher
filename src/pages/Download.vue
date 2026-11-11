@@ -20,6 +20,7 @@ import ModpackSearchBar from "../component/download/ModpackSearchBar.vue";
 import ModpackResultList from "../component/download/ModpackResultList.vue";
 import ScrollTopFab from "../component/common/ScrollTopFab.vue";
 import { vdState } from "../store/task/versionDownload";
+import { setDownloadBackHandler } from "../store/app/nav";
 import { communitySearch } from "../store/community/communitySearch";
 import { loadDownloadConfig } from "../store/config/downloaderConfig";
 import { downloadTabState } from "../store/task/downloadTab";
@@ -39,10 +40,34 @@ const bodyEl = ref<HTMLElement>();
 const route = useRoute();
 const router = useRouter();
 
+/** 社区 tab 顺序：与左侧导航一致，用于决定上下切换方向。 */
+const TAB_ORDER = ["vanilla", "mod", "shader", "resourcepack", "datapack", "modpack", "worlds"];
+/** 页面切换动画：tab 间上下位移；原版列表 ↔ 详情用横向整页推入。 */
+const pageMotion = ref<"dl-tab-down" | "dl-tab-up" | "dl-detail-forward" | "dl-detail-back">(
+  "dl-tab-down",
+);
+let prevTab = downloadTabState.current;
+watch(
+  () => downloadTabState.current,
+  (next) => {
+    const from = TAB_ORDER.indexOf(prevTab);
+    const to = TAB_ORDER.indexOf(next);
+    if (from >= 0 && to >= 0 && from !== to) {
+      pageMotion.value = to > from ? "dl-tab-down" : "dl-tab-up";
+    }
+    prevTab = next;
+  },
+);
+
+let prevSelectedId = vdState.selectedVersion?.id ?? null;
+
 // 原版详情态 ↔ 路由 query：进入详情 push ?v=<id>，原生后退 → query 消失 → 回列表（侧键见 nav.ts goBack，此处兜底原生历史 / URL 直达）
 watch(
   () => vdState.selectedVersion?.id,
   (id) => {
+    if (id && !prevSelectedId) pageMotion.value = "dl-detail-forward";
+    else if (!id && prevSelectedId) pageMotion.value = "dl-detail-back";
+    prevSelectedId = id ?? null;
     const cur = route.query.v;
     if (id && cur !== id) {
       router.push({ path: "/download", query: { v: id } });
@@ -66,6 +91,11 @@ watch(
 );
 
 onMounted(async () => {
+  setDownloadBackHandler(() => {
+    if (!vdState.selectedVersion) return false;
+    vdState.backToList();
+    return true;
+  });
   vdState.fetchManifest();
   // 翻译开关依赖 dlTranslateMode：必须等配置读入后再搜索，否则 en 模式首帧仍请求翻译
   await loadDownloadConfig();
@@ -83,6 +113,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  setDownloadBackHandler(null);
   const el = bodyEl.value;
   if (el) downloadTabState.scrollTop[downloadTabState.current] = el.scrollTop;
 });
@@ -142,7 +173,7 @@ watch(tab, (t) => {
     </nav>
 
     <div ref="bodyEl" class="dl-body">
-      <Transition name="page" mode="out-in">
+      <Transition :name="pageMotion">
         <div v-if="tab === 'vanilla' && !vdState.selectedVersion" key="list" class="dl-page">
           <VanillaList />
         </div>
@@ -218,8 +249,59 @@ watch(tab, (t) => {
 }
 .mod-dl-page { gap: 8px; }
 
-/* fast opacity fade */
-.page-enter-active, .page-leave-active { transition: opacity 0.12s ease; }
-.page-enter-from { opacity: 0; }
-.page-leave-to { opacity: 0; }
+/* 社区 tab 切换：按导航顺序上下位移 */
+.dl-tab-down-enter-active,
+.dl-tab-down-leave-active,
+.dl-tab-up-enter-active,
+.dl-tab-up-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
+}
+.dl-tab-down-enter-from { opacity: 0; transform: translateY(-24px); }
+.dl-tab-down-leave-to { opacity: 0; transform: translateY(24px); }
+.dl-tab-up-enter-from { opacity: 0; transform: translateY(24px); }
+.dl-tab-up-leave-to { opacity: 0; transform: translateY(-24px); }
+
+/* 原版列表 ↔ 详情：与社区资源列表 → 详情一致的横向整页推入 */
+.dl-detail-forward-enter-active,
+.dl-detail-forward-leave-active,
+.dl-detail-back-enter-active,
+.dl-detail-back-leave-active {
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dl-detail-forward-enter-from { transform: translateX(100%); }
+.dl-detail-forward-leave-to { transform: translateX(-100%); }
+.dl-detail-back-enter-from { transform: translateX(-100%); }
+.dl-detail-back-leave-to { transform: translateX(100%); }
+
+.dl-tab-down-leave-active,
+.dl-tab-up-leave-active,
+.dl-detail-forward-leave-active,
+.dl-detail-back-leave-active {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.dl-tab-down-enter-active,
+.dl-tab-up-enter-active,
+.dl-detail-forward-enter-active,
+.dl-detail-back-enter-active {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dl-tab-down-enter-active,
+  .dl-tab-down-leave-active,
+  .dl-tab-up-enter-active,
+  .dl-tab-up-leave-active,
+  .dl-detail-forward-enter-active,
+  .dl-detail-forward-leave-active,
+  .dl-detail-back-enter-active,
+  .dl-detail-back-leave-active {
+    transition: none;
+  }
+}
 </style>

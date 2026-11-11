@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // 左侧垂直导航 + 内容区骨架，Settings / Tools / VersionSetup 三页共用：
 // 导航项 v-for + active 高亮 + 可选刷新按钮 + 内容区过渡。tab 根用 div（可内嵌刷新 button）。
+import { computed, ref, watch } from "vue";
 import { RefreshCw } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import type { Component } from "vue";
@@ -11,7 +12,7 @@ export interface NavTab {
   icon: Component;
 }
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     tabs: NavTab[];
     modelValue: string;
@@ -40,6 +41,20 @@ function onRefresh(e: MouseEvent, k: string) {
   e.stopPropagation();
   emit("refresh", k);
 }
+
+/** 内容切换方向按 tab 顺序：向下切 → 内容从上往下移动；向上切 → 从下往上移动。 */
+const slideDir = ref<"down" | "up">("down");
+let lastIndex = Math.max(0, props.tabs.findIndex((tab) => tab.key === props.modelValue));
+watch(
+  () => props.modelValue,
+  (next) => {
+    const nextIndex = props.tabs.findIndex((tab) => tab.key === next);
+    if (nextIndex < 0 || nextIndex === lastIndex) return;
+    slideDir.value = nextIndex > lastIndex ? "down" : "up";
+    lastIndex = nextIndex;
+  },
+);
+const switchName = computed(() => `sn-slide-${slideDir.value}`);
 </script>
 
 <template>
@@ -67,7 +82,7 @@ function onRefresh(e: MouseEvent, k: string) {
     </nav>
 
     <div class="sn-body" :class="{ 'sn-body-scroll': !internalScroll }">
-      <Transition name="sn-switch" mode="out-in">
+      <Transition :name="switchName">
         <slot />
       </Transition>
     </div>
@@ -189,19 +204,55 @@ function onRefresh(e: MouseEvent, k: string) {
   flex-direction: column;
 }
 
-/* tab 内容切换动画 */
-.sn-switch-enter-active,
-.sn-switch-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+/* tab 内容切换：按导航顺序做上下位移，旧内容绝对定位退出，避免 out-in 空窗。 */
+.sn-slide-down-enter-active,
+.sn-slide-down-leave-active,
+.sn-slide-up-enter-active,
+.sn-slide-up-leave-active {
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
 }
 
-.sn-switch-enter-from {
+/* 向下切：新内容从上方落下，旧内容向下方退出 */
+.sn-slide-down-enter-from {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(-24px);
+}
+.sn-slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(24px);
+}
+/* 向上切：反向 */
+.sn-slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.sn-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-24px);
 }
 
-.sn-switch-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
+.sn-slide-down-leave-active,
+.sn-slide-up-leave-active {
+  position: absolute;
+  inset: 0;
+  padding: 20px 24px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.sn-slide-down-enter-active,
+.sn-slide-up-enter-active {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn-slide-down-enter-active,
+  .sn-slide-down-leave-active,
+  .sn-slide-up-enter-active,
+  .sn-slide-up-leave-active {
+    transition: none;
+  }
 }
 </style>

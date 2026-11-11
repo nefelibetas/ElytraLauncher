@@ -168,7 +168,7 @@ export function updateCustomTheme(id: string, patch: Partial<CustomTheme>) {
     [id]: { ...theme, ...patch, vars: patch.vars ? { ...theme.vars, ...patch.vars } : theme.vars },
   };
   saveCustoms();
-  if (themeId.value === id) applyTheme();
+  if (themeId.value === id) applyTheme(); // 编辑器实时预览：不做过渡，避免拖动取色器时颜色滞后
 }
 
 export function deleteCustomTheme(id: string) {
@@ -177,8 +177,7 @@ export function deleteCustomTheme(id: string) {
   saveCustoms();
   removeCustomStyle(id);
   if (themeId.value === id) {
-    themeId.value = "grass";
-    applyTheme();
+    themeId.value = "grass"; // watcher 负责带过渡应用
   }
 }
 
@@ -292,6 +291,59 @@ export function applyTheme() {
   document.documentElement.dataset.theme = themeId.value;
 }
 
+let themeTransitionTimer: number | undefined;
+
+/**
+ * 标题栏用的是 background-image 渐变，CSS 无法在渐变之间插值。
+ * 在切换前把旧渐变铺成负 z-index 覆盖层，主题变量更新后再淡出，露出新渐变。
+ */
+function crossfadeTitlebarGradient() {
+  for (const bar of document.querySelectorAll<HTMLElement>(".titlebar")) {
+    for (const old of bar.querySelectorAll<HTMLElement>(".titlebar-theme-fade")) {
+      old.remove();
+    }
+    const gradient = getComputedStyle(bar).backgroundImage;
+    if (!gradient || gradient === "none") continue;
+    const overlay = document.createElement("div");
+    overlay.className = "titlebar-theme-fade";
+    Object.assign(overlay.style, {
+      position: "absolute",
+      inset: "0",
+      zIndex: "-1",
+      pointerEvents: "none",
+      backgroundImage: gradient,
+      opacity: "1",
+      willChange: "opacity",
+    });
+    // 主题过渡期全局 transition 带 !important，覆盖层必须用内联 !important 才能保留自己的淡出。
+    overlay.style.setProperty(
+      "transition",
+      "opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1)",
+      "important",
+    );
+    bar.appendChild(overlay);
+    void overlay.offsetWidth; // 先落旧渐变的第一帧，再触发淡出
+    overlay.style.opacity = "0";
+    window.setTimeout(() => overlay.remove(), 500);
+  }
+}
+
+/** 用户切换主题时给根节点临时开启颜色过渡；初始 applyTheme 不带动画，避免首屏颜色渐入。 */
+function applyThemeAnimated() {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    applyTheme();
+    return;
+  }
+  const root = document.documentElement;
+  root.classList.add("theme-switching");
+  crossfadeTitlebarGradient();
+  applyTheme();
+  window.clearTimeout(themeTransitionTimer);
+  themeTransitionTimer = window.setTimeout(() => {
+    root.classList.remove("theme-switching");
+  }, 500);
+}
+
 export function activateCustomTheme(id: string) {
   if (!customThemes.value[id]) return;
   applyCustomThemeStyle(id);
@@ -300,7 +352,7 @@ export function activateCustomTheme(id: string) {
 
 watch(themeId, (id) => {
   localStorage.setItem(STORAGE_KEY, id);
-  applyTheme();
+  applyThemeAnimated();
 });
 
 /** 挂载时注入已有自定义主题样式（<style> 不持久）。 */

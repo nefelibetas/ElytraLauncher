@@ -1,22 +1,51 @@
-/* 路由切换过渡动画（Route transitions — simple opacity fade, no scroll jitter）。
+/* 路由切换过渡动画（无 name 的兜底用淡入淡出；页面路由用左右位移）。
  * 与 App.vue 的组件级过渡（toast/fade）分离：路由过渡类名由 router 动态
  * 注入（route.meta.transition，见 router/index.ts beforeEach），静态分析
  * 无法在 SFC 模板中命中，独立成文件避免 Volar unused selectors 误报。
  */
 .route-enter-active,
-.route-leave-active,
+.route-leave-active {
+  transition: opacity 0.18s ease;
+}
+.route-enter-from,
+.route-leave-to { opacity: 0; }
+
+/* 路由左右位移：新页从一侧推入，旧页向另一侧退出；旧页脱离文档流，避免撑高/抖动。 */
 .slide-left-enter-active,
 .slide-left-leave-active,
 .slide-right-enter-active,
 .slide-right-leave-active {
-  transition: opacity 0.18s ease;
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
 }
-.route-enter-from,
-.slide-left-enter-from,
-.slide-right-enter-from { opacity: 0; }
-.route-leave-to,
-.slide-left-leave-to,
-.slide-right-leave-to { opacity: 0; }
+
+.slide-left-enter-from { transform: translateX(100%); }
+.slide-left-leave-to { transform: translateX(-100%); }
+.slide-right-enter-from { transform: translateX(-100%); }
+.slide-right-leave-to { transform: translateX(100%); }
+
+.slide-left-leave-active,
+.slide-right-leave-active {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.slide-left-enter-active,
+.slide-right-enter-active {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-left-enter-active,
+  .slide-left-leave-active,
+  .slide-right-enter-active,
+  .slide-right-leave-active {
+    transition: none;
+  }
+}
 
 /* 展开/收起共享骨架（<Transition name="expand">）。
  * 目标高度由 --expand-h 注入，各组件只负责给元素挂上该变量（默认回退 1000px，防止漏注入时高度归零）。
