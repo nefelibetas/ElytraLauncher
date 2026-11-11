@@ -20,6 +20,7 @@ pub mod tooldl;
 pub mod ts_export;
 mod update;
 pub mod util;
+mod window_state;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -197,7 +198,7 @@ pub fn run() {
     util::init_file_logging();
     // 任务数据库恢复与工具箱配置均为首次访问惰性初始化；窗口创建前不碰 SQLite/TOML。
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // 单实例须最先注册（其窗口过程在插件初始化时挂钩）
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // 第二实例的启动请求：把已有窗口带前（可能处于最小化或失焦）
@@ -209,16 +210,21 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                // 不保存 visible：从托盘退出时窗口是隐藏的，恢复 visible=false 会导致下次启动看不到窗口。
-                .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::SIZE
-                        | tauri_plugin_window_state::StateFlags::POSITION
-                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
-                )
-                .build(),
-        )
+        // 自管窗口几何：统一写入 Elytra 配置目录，避免插件另建 identifier 目录。
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    window_state::save(window.app_handle());
+                }
+                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) => {
+                    window_state::record_normal(window);
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
             // 配置损坏恢复：运行期经事件推送（启动期由前端 take_config_recovery_notice 拉取兜底）
             let handle = app.handle().clone();
@@ -409,6 +415,21 @@ pub fn run() {
             has_tray,
             set_tray_labels
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| match event {
+        // Ready 在窗口创建/居中完成后触发，此时设置几何才不会被随后创建流程覆盖。
+        tauri::RunEvent::Ready => {
+            // Ready 时配置窗口的尺寸/居中可能尚未最终落定；推迟到首帧后恢复几何。
+            let handle = app_handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(180));
+                let target = handle.clone();
+                let _ = handle.run_on_main_thread(move || window_state::restore(&target));
+            });
+        }
+        tauri::RunEvent::ExitRequested { .. } => window_state::save(app_handle),
+        _ => {}
+    });
 }
