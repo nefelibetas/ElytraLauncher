@@ -24,6 +24,18 @@ export default {
   dialog: {
     tip: "Notice",
   },
+  tray: {
+    show: "Show main window",
+    quit: "Quit",
+  },
+  closePrompt: {
+    title: "Close Elytra",
+    message: "Quit the app, or minimize to the system tray and keep running?",
+    tray: "Minimize to tray",
+    exit: "Quit",
+    dontAsk: "Remember my choice and don't ask again",
+    cancel: "Cancel",
+  },
   status: {
     loading: "Loading…",
     empty: "Nothing here",
@@ -39,6 +51,8 @@ export default {
     autoCurrent: "Auto (currently: {locale})",
   },
   tooltip: {
+    maximize: "Maximize",
+    restore: "Restore",
     minimize: "Minimize",
     close: "Close",
     refresh: "Refresh",

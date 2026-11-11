@@ -24,6 +24,18 @@ export default {
   dialog: {
     tip: "提示",
   },
+  tray: {
+    show: "显示主窗口",
+    quit: "退出",
+  },
+  closePrompt: {
+    title: "关闭 Elytra",
+    message: "要退出应用，还是最小化到系统托盘继续运行？",
+    tray: "最小化到托盘",
+    exit: "退出",
+    dontAsk: "记住我的选择，不再询问",
+    cancel: "取消",
+  },
   status: {
     loading: "加载中…",
     empty: "暂无内容",
@@ -39,6 +51,8 @@ export default {
     autoCurrent: "跟随系统（当前：{locale}）",
   },
   tooltip: {
+    maximize: "最大化",
+    restore: "还原",
     minimize: "最小化",
     close: "关闭",
     refresh: "刷新",

@@ -13,6 +13,9 @@
     "opener:default",
     "dialog:default",
     "core:event:allow-emit-to",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-destroy"
   ]
 }

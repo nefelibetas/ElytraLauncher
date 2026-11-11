@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // 共享弹出菜单壳：Teleport 到 body + fixed 视口定位 + @click.stop 阻断冒泡（window click 关闭监听由使用方注册）。
 // .menu-item / .menu-sep 通用样式收敛于此；各出现处仅 min-width 不同（经 prop 传入）。
-withDefaults(
+import { onMounted, onUnmounted } from "vue";
+
+const props = withDefaults(
   defineProps<{
     /** 开关状态。 */
     visible: boolean;
@@ -17,6 +19,19 @@ withDefaults(
   }>(),
   { minWidth: "164px", maxHeight: "", menuClass: "" },
 );
+
+const emit = defineEmits<{ close: [] }>();
+
+/** Esc 先关闭菜单，捕获阶段阻止 App.vue 的全局返回。 */
+function onKeydown(e: KeyboardEvent) {
+  if (!props.visible || e.key !== "Escape") return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  emit("close");
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown, true));
+onUnmounted(() => window.removeEventListener("keydown", onKeydown, true));
 </script>
 
 <template>

@@ -419,6 +419,7 @@ function useOfflineName(name: string) {
           :visible="accountUi.editMenu.visible"
           :x="accountUi.editMenu.x"
           :y="accountUi.editMenu.y"
+          @close="accountUi.editMenu.visible = false"
         >
           <div class="menu-item" @click="accountUi.openPasswordPage">{{ t("launch.auth.changePassword") }}</div>
           <div class="menu-item" @click="accountUi.openNameChangePage">{{ t("launch.auth.changeName") }}</div>
@@ -430,6 +431,7 @@ function useOfflineName(name: string) {
           :y="accountUi.accountsMenu.y"
           menu-class="acct-menu accounts"
           max-height="320px"
+          @close="accountUi.accountsMenu.visible = false"
         >
             <template v-if="msAccounts.length">
               <div

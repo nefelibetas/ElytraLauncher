@@ -9,6 +9,9 @@ import CheckToggle from "../common/CheckToggle.vue";
 import RangeSlider from "../common/RangeSlider.vue";
 import { MEM_FLOOR_MB, MEM_STEP_MB } from "../../utils/memory";
 import {
+  closeAction, setCloseAction, trayAvailable, type CloseAction,
+} from "../../store/app/closeBehavior";
+import {
   loWindowTitle, loPriority, loWinMode, loWinW, loWinH, loGameLang,
   loMemAuto, loMemMb, loMinMem, loMemOptimize, loVerifySsl, launchError,
   memLimitMb, memAutoMb, memLowerMb, memUpperMb,
@@ -56,6 +59,15 @@ const winsizeOptions = computed<SelOption[]>(() => [
 
 const gameLangOptions = computed<SelOption[]>(() => [
   { value: "auto_zh_CN", label: t("settings.launch.gameLanguageAuto") },
+]);
+
+/** 关闭窗口行为：托盘不可用时只保留「询问 / 直接退出」。 */
+const closeOptions = computed<SelOption[]>(() => [
+  { value: "ask", label: t("settings.launch.closeAsk") },
+  ...(trayAvailable.value
+    ? [{ value: "tray", label: t("settings.launch.closeTray") }]
+    : []),
+  { value: "exit", label: t("settings.launch.closeExit") },
 ]);
 </script>
 
@@ -145,6 +157,16 @@ const gameLangOptions = computed<SelOption[]>(() => [
       </div>
       <div class="lo-row">
         <CheckToggle v-model="loMemOptimize" @change="saveLaunchOptions">{{ t("settings.launch.memoryOptimize") }}</CheckToggle>
+      </div>
+      <div class="lo-row">
+        <label class="lo-label" for="lo-close">{{ t("settings.launch.closeBehavior") }}</label>
+        <DropSelect
+          id="lo-close"
+          :model-value="closeAction"
+          :options="closeOptions"
+          width="180px"
+          @update:model-value="setCloseAction($event as CloseAction)"
+        />
       </div>
     </div>
     <div v-if="launchError" class="err">{{ launchError }}</div>

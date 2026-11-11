@@ -1,4 +1,5 @@
-// 4 套内置主题（grass 默认 / end / nether / ice）+ 自定义色板；持久化 localStorage，向 <html> 注入 data-theme（无属性 = grass）。
+// 4 套内置主题（grass 默认 / end / nether / ice）+ 浅色/深色/跟随系统 + 自定义色板；
+// 持久化 localStorage，向 <html> 注入 data-theme / data-mode（自定义主题固定 light）。
 
 import { ref, watch } from "vue";
 import { t } from "../../i18n";
@@ -45,8 +46,9 @@ export interface CustomTheme {
 
 const STORAGE_KEY = "elytra.theme";
 const CUSTOMS_KEY = "elytra.customThemes";
+const MODE_STORAGE_KEY = "elytra.appearanceMode";
 
-/** 内置主题变量值；色值须与 App.vue 的 :root 及各 [data-theme] 块同步（CSS 为事实源）。 */
+/** 内置主题变量值（浅色）；色值须与 styles/tokens.css 的 :root / [data-theme] 块同步（CSS 为事实源）。 */
 export function builtinVars(id: ThemeId): CustomThemeVars {
   switch (id) {
     case "grass":
@@ -102,6 +104,45 @@ function normalize(raw: string | null): ThemeId {
   if (raw && raw.startsWith(CUSTOM_PREFIX)) return raw as ThemeId;
   return "grass";
 }
+
+export type AppearanceMode = "light" | "dark" | "system";
+
+function readAppearanceMode(): AppearanceMode {
+  try {
+    const value = localStorage.getItem(MODE_STORAGE_KEY);
+    if (value === "light" || value === "dark" || value === "system") return value;
+  } catch {
+    // 存储不可用时按跟随系统处理
+  }
+  return "system";
+}
+
+export const appearanceMode = ref<AppearanceMode>(readAppearanceMode());
+
+const systemDark = ref(false);
+let systemMedia: MediaQueryList | null = null;
+
+function initSystemThemeWatch() {
+  if (systemMedia || typeof window === "undefined" || !window.matchMedia) return;
+  systemMedia = window.matchMedia("(prefers-color-scheme: dark)");
+  systemDark.value = systemMedia.matches;
+  systemMedia.addEventListener("change", (event) => {
+    systemDark.value = event.matches;
+    if (appearanceMode.value === "system") applyThemeAnimated();
+  });
+}
+
+function resolvedMode(): "light" | "dark" {
+  if (appearanceMode.value === "system") return systemDark.value ? "dark" : "light";
+  return appearanceMode.value;
+}
+
+export function setAppearanceMode(mode: AppearanceMode) {
+  appearanceMode.value = mode;
+}
+
+// 在任何 applyTheme 之前先取到系统偏好，避免首帧按 light 绘制。
+initSystemThemeWatch();
 
 export const themeId = ref<ThemeId>(normalize(localStorage.getItem(STORAGE_KEY)));
 
@@ -196,14 +237,17 @@ const BRAND_DERIVED_KEYS = [
   "--color-brand-gradient",
 ] as const;
 
-/** 取内置主题的品牌衍生变量（事实源 App.vue CSS）：临时切 data-theme 后同帧还原；读不到 → null。 */
+/** 取内置主题的品牌衍生变量（事实源 styles/tokens.css）：临时切 data-theme 后同帧还原；读不到 → null。 */
 function readBuiltinDerived(id: ThemeId): Record<string, string> | null {
   if (typeof document === "undefined") return null;
   const root = document.documentElement;
   const prev = root.dataset.theme;
+  const prevMode = root.dataset.mode;
   const out: Record<string, string> = {};
   try {
+    // 自定义主题按浅色色板创建，派生值也必须读浅色块，不能受当前深色模式影响。
     root.dataset.theme = id;
+    root.dataset.mode = "light";
     const cs = getComputedStyle(root);
     for (const k of BRAND_DERIVED_KEYS) {
       const v = cs.getPropertyValue(k).trim();
@@ -214,6 +258,8 @@ function readBuiltinDerived(id: ThemeId): Record<string, string> | null {
     // 无论成功与否都还原（prev undefined = 原本无属性）
     if (prev === undefined) delete root.dataset.theme;
     else root.dataset.theme = prev;
+    if (prevMode === undefined) delete root.dataset.mode;
+    else root.dataset.mode = prevMode;
   }
   return out;
 }
@@ -285,10 +331,14 @@ function removeCustomStyle(id: string) {
 
 /** 自定义须先注入动态规则再设属性；挂载前调用一次。 */
 export function applyTheme() {
-  if (isCustom(themeId.value)) {
+  const custom = isCustom(themeId.value);
+  if (custom) {
     applyCustomThemeStyle(themeId.value);
   }
-  document.documentElement.dataset.theme = themeId.value;
+  const root = document.documentElement;
+  root.dataset.theme = themeId.value;
+  // 自定义主题是显式色板，不参与内置深色覆盖。
+  root.dataset.mode = custom ? "light" : resolvedMode();
 }
 
 let themeTransitionTimer: number | undefined;
@@ -352,6 +402,15 @@ export function activateCustomTheme(id: string) {
 
 watch(themeId, (id) => {
   localStorage.setItem(STORAGE_KEY, id);
+  applyThemeAnimated();
+});
+
+watch(appearanceMode, (mode) => {
+  try {
+    localStorage.setItem(MODE_STORAGE_KEY, mode);
+  } catch {
+    // 仅本会话生效
+  }
   applyThemeAnimated();
 });
 

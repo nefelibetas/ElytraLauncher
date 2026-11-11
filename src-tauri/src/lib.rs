@@ -21,6 +21,10 @@ pub mod ts_export;
 mod update;
 pub mod util;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 
 use commands::account::{
@@ -109,6 +113,81 @@ use commands::version_icon::{
     get_version_icon, get_version_icon_source, reset_version_icon, set_version_icon,
 };
 
+/// 主窗口标签（tauri.conf.json 唯一窗口）。
+const MAIN_WINDOW: &str = "main";
+/// 托盘图标 id：更新多语言菜单时按 id 查找。
+const TRAY_ID: &str = "main";
+/// 托盘是否创建成功：Linux 缺少 appindicator 等环境时前端需回退为直接退出。
+static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window(MAIN_WINDOW) {
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
+}
+
+fn tray_menu(app: &tauri::AppHandle, show: &str, quit: &str) -> tauri::Result<Menu<tauri::Wry>> {
+    let show_item = MenuItem::with_id(app, "show", show, true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&show_item, &quit_item])
+}
+
+/// 创建系统托盘：菜单含「显示主窗口 / 退出」；双击图标恢复窗口。
+fn init_tray(app: &tauri::App) -> Result<(), String> {
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or_else(|| keyed_msg!("errors.tray.noIcon", "应用缺少窗口图标"))?;
+    let menu = tray_menu(app.handle(), "显示主窗口", "退出").map_err(|e| e.to_string())?;
+    let tray = TrayIconBuilder::with_id(TRAY_ID)
+        .icon(icon)
+        // macOS 菜单栏图标按模板渲染（单色），避免彩色图标在系统栏里突兀。
+        .icon_as_template(cfg!(target_os = "macos"))
+        .menu(&menu)
+        // Windows/Linux 左键恢复窗口、右键菜单；macOS 保持系统惯例（左键菜单）。
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } => show_main_window(tray.app_handle()),
+            _ => {}
+        })
+        .build(app)
+        .map_err(|e| e.to_string())?;
+    // TrayIcon 在最后一个实例 drop 时移除：交给 App 状态持有。
+    app.manage(tray);
+    TRAY_AVAILABLE.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
+#[tauri::command]
+fn has_tray() -> bool {
+    TRAY_AVAILABLE.load(Ordering::Relaxed)
+}
+
+/// 前端语言切换后同步托盘菜单文案（托盘由 Rust 持有，无法直接读前端 i18n）。
+#[tauri::command]
+fn set_tray_labels(app: tauri::AppHandle, show: String, quit: String) -> Result<(), String> {
+    let tray = app
+        .tray_by_id(TRAY_ID)
+        .ok_or_else(|| keyed_msg!("errors.tray.notReady", "托盘未初始化"))?;
+    let menu = tray_menu(&app, &show, &quit).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 子进程不得弹控制台：GUI 进程先持有一个隐藏控制台，第三方库内部 spawn
@@ -130,12 +209,26 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // 不保存 visible：从托盘退出时窗口是隐藏的，恢复 visible=false 会导致下次启动看不到窗口。
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .setup(|app| {
             // 配置损坏恢复：运行期经事件推送（启动期由前端 take_config_recovery_notice 拉取兜底）
             let handle = app.handle().clone();
             persist::set_recovery_hook(move |notice| {
                 let _ = handle.emit(events::CONFIG_RECOVERY, notice);
             });
+            // 系统托盘：失败时仅记录，前端 has_tray 会回退为直接退出。
+            if let Err(e) = init_tray(app) {
+                eprintln!("托盘初始化失败: {e}");
+            }
             // 游戏目录变化监听（激活目录的 versions/ 与聚焦版本子目录 → 事件推送）
             game::version::watch::init(app.handle().clone());
             // JDK 首扫放到窗口创建后：首次启动的递归扫盘 + java -version 子进程不与 WebView 争资源。
@@ -312,7 +405,9 @@ pub fn run() {
             tooldl_get_config,
             tooldl_save_config,
             check_launcher_update,
-            take_config_recovery_notice
+            take_config_recovery_notice,
+            has_tray,
+            set_tray_labels
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

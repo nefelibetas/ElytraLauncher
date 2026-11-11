@@ -1,15 +1,16 @@
 <script setup lang="ts">
 // 外观设置：内置亮色主题（Grass/End/Nether/Ice）+ 自定义色板。
 // 即时生效并持久化 localStorage；自定义卡片 hover 显示编辑/删除。
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import DropSelect from "../common/DropSelect.vue";
+import ConfirmDialog from "../common/ConfirmDialog.vue";
 import { currentLocale, languageSetting, setLanguage, type LanguageSetting } from "../../i18n";
 import {
-  THEMES, themeId, customThemes, isCustom,
+  THEMES, themeId, customThemes, isCustom, appearanceMode, setAppearanceMode,
   deleteCustomTheme, activateCustomTheme, ensureCustomThemesApplied,
-  type ThemeId,
+  type AppearanceMode, type ThemeId,
 } from "../../store/app/theme";
 import { Trash2, Pencil, Plus } from "@lucide/vue";
 
@@ -54,6 +55,12 @@ function onLanguage(value: string) {
   setLanguage(value as LanguageSetting);
 }
 
+
+const modeOptions = computed<{ value: AppearanceMode; label: string }[]>(() => [
+  { value: "light", label: t("settings.appearance.mode.light") },
+  { value: "dark", label: t("settings.appearance.mode.dark") },
+  { value: "system", label: t("settings.appearance.mode.system") },
+]);
 
 function isActive(id: string) {
   return themeId.value === id;
@@ -101,12 +108,19 @@ function openEdit(id: string) {
   void router.push({ path: "/custom-theme", query: { id } });
 }
 
+const deleteOpen = ref(false);
+const deleteTarget = ref<string | null>(null);
+
 function removeCustom(id: string) {
-  const theme = customThemes.value[id];
-  if (!theme) return;
-  if (window.confirm(t("settings.appearance.deleteConfirm", { name: theme.name }))) {
-    deleteCustomTheme(id);
-  }
+  if (!customThemes.value[id]) return;
+  deleteTarget.value = id;
+  deleteOpen.value = true;
+}
+
+function confirmRemoveCustom() {
+  if (deleteTarget.value) deleteCustomTheme(deleteTarget.value);
+  deleteOpen.value = false;
+  deleteTarget.value = null;
 }
 
 </script>
@@ -117,13 +131,34 @@ function removeCustom(id: string) {
       <h3>{{ t("settings.appearance.title") }}</h3>
       <p class="stg-card-sub">{{ t("settings.appearance.subtitle") }}</p>
     </div>
+    <div class="appearance-mode">
+      <span class="appearance-mode-label">{{ t("settings.appearance.modeLabel") }}</span>
+      <div class="appearance-mode-group" role="group" :aria-label="t('settings.appearance.modeLabel')">
+        <button
+          v-for="m in modeOptions"
+          :key="m.value"
+          type="button"
+          class="appearance-mode-btn"
+          :class="{ active: appearanceMode === m.value }"
+          @click="setAppearanceMode(m.value)"
+        >{{ m.label }}</button>
+      </div>
+      <span v-if="isCustom(themeId)" class="appearance-mode-hint">
+        {{ t("settings.appearance.modeCustomHint") }}
+      </span>
+    </div>
+
     <div class="appearance-grid">
-      <button
+      <div
         v-for="theme in allThemes"
         :key="theme.id"
         class="appearance-item"
         :class="{ active: isActive(theme.id), 'appearance-item--custom': isCustom(theme.id) }"
+        role="button"
+        tabindex="0"
         @click="onPick(theme.id)"
+        @keydown.enter.prevent="onPick(theme.id)"
+        @keydown.space.prevent="onPick(theme.id)"
       >
         <span class="appearance-icon" :style="iconStyle(theme.swatch)"></span>
         <span class="appearance-name">{{ theme.label }}</span>
@@ -136,7 +171,7 @@ function removeCustom(id: string) {
             <Trash2 :size="13" />
           </button>
         </span>
-      </button>
+      </div>
 
       <button class="appearance-item appearance-add" @click="openNew(themeId)">
         <span class="appearance-icon appearance-add-icon"><Plus :size="26" /></span>
@@ -160,6 +195,13 @@ function removeCustom(id: string) {
       />
     </div>
   </section>
+
+  <ConfirmDialog
+    v-model="deleteOpen"
+    :title="t('common.action.delete')"
+    :message="t('settings.appearance.deleteConfirm', { name: deleteTarget ? customThemes[deleteTarget]?.name ?? '' : '' })"
+    @confirm="confirmRemoveCustom"
+  />
 </template>
 
 <style>
@@ -169,6 +211,55 @@ function removeCustom(id: string) {
 <style scoped>
 .lang-select {
   max-width: 320px;
+}
+
+.appearance-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.appearance-mode-label {
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+}
+
+.appearance-mode-group {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-page);
+}
+
+.appearance-mode-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.appearance-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.appearance-mode-btn.active {
+  background: var(--color-brand-bg);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.appearance-mode-hint {
+  width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
 }
 
 .appearance-grid {

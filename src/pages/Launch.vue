@@ -78,8 +78,10 @@ onMounted(async () => {
 
 /* ===== left ===== */
 .left {
-  flex: 0 0 35%;
-  min-width: 280px;
+  flex: 0 0 clamp(280px, 35%, 400px);
+  min-width: 260px;
+  max-width: 400px;
+  overflow-y: auto;
   background-color: var(--surface-elevated);
   border-right: 1px solid var(--border-default);
   display: flex;
@@ -113,6 +115,7 @@ onMounted(async () => {
 /* ===== right ===== */
 .right {
   flex: 1;
+  min-width: 0;
   background-color: var(--surface-page);
   display: flex;
   align-items: stretch;
@@ -147,4 +150,9 @@ onMounted(async () => {
   opacity: 0;
 }
 
+@media (max-width: 980px) {
+  .left {
+    padding: 16px 18px;
+  }
+}
 </style>

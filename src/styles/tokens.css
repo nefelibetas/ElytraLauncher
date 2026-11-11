@@ -22,7 +22,7 @@
   --range-pct: 0%;
   /* 命令块 / MOTD 预览等等宽文本使用 */
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
   font-size: var(--fs-md);
   line-height: 1.5;
   font-weight: 400;
@@ -88,6 +88,11 @@
   --overlay: rgba(15, 23, 42, 0.5);
   --toast-bg: #1F2937;
 
+  color-scheme: light;
+
+  /* 关闭按钮 hover：Windows 系统 caption 红，深浅色主题通用 */
+  --color-close-hover: #C42B1C;
+
   /* 字号阶梯：组件不写裸 px；半像素值统一归并到最近档 */
   --fs-2xs: 10px;
   --fs-xs: 11px;
@@ -112,7 +117,6 @@
   --dur-fast: var(--dur-fast);
 
   /* scrollbar */
-  --scrollbar-thumb: #CBD5D1;
 
   /* .edge-shade 覆盖层；色相取各主题深色调（无边框窗口与外部背景接近时易难辨边界） */
   --edge-line: rgba(6, 78, 59, 0.20);
@@ -143,7 +147,6 @@
   --shadow-lg: 0 4px 16px rgba(36, 27, 69, 0.10);
 
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #D2CBEA;
 
   --edge-line: rgba(76, 29, 149, 0.18);
   --edge-shade: rgba(76, 29, 149, 0.07);
@@ -179,7 +182,6 @@
   --shadow-lg: 0 4px 16px rgba(41, 37, 36, 0.10);
 
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #DED2C8;
 
   --edge-line: rgba(124, 45, 18, 0.18);
   --edge-shade: rgba(124, 45, 18, 0.07);
@@ -215,7 +217,6 @@
   --shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.10);
 
   --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #C6D6E0;
 
   --edge-line: rgba(12, 74, 110, 0.18);
   --edge-shade: rgba(12, 74, 110, 0.07);
@@ -228,3 +229,107 @@
 }
 
 
+/* ===== 深色模式：内置主题共享的中性色板 =====
+   自定义主题是显式色板，不参与深色覆盖（theme.ts 对自定义主题强制 data-mode="light"）。 */
+html[data-mode="dark"]:not([data-theme^="custom-"]) {
+  color-scheme: dark;
+  --text-primary: #E8F0EB;
+  --text-secondary: #A7B5AC;
+  --text-tertiary: #7C8B82;
+  --text-inverse: #0B100D;
+  --surface-page: #0E1511;
+  --surface-card: #151D18;
+  --surface-elevated: #1A2420;
+  --surface-input: #121A16;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --border-default: #2A3731;
+  --border-strong: #3A4A42;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --color-danger: #F87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.14);
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
+  --color-warning-bg: rgba(251, 191, 36, 0.14);
+  --overlay: rgba(0, 0, 0, 0.62);
+  --toast-bg: #26332D;
+  --edge-line: rgba(255, 255, 255, 0.10);
+  --edge-shade: rgba(0, 0, 0, 0.30);
+  --titlebar-fg: #F8FAF9;
+  --titlebar-fg-dim: rgba(255, 255, 255, 0.72);
+  --titlebar-hover: rgba(255, 255, 255, 0.14);
+  --titlebar-active: rgba(255, 255, 255, 0.20);
+  --color-badge-alt: #A78BFA;
+  --color-badge-alt-bg: rgba(167, 139, 250, 0.16);
+  --ld-fabric: #FBBF24;
+  --ld-forge: #F87171;
+  --ld-neoforge: #34D399;
+  --ld-quilt: #C4B5FD;
+  --ld-optifine: #38BDF8;
+}
+
+html[data-mode="dark"][data-theme="grass"] {
+  --color-brand: #34D399;
+  --color-brand-dark: #059669;
+  --color-brand-hover: #6EE7B7;
+  --color-brand-bg: rgba(52, 211, 153, 0.14);
+  --color-brand-glow: rgba(52, 211, 153, 0.28);
+  --color-brand-gradient: linear-gradient(135deg, #047857, #34D399);
+  --surface-page: #0D1511;
+  --surface-card: #14201A;
+  --surface-elevated: #1A2922;
+  --border-default: #26382F;
+  --border-strong: #375345;
+  --edge-line: rgba(52, 211, 153, 0.16);
+  --edge-shade: rgba(0, 0, 0, 0.30);
+}
+
+html[data-mode="dark"][data-theme="end"] {
+  --color-brand: #A78BFA;
+  --color-brand-dark: #7C3AED;
+  --color-brand-hover: #C4B5FD;
+  --color-brand-bg: rgba(167, 139, 250, 0.16);
+  --color-brand-glow: rgba(167, 139, 250, 0.30);
+  --color-brand-gradient: linear-gradient(135deg, #6D28D9, #A78BFA);
+  --surface-page: #12101C;
+  --surface-card: #1A1728;
+  --surface-elevated: #211D31;
+  --border-default: #2E2845;
+  --border-strong: #423A5E;
+  --edge-line: rgba(167, 139, 250, 0.16);
+  --edge-shade: rgba(0, 0, 0, 0.32);
+}
+
+html[data-mode="dark"][data-theme="nether"] {
+  --color-brand: #FB923C;
+  --color-brand-dark: #C2410C;
+  --color-brand-hover: #FDBA74;
+  --color-brand-bg: rgba(251, 146, 60, 0.14);
+  --color-brand-glow: rgba(251, 146, 60, 0.28);
+  --color-brand-gradient: linear-gradient(135deg, #C2410C, #FB923C);
+  --surface-page: #171210;
+  --surface-card: #211A16;
+  --surface-elevated: #2A211B;
+  --border-default: #3A2C24;
+  --border-strong: #533E32;
+  --edge-line: rgba(251, 146, 60, 0.16);
+  --edge-shade: rgba(0, 0, 0, 0.32);
+}
+
+html[data-mode="dark"][data-theme="ice"] {
+  --color-brand: #38BDF8;
+  --color-brand-dark: #0369A1;
+  --color-brand-hover: #7DD3FC;
+  --color-brand-bg: rgba(56, 189, 248, 0.14);
+  --color-brand-glow: rgba(56, 189, 248, 0.30);
+  --color-brand-gradient: linear-gradient(135deg, #0369A1, #38BDF8);
+  --surface-page: #0E141A;
+  --surface-card: #151D25;
+  --surface-elevated: #1B2630;
+  --border-default: #26323D;
+  --border-strong: #36485A;
+  --edge-line: rgba(56, 189, 248, 0.16);
+  --edge-shade: rgba(0, 0, 0, 0.32);
+}

@@ -81,6 +81,7 @@ async function menuImportPack() {
       :x="itemMenu.x"
       :y="itemMenu.y"
       min-width="120px"
+      @close="itemMenu.visible = false"
     >
       <div class="menu-item" @click="menuRename">{{ t("settings.version.select.rename") }}</div>
       <div class="menu-item" @click="menuOpen">{{ t("settings.version.select.open") }}</div>

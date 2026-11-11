@@ -3,7 +3,7 @@
 // 两种模式：默认「限列表」（物品场景，值必须来自 options）；`allowCustom` 时支持自由输入
 // （实体/效果等场景，输入文本直接为值，失焦时精确匹配中文名/ID 则归一化，否则原样保留）。
 // 用于物品/实体/效果等需手填 ID 的场景（替代裸文本输入）。
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Search } from "@lucide/vue";
 
@@ -86,6 +86,16 @@ function pick(id: string) {
   open.value = false;
   emit("update:modelValue", id);
 }
+
+function onKeydown(e: KeyboardEvent) {
+  if (!open.value || e.key !== "Escape") return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  open.value = false;
+}
+
+onMounted(() => window.addEventListener("keydown", onKeydown, true));
+onUnmounted(() => window.removeEventListener("keydown", onKeydown, true));
 
 function onBlur() {
   // 延迟关闭：让点击选项的 mousedown 先执行

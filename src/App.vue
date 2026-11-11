@@ -3,19 +3,40 @@ import { onMounted, onUnmounted, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { X } from "@lucide/vue";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initNavHistory, goBack, goForward } from "./store/app/nav";
 import { prefetchTabPages } from "./router";
 import TitleBar from "./component/common/TitleBar.vue";
 import AlertDialog from "./component/common/AlertDialog.vue";
+import CheckToggle from "./component/common/CheckToggle.vue";
 import { dlState, ensureListen, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
 import { ensureAutoTasksListen, lastAutoTasksFinished } from "./store/config/autoTasks";
 import { setSelected } from "./store/app/selectedVersion";
 import { toasts, dismissToast, pauseToast, resumeToast, showToast } from "./utils/toast";
 import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/focusNav";
 import { errMsg, formatError } from "./utils/error";
+import { showNativeTextMenu } from "./utils/contextMenu";
+import { currentLocale } from "./i18n";
+import {
+  closeAction, setCloseAction, trayAvailable, initCloseBehavior, syncTrayLabels,
+} from "./store/app/closeBehavior";
 
 const router = useRouter();
 const { t } = useI18n();
+const appWindow = getCurrentWindow();
+
+/** 窗口焦点：自绘标题栏在失焦时弱化，模拟系统非活动窗口。 */
+const windowFocused = ref(true);
+
+/** 关闭确认弹窗：托盘/退出二选一 + 不再询问。 */
+const closePrompt = ref(false);
+const dontAskClose = ref(false);
+let unlistenClose: (() => void) | undefined;
+let unlistenFocus: (() => void) | undefined;
+
+watch(currentLocale, () => {
+  void syncTrayLabels();
+});
 
 
 /** body 只放短提示，完整错误由复制按钮带走。 */
@@ -77,10 +98,21 @@ watch(waitingUser, async (w) => {
 function isEditableTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el || typeof el.tagName !== "string") return false;
-  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || !!el.closest("[contenteditable='true']");
+}
+
+/** 日志/代码块等只读文本：Ctrl(⌘)+A 与右键复制按原生文本处理。 */
+function isTextTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  return isEditableTarget(target) || !!el.closest("pre, code, [data-selectable]");
 }
 
 function onKeyDown(e: KeyboardEvent) {
+  // 输入法组合期间的 Esc/方向键属于候选框操作，不能触发全局导航。
+  if (e.isComposing || e.keyCode === 229) return;
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+  const primary = isMac ? e.metaKey : e.ctrlKey;
   // 鼠标侧键可能被系统映射成 BrowserBack/Forward 或 Alt+←/→，不能依赖 WebView 原生历史。
   const browserBack = e.key === "BrowserBack" || e.keyCode === 166;
   const browserForward = e.key === "BrowserForward" || e.keyCode === 167;
@@ -88,35 +120,38 @@ function onKeyDown(e: KeyboardEvent) {
     e.altKey && !isEditableTarget(e.target) && e.key === "ArrowLeft";
   const altForward =
     e.altKey && !isEditableTarget(e.target) && e.key === "ArrowRight";
-  if (browserBack || browserForward || altBack || altForward) {
+  const cmdBack = isMac && e.metaKey && e.key === "[";
+  const cmdForward = isMac && e.metaKey && e.key === "]";
+  if (browserBack || browserForward || altBack || altForward || cmdBack || cmdForward) {
     e.preventDefault();
     if (e.repeat) return;
     const now = Date.now();
     if (now - lastSideAt < 120) return; // 与鼠标事件共用去重窗口
     lastSideAt = now;
-    if (browserBack || altBack) goBack();
+    if (browserBack || altBack || cmdBack) goBack();
     else goForward();
     return;
   }
 
-  // 禁止打开开发者工具：F12 / Ctrl+Shift+I/J/C / Ctrl+U
+  // 禁止打开开发者工具：F12 / Ctrl(⌘)+Shift+I/J/C / Ctrl(⌘)+U / macOS ⌘⌥I
   if (
     e.key === "F12" ||
-    (e.ctrlKey && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase())) ||
-    (e.ctrlKey && e.key.toUpperCase() === "U")
+    (primary && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase())) ||
+    (isMac && e.metaKey && e.altKey && e.key.toUpperCase() === "I") ||
+    (primary && e.key.toUpperCase() === "U")
   ) {
     e.preventDefault();
     return;
   }
-  // 禁止刷新页面：F5 / Ctrl+R（WebView 内刷新会丢失 Tauri IPC 状态）
-  if (e.key === "F5" || (e.ctrlKey && e.key.toUpperCase() === "R")) {
+  // 禁止刷新页面：F5 / Ctrl(⌘)+R（WebView 内刷新会丢失 Tauri IPC 状态）
+  if (e.key === "F5" || (primary && e.key.toUpperCase() === "R")) {
     e.preventDefault();
     return;
   }
   // 输入上下文放行原生编辑快捷键（全选/复制/剪切/粘贴/撤销/重做）
   if (
     isEditableTarget(e.target) &&
-    e.ctrlKey &&
+    primary &&
     ["A", "C", "X", "V", "Z", "Y"].includes(e.key.toUpperCase())
   ) {
     return;
@@ -127,8 +162,8 @@ function onKeyDown(e: KeyboardEvent) {
     moveFocus(e.shiftKey ? -1 : 1);
     return;
   }
-  // 禁止全选（Ctrl+A；输入上下文已在上面放行）
-  if (e.ctrlKey && e.key.toLowerCase() === "a") {
+  // 非文本区域禁止全选；日志/代码块保留原生 Ctrl(⌘)+A。
+  if (primary && e.key.toLowerCase() === "a" && !isTextTarget(e.target)) {
     e.preventDefault();
     return;
   }
@@ -165,8 +200,40 @@ function onPopState() {
   }
 }
 
-function onContextMenu(e: MouseEvent) {
+async function onContextMenu(e: MouseEvent) {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+  const selected = (window.getSelection()?.toString().length ?? 0) > 0;
+  if (!isEditableTarget(target) && !selected) {
+    // 非文本区域保持无浏览器菜单（后续可接行级原生菜单）。
+    e.preventDefault();
+    return;
+  }
   e.preventDefault();
+  const editable = target.closest("input, textarea, [contenteditable='true']") as HTMLElement | null;
+  editable?.focus();
+  try {
+    await showNativeTextMenu();
+  } catch {
+    // 原生菜单不可用时静默降级，不弹 Chromium 网页菜单。
+  }
+}
+
+async function minimizeToTray() {
+  if (dontAskClose.value) setCloseAction("tray");
+  closePrompt.value = false;
+  await appWindow.hide();
+}
+
+async function exitApplication() {
+  if (dontAskClose.value) setCloseAction("exit");
+  closePrompt.value = false;
+  // destroy 不再触发 close-requested，避免二次弹窗。
+  await appWindow.destroy();
+}
+
+function cancelClosePrompt() {
+  closePrompt.value = false;
 }
 
 /** 首帧后执行非关键启动任务；不支持 requestIdleCallback 的 WebView 回退到定时器。 */
@@ -178,8 +245,29 @@ function afterFirstPaint(task: () => void) {
   else window.setTimeout(task, 200);
 }
 
-onMounted(() => {
+onMounted(async () => {
   pinnedHash = location.hash || "#/";
+  await initCloseBehavior();
+  await syncTrayLabels();
+  unlistenFocus = await appWindow.onFocusChanged(({ payload }) => {
+    windowFocused.value = payload;
+  });
+  unlistenClose = await appWindow.onCloseRequested(async (event) => {
+    if (closePrompt.value) {
+      event.preventDefault();
+      return;
+    }
+    if (closeAction.value === "tray" && trayAvailable.value) {
+      event.preventDefault();
+      await appWindow.hide();
+      return;
+    }
+    if (closeAction.value === "exit" || !trayAvailable.value) return;
+    // 询问模式：先阻止关闭，由前端弹窗决定。
+    event.preventDefault();
+    dontAskClose.value = false;
+    closePrompt.value = true;
+  });
   router.afterEach(() => {
     pinnedHash = location.hash || "#/";
   });
@@ -213,6 +301,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  unlistenClose?.();
+  unlistenFocus?.();
   document.removeEventListener("contextmenu", onContextMenu);
   document.removeEventListener("keydown", onKeyDown);
   document.removeEventListener("mousedown", onSideButton, true);
@@ -228,7 +318,7 @@ onUnmounted(() => {
 
 <template>
   <!-- 主窗口：TitleBar + 路由动画 + 全局弹层 -->
-  <div class="app-layout">
+  <div class="app-layout" :class="{ 'app-inactive': !windowFocused }">
     <TitleBar />
     <main class="main-content">
       <router-view v-slot="{ Component, route }">
@@ -262,6 +352,19 @@ onUnmounted(() => {
 
     <AlertDialog v-model="autoTaskFailDialog" :title="t('task.dialog.autoTaskFailed')" :message="autoTaskFailMessage" copyable>
       <p>{{ t("task.dialog.autoTaskFailedBody") }}</p>
+    </AlertDialog>
+
+    <!-- 关闭窗口：退出 / 最小化到托盘；勾选后记住选择 -->
+    <AlertDialog v-model="closePrompt" :title="t('common.closePrompt.title')">
+      <div class="close-prompt-body">
+        <p>{{ t("common.closePrompt.message") }}</p>
+        <CheckToggle v-model="dontAskClose">{{ t("common.closePrompt.dontAsk") }}</CheckToggle>
+      </div>
+      <template #actions>
+        <button class="dialog-btn" @click="cancelClosePrompt">{{ t("common.closePrompt.cancel") }}</button>
+        <button v-if="trayAvailable" class="dialog-btn" @click="minimizeToTray">{{ t("common.closePrompt.tray") }}</button>
+        <button class="dialog-btn primary" @click="exitApplication">{{ t("common.closePrompt.exit") }}</button>
+      </template>
     </AlertDialog>
 
     <!-- 批量文件下载失败挂起：用户决策 跳过/重试/取消（WaitingForUser） -->
@@ -303,9 +406,6 @@ html, body {
   background: transparent;
   height: 100%;
   width: 100%;
-  /* 全局禁止选中（输入框/文本域内例外） */
-  -webkit-user-select: none;
-  user-select: none;
 }
 
 /* 指针点击聚焦不显示默认焦点框；点过按钮再按键时 Chrome 会重新判定 :focus-visible 并画出 2px 品牌色轮廓
@@ -360,17 +460,42 @@ html.theme-switching:not(.i18n-switching) *::after {
   }
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: var(--radius-2xs);
+::selection {
+  background: var(--color-brand-bg);
+  color: var(--text-primary);
+}
+
+/* 窗口失焦：弱化自绘标题栏，模拟系统非活动窗口 */
+.app-inactive .titlebar {
+  filter: saturate(0.72) brightness(0.92);
+}
+
+.app-inactive .win {
+  opacity: 0.62;
+}
+
+.app-inactive .win:hover {
+  opacity: 1;
+}
+
+.close-prompt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.close-prompt-body p {
+  margin: 0;
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .app-layout {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  min-width: 0;
   overflow: hidden;
   position: relative;
   border-radius: var(--radius-md);
@@ -378,9 +503,20 @@ html.theme-switching:not(.i18n-switching) *::after {
   color: var(--text-primary);
 }
 
+/* 最大化时去掉自绘圆角/边缘描边，避免屏幕四角露出桌面 */
+html[data-maximized="true"] .app-layout,
+html[data-maximized="true"] .edge-shade {
+  border-radius: 0;
+}
+
+html[data-maximized="true"] .edge-shade {
+  box-shadow: none;
+}
+
 .main-content {
   position: relative;
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;

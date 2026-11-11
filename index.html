@@ -3,6 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+        <script src="/theme-init.js"></script>
         <style>
             html,
             body {
@@ -25,6 +26,8 @@
                 --bs-line-strong: #d5dfd9;
                 --bs-brand: #059669;
                 --bs-titlebar: linear-gradient(135deg, #059669, #10b981);
+                --bs-active: rgba(5, 150, 105, 0.12);
+                --bs-launch: linear-gradient(135deg, rgba(5, 150, 105, 0.18), rgba(16, 185, 129, 0.1));
                 position: fixed;
                 inset: 0;
                 z-index: 9999;
@@ -34,9 +37,34 @@
                 border-radius: 8px;
                 background: var(--bs-page);
                 color: #1f2937;
-                font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+                font-family: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
                 box-sizing: border-box;
                 animation: bs-fade-in 0.22s ease-out;
+            }
+            /* 深色首帧骨架：theme-init.js 先写 data-mode，系统偏好作为兜底 */
+            html[data-mode="dark"] #boot-splash {
+                --bs-page: #0d1511;
+                --bs-elevated: #14201a;
+                --bs-line: #26382f;
+                --bs-line-strong: #375345;
+                --bs-brand: #34d399;
+                --bs-titlebar: linear-gradient(135deg, #047857, #34d399);
+                --bs-active: rgba(52, 211, 153, 0.18);
+                --bs-launch: linear-gradient(135deg, rgba(52, 211, 153, 0.22), rgba(16, 185, 129, 0.12));
+                color: #e8f0eb;
+            }
+            @media (prefers-color-scheme: dark) {
+                html:not([data-mode="light"]) #boot-splash {
+                    --bs-page: #0d1511;
+                    --bs-elevated: #14201a;
+                    --bs-line: #26382f;
+                    --bs-line-strong: #375345;
+                    --bs-brand: #34d399;
+                    --bs-titlebar: linear-gradient(135deg, #047857, #34d399);
+                    --bs-active: rgba(52, 211, 153, 0.18);
+                    --bs-launch: linear-gradient(135deg, rgba(52, 211, 153, 0.22), rgba(16, 185, 129, 0.12));
+                    color: #e8f0eb;
+                }
             }
             /* 应用首帧已绘制后再加这个类：整块骨架淡出，露出下方真实页面。 */
             #boot-splash.bs-hide {
@@ -178,7 +206,7 @@
                 border-radius: 6px;
             }
             .bs-auth-btn.active {
-                background: rgba(5, 150, 105, 0.12);
+                background: var(--bs-active);
             }
             .bs-user {
                 flex: 1;
@@ -213,7 +241,7 @@
                 align-items: center;
                 justify-content: center;
                 gap: 8px;
-                background: linear-gradient(135deg, rgba(5, 150, 105, 0.18), rgba(16, 185, 129, 0.1));
+                background: var(--bs-launch);
             }
             .bs-launch-btn::after {
                 content: "";
@@ -311,7 +339,7 @@
                 border-radius: 8px;
             }
             .bs-side-dot.active {
-                background: rgba(5, 150, 105, 0.12);
+                background: var(--bs-active);
             }
             .bs-side-spacer {
                 flex: 1;

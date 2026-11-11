@@ -85,7 +85,14 @@ export default {
   },
   appearance: {
     title: "Appearance",
-    subtitle: "Choose a theme (all built-ins are light; accents follow the Minecraft palette; custom themes are supported)",
+    subtitle: "Choose a theme (light, dark, or follow system; accents follow the Minecraft palette; custom themes are supported)",
+    modeLabel: "Appearance mode",
+    mode: {
+      light: "Light",
+      dark: "Dark",
+      system: "Follow system",
+    },
+    modeCustomHint: "Custom themes keep their own palette and ignore the appearance mode",
     addCustom: "Add Custom",
     addCustomDesc: "Customize brand and text colors",
     customDesc: "Custom theme",
@@ -138,6 +145,10 @@ export default {
     memoryOptimize: "Optimize memory before launching the game",
     memoryUsed: "Used {size}",
     memoryGame: "Allocated {size}",
+    closeBehavior: "When closing the window",
+    closeAsk: "Ask every time",
+    closeTray: "Minimize to tray",
+    closeExit: "Quit",
   },
   jdk: {
     title: "Java Runtime",

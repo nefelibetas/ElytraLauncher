@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 
 import { goBack } from "../../store/app/nav";
-import { ArrowLeft, Play, Download, ListChecks, Settings, Minus, X, Feather } from "@lucide/vue";
+import { ArrowLeft, Play, Download, ListChecks, Settings, Minus, X, Feather, Square, Copy } from "@lucide/vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { detailTitle } from "../../store/community/resourceDetail";
 import { dlState } from "../../store/task/download";
@@ -65,14 +65,47 @@ const items = [
 const activeTasks = computed(() => dlState.tasks.filter(t => t.status === "running" || t.status === "pending").length);
 
 function isActive(p: string) { return route.path === p; }
-function minimize() { appWindow.minimize(); }
-function closeWindow() { appWindow.close(); }
+const maximized = ref(false);
+let unlistenResize: (() => void) | undefined;
+
+async function syncMaximized() {
+  try {
+    maximized.value = await appWindow.isMaximized();
+    document.documentElement.dataset.maximized = String(maximized.value);
+  } catch {
+    // 窗口销毁中：忽略
+  }
+}
+
+function minimize() { void appWindow.minimize(); }
+function closeWindow() { void appWindow.close(); }
+
+function toggleMaximize() {
+  void appWindow.toggleMaximize().then(syncMaximized);
+}
 
 function onMouseDown(e: MouseEvent) {
+  if (e.button !== 0) return;
   const target = e.target as HTMLElement;
-  if (target.closest("a, button")) return;
-  appWindow.startDragging();
+  if (target.closest("a, button, input, textarea")) return;
+  // 双击标题栏切换最大化；首击已进入拖拽时第二次 mousedown 仍带 detail=2。
+  if (e.detail === 2) {
+    toggleMaximize();
+    return;
+  }
+  void appWindow.startDragging();
 }
+
+onMounted(async () => {
+  await syncMaximized();
+  try {
+    unlistenResize = await appWindow.onResized(syncMaximized);
+  } catch {
+    // 窗口销毁中：忽略
+  }
+});
+
+onUnmounted(() => unlistenResize?.());
 
 </script>
 
@@ -118,6 +151,10 @@ function onMouseDown(e: MouseEvent) {
     <div class="tr">
       <button class="win" @click="minimize" v-tooltip="t('common.tooltip.minimize')">
         <Minus :size="12" />
+      </button>
+      <button class="win" @click="toggleMaximize" v-tooltip="t(maximized ? 'common.tooltip.restore' : 'common.tooltip.maximize')">
+        <Copy v-if="maximized" :size="12" />
+        <Square v-else :size="12" />
       </button>
       <button class="win close" @click="closeWindow" v-tooltip="t('common.tooltip.close')">
         <X :size="12" />
@@ -264,9 +301,8 @@ function onMouseDown(e: MouseEvent) {
 }
 
 .close:hover {
-  background-color: var(--titlebar-active);
-  background-color: color-mix(in srgb, var(--titlebar-fg) 24%, transparent);
-  color: var(--titlebar-fg);
+  background-color: var(--color-close-hover);
+  color: #FFFFFF;
 }
 
 .bar-inner {

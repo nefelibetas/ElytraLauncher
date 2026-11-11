@@ -601,8 +601,8 @@ function savePickedSkin() {
 
 /* ===== 左：3D 预览 ===== */
 .stage-col {
-  flex: 0 0 38%;
-  min-width: 300px;
+  flex: 0 0 clamp(300px, 38%, 520px);
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   min-height: 0;

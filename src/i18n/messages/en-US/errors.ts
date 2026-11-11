@@ -389,5 +389,9 @@ export default {
     artifactUrlUnknown: "Cannot determine the download URL for artifact {coord}",
     stdoutUnavailable: "{label} stdout is unavailable",
     stderrUnavailable: "{label} stderr is unavailable"
+  },
+  tray: {
+    noIcon: "The app has no window icon",
+    notReady: "Tray is not initialized"
   }
 };

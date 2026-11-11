@@ -389,5 +389,9 @@ export default {
     artifactUrlUnknown: "无法确定构件下载地址：{coord}",
     stdoutUnavailable: "{label} stdout 不可用",
     stderrUnavailable: "{label} stderr 不可用"
+  },
+  tray: {
+    noIcon: "应用缺少窗口图标",
+    notReady: "托盘未初始化"
   }
 };

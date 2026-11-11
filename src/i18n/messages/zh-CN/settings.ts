@@ -82,7 +82,14 @@ export default {
   },
   appearance: {
     title: "外观",
-    subtitle: "选择主题（内置均为亮色，accent 取自 Minecraft 生态；可添加自定义外观）",
+    subtitle: "选择主题（支持浅色/深色/跟随系统，accent 取自 Minecraft 生态；可添加自定义外观）",
+    modeLabel: "外观模式",
+    mode: {
+      light: "浅色",
+      dark: "深色",
+      system: "跟随系统",
+    },
+    modeCustomHint: "自定义主题使用自身色板，不随外观模式变化",
     addCustom: "添加自定义",
     addCustomDesc: "自定义品牌色与文本配色",
     customDesc: "自定义外观",
@@ -135,6 +142,10 @@ export default {
     memoryOptimize: "启动游戏前进行内存优化",
     memoryUsed: "已使用 {size}",
     memoryGame: "游戏分配 {size}",
+    closeBehavior: "关闭窗口时",
+    closeAsk: "每次询问",
+    closeTray: "最小化到托盘",
+    closeExit: "直接退出",
   },
   jdk: {
     title: "Java 运行时",

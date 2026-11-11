@@ -292,6 +292,12 @@ watch(tab, (t) => {
   z-index: 1;
 }
 
+@media (max-width: 980px) {
+  .dl-body {
+    padding: 18px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dl-tab-down-enter-active,
   .dl-tab-down-leave-active,

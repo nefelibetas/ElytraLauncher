@@ -64,9 +64,6 @@ const routeLevel: Record<string, number> = {
   // 独立窗口页面：不与主窗口路由互跳，等级独立（无动画耦合）
 };
 
-/** 顶级 tab 顺序（同级切换按此决定左右方向）。 */
-const tabOrder = ["launch", "download", "download-detail", "settings"];
-
 router.beforeEach((to, from) => {
   const toLevel = routeLevel[to.name as string] ?? 0;
   const fromLevel = routeLevel[from.name as string] ?? 0;
@@ -75,10 +72,8 @@ router.beforeEach((to, from) => {
   } else if (toLevel < fromLevel) {
     to.meta.transition = "slide-right"; // 返回上级：新页从左侧推入
   } else {
-    // 同级：按 tab 顺序决定方向（右侧 tab → 内容左移，左侧 tab → 内容右移）
-    const fi = tabOrder.indexOf(from.name as string);
-    const ti = tabOrder.indexOf(to.name as string);
-    to.meta.transition = fi >= 0 && ti >= 0 && ti > fi ? "slide-left" : "slide-right";
+    // 同级（顶级 tab / 详情间切换）：桌面应用用淡入，不做整页横滑。
+    to.meta.transition = "route";
   }
 });
 

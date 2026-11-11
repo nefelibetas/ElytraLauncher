@@ -203,7 +203,8 @@ async function handleDismissPaused(task: TaskItem) {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 28px;
+  flex-wrap: wrap;
+  gap: 16px 28px;
   background-color: var(--surface-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -254,7 +255,8 @@ async function handleDismissPaused(task: TaskItem) {
 .ov-stats {
   flex: none;
   display: flex;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
 }
 
 .ov-stat {

@@ -873,6 +873,21 @@ async function copyName() {
   display: flex;
   gap: 12px;
 }
+@media (max-width: 980px) {
+  .md-cards-row {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .md-deps-card {
+    flex: 0 0 auto;
+    max-height: 240px;
+  }
+  .mv-side-enter-to,
+  .mv-side-leave-from {
+    width: 100%;
+  }
+}
+
 .md-versions {
   flex: 1;
   min-width: 0;
