@@ -350,6 +350,10 @@ function modeText(task: ToolDlSnapshot): string {
   </div>
 </template>
 
+<style>
+@import "../../styles/tools-shared.css";
+</style>
+
 <style scoped>
 .tool-card {
   /* 撑满内容区：任务列表在卡内滚动，页面本身不出现外部滚动条 */
@@ -357,27 +361,6 @@ function modeText(task: ToolDlSnapshot): string {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 16px 18px;
-}
-
-.tool-card-hdr {
-  flex: none;
-  margin-bottom: 14px;
-}
-
-.tool-card-hdr h3 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  color: var(--text-primary);
-}
-
-.tool-card-sub {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  line-height: 1.5;
 }
 
 .tdl-sec {
@@ -395,7 +378,7 @@ function modeText(task: ToolDlSnapshot): string {
 }
 
 .tdl-sec-title {
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -407,7 +390,7 @@ function modeText(task: ToolDlSnapshot): string {
   resize: none;
   height: 62px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-family: "Cascadia Mono", "Consolas", monospace;
   line-height: 1.45;
   color: var(--text-primary);
@@ -430,7 +413,7 @@ function modeText(task: ToolDlSnapshot): string {
 
 .tdl-label {
   flex: 0 0 64px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -439,7 +422,7 @@ function modeText(task: ToolDlSnapshot): string {
   min-width: 0;
   height: 32px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -465,7 +448,7 @@ function modeText(task: ToolDlSnapshot): string {
   gap: 6px;
   height: 32px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -484,20 +467,20 @@ function modeText(task: ToolDlSnapshot): string {
 }
 
 .tdl-btn-primary {
-  color: var(--text-on-brand, #fff);
+  color: var(--text-inverse);
   background: var(--color-brand-gradient, var(--color-brand));
   border-color: transparent;
 }
 
 .tdl-btn-primary:hover:not(:disabled) {
-  color: var(--text-on-brand, #fff);
+  color: var(--text-inverse);
   opacity: 0.9;
 }
 
 .tdl-btn-ghost {
   height: 26px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .tdl-icon-btn {
@@ -532,7 +515,7 @@ function modeText(task: ToolDlSnapshot): string {
 }
 
 .tdl-speed {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--color-brand);
 }
 
@@ -558,7 +541,7 @@ function modeText(task: ToolDlSnapshot): string {
 
 .tdl-item {
   padding: 10px 12px;
-  background-color: var(--surface-inset, var(--surface-hover));
+  background-color: var(--surface-hover);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
@@ -572,7 +555,7 @@ function modeText(task: ToolDlSnapshot): string {
 .tdl-name {
   max-width: 45%;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -581,8 +564,8 @@ function modeText(task: ToolDlSnapshot): string {
 .tdl-chip {
   flex: 0 0 auto;
   padding: 1px 7px;
-  font-size: 11.5px;
-  border-radius: 999px;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-pill);
   color: var(--text-secondary);
   background-color: var(--surface-hover);
 }
@@ -596,26 +579,26 @@ function modeText(task: ToolDlSnapshot): string {
 }
 
 .tdl-chip.is-error {
-  color: var(--color-error, #e5484d);
+  color: var(--color-danger);
 }
 
 .tdl-mode {
   flex: 0 0 auto;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
 .tdl-bar {
   height: 6px;
   margin: 8px 0 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background-color: var(--surface-hover);
   overflow: hidden;
 }
 
 .tdl-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: var(--color-brand-gradient, var(--color-brand));
   transition: width 0.25s ease;
 }
@@ -624,7 +607,7 @@ function modeText(task: ToolDlSnapshot): string {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -634,8 +617,8 @@ function modeText(task: ToolDlSnapshot): string {
 
 .tdl-err {
   margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-error, #e5484d);
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

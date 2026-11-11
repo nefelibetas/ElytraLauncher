@@ -98,13 +98,13 @@ function goDownload() {
 }
 
 .launch-label {
-  font-size: 16px;
+  font-size: var(--fs-xl);
   font-weight: 600;
   line-height: 1.4;
 }
 
 .launch-version {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   opacity: 0.8;
   line-height: 1.3;
 }
@@ -125,10 +125,10 @@ function goDownload() {
   border: 1px solid var(--border-strong);
   background-color: var(--surface-elevated);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .secondary-btn:hover {
@@ -141,13 +141,13 @@ function goDownload() {
   min-width: 0;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-input, var(--surface-card));
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .lo-input:hover,

@@ -11,9 +11,10 @@ use super::{expand_inheritance, InstallCtx, LoaderEvent, LoaderHook, VersionTarg
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::endpoints;
 use crate::downloader::fetcher::{self, http};
-use crate::game::resource::{extract, library};
+use crate::game::resource::library;
 use crate::game::version::model;
 use crate::jdk;
+use crate::util::archive;
 use crate::util::java_bin_path;
 
 pub async fn install_forge(
@@ -753,7 +754,7 @@ async fn resolve_jar(
                     "读取安装程序条目失败"
                 ))?;
                 if entry.name() == fp {
-                    extract::extract_entry_to(&mut entry, jar_path)?;
+                    archive::extract_entry_to(&mut entry, jar_path)?;
                     return Ok(None);
                 }
             }
@@ -810,7 +811,7 @@ async fn resolve_jar(
             && !name.contains("sources")
             && !name.contains("javadoc")
         {
-            extract::extract_entry_to(&mut entry, jar_path)?;
+            archive::extract_entry_to(&mut entry, jar_path)?;
             return Ok(None);
         }
     }

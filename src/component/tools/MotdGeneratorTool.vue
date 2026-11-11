@@ -221,7 +221,7 @@ const charCount = () => visibleLength(text.value);
   box-sizing: border-box;
   padding: 10px 12px;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--surface-page);
@@ -253,7 +253,7 @@ const charCount = () => visibleLength(text.value);
 }
 
 .motd-tool-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-right: 2px;
   flex: 0 0 auto;
@@ -263,7 +263,7 @@ const charCount = () => visibleLength(text.value);
   width: 18px;
   height: 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   padding: 0;
   cursor: pointer;
   transition: transform 0.1s;
@@ -278,7 +278,7 @@ const charCount = () => visibleLength(text.value);
   height: 20px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: none;
   cursor: pointer;
 }
@@ -295,7 +295,7 @@ const charCount = () => visibleLength(text.value);
   background: var(--surface-page);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .motd-style:hover {
@@ -314,13 +314,13 @@ const charCount = () => visibleLength(text.value);
 }
 
 .motd-grad-arrow {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
 .motd-grad-btn,
 .motd-clear-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
@@ -333,7 +333,7 @@ const charCount = () => visibleLength(text.value);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
@@ -369,12 +369,12 @@ const charCount = () => visibleLength(text.value);
 .motd-online-text {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
 .motd-online-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 </style>

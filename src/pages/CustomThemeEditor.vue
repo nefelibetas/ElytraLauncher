@@ -403,10 +403,10 @@ function save() {
   border-bottom: 2px solid var(--border-default);
   background: transparent;
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .cte-name::placeholder {
@@ -424,9 +424,9 @@ function save() {
   border-bottom: 1px solid var(--border-subtle, var(--border-default));
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .cte-desc::placeholder {
@@ -463,24 +463,24 @@ function save() {
   padding: 9px 20px;
   border: none;
   border-radius: 10px;
-  background: var(--color-brand-gradient, linear-gradient(135deg, var(--color-brand), var(--color-brand-dark)));
+  background: var(--color-brand-gradient);
   color: var(--text-inverse);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px var(--color-brand-glow, rgba(0,0,0,0.2));
-  transition: all 0.15s;
+  box-shadow: 0 2px 8px var(--color-brand-glow);
+  transition: all var(--dur-fast);
 }
 
 .cte-save:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px var(--color-brand-glow, rgba(0,0,0,0.28));
+  box-shadow: 0 4px 14px var(--color-brand-glow);
   filter: brightness(1.05);
 }
 
 .cte-save:active {
   transform: translateY(0);
-  box-shadow: 0 1px 4px var(--color-brand-glow, rgba(0,0,0,0.2));
+  box-shadow: 0 1px 4px var(--color-brand-glow);
 }
 
 .cte-body {
@@ -545,10 +545,10 @@ function save() {
   transform: translateX(-50%);
   margin-top: 4px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--color-brand);
   color: var(--text-inverse);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
@@ -578,7 +578,7 @@ function save() {
 .pv-logo {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--pv-color-brand, var(--color-brand));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
@@ -589,12 +589,12 @@ function save() {
   display: flex;
   align-items: center;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 0 8px;
 }
 
 .pv-title-text {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--pv-text-primary, var(--text-primary));
   opacity: 0.8;
@@ -629,7 +629,7 @@ function save() {
 .pv-side-item {
   width: 18px;
   height: 18px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--pv-text-secondary, var(--text-secondary));
   opacity: 0.6;
 }
@@ -666,7 +666,7 @@ function save() {
 .pv-card-title {
   flex: 1;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: var(--pv-text-primary, var(--text-primary));
   opacity: 0.8;
 }
@@ -675,7 +675,7 @@ function save() {
   flex: none;
   width: 52px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--pv-color-brand, var(--color-brand));
 }
 
@@ -704,7 +704,7 @@ function save() {
 .pv-list-item {
   display: block;
   height: 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--pv-surface-hover, var(--surface-hover));
 }
 
@@ -737,7 +737,7 @@ function save() {
 .pv-foot-btn {
   width: 64px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--pv-text-secondary, var(--text-secondary));
   opacity: 0.55;
 }
@@ -778,7 +778,7 @@ function save() {
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
   line-height: 1.8;
 }
@@ -794,7 +794,7 @@ function save() {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.3px;
@@ -820,7 +820,7 @@ function save() {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .cte-palette-reset:hover {
@@ -838,7 +838,7 @@ function save() {
 .cte-preset {
   aspect-ratio: 1;
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.12s;
   padding: 0;
@@ -882,7 +882,7 @@ function save() {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-page);
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .cte-hex-box:focus-within {
@@ -890,7 +890,7 @@ function save() {
 }
 
 .cte-hex-prefix {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-tertiary);
   font-family: Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
@@ -904,7 +904,7 @@ function save() {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-family: Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
   letter-spacing: 0.5px;
   outline: none;

@@ -31,7 +31,7 @@ pub(crate) use version_meta::parse_optifine_version;
 mod tests {
     use super::detect::detect_pack;
     use super::*;
-    use crate::task::LoaderKind;
+    use crate::game::loader::LoaderKind;
     use std::io::Write as _;
     use std::path::Path;
 

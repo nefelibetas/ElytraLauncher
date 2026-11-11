@@ -18,7 +18,7 @@ use crate::downloader::probe::{probe_speed, probe_url, SpeedProbeResult};
 use crate::game::version::source::CacheBehaviour;
 use crate::jdk::model::JdkInfo;
 use crate::jdk::scanner;
-use crate::util::{java_bin_path, parse_java_major, safe_relative_path};
+use crate::util::{archive, java_bin_path, parse_java_major, safe_relative_path};
 
 /// 安装进度钩子（任务侧传入；均可为空，纯函数调用方直接不传）。
 pub struct InstallProgress<'a> {
@@ -745,12 +745,9 @@ fn mark_bin_executable(_root: &Path) {}
 
 /// zip 解压（Mojang/Azul/Adoptium 共用的包级解压；zip 内顶层目录保留）。
 fn extract_zip(package: &Path, dest_root: &Path) -> Result<(), String> {
-    let file = std::fs::File::open(package)
-        .map_err(common_err_ctx_key!("errors.file.read", "打开 JDK 包失败"))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(common_err_ctx_key!("errors.file.read", "读取 JDK 包失败"))?;
-    for i in 0..archive.len() {
-        let mut entry = archive
+    let mut zip_archive = archive::open_zip(package, "JDK 包")?;
+    for i in 0..zip_archive.len() {
+        let mut entry = zip_archive
             .by_index(i)
             .map_err(common_err_ctx_key!("errors.file.read", "读取条目失败"))?;
         // 目录条目名带尾 `/`（过不了相对路径校验）：目录由文件写入时隐式创建
@@ -759,19 +756,7 @@ fn extract_zip(package: &Path, dest_root: &Path) -> Result<(), String> {
         }
         let name = entry.name().to_string();
         let out = dest_root.join(safe_relative_path(&name)?);
-        if let Some(parent) = out.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
-        let mut file_out = std::fs::File::create(&out).map_err(common_err_ctx_key!(
-            "errors.file.write",
-            "创建 {} 失败",
-            out.display()
-        ))?;
-        std::io::copy(&mut entry, &mut file_out).map_err(common_err_ctx_key!(
-            "errors.file.extract",
-            "解压 {} 失败",
-            out.display()
-        ))?;
+        archive::extract_entry_to(&mut entry, &out)?;
     }
     Ok(())
 }
@@ -781,8 +766,8 @@ fn extract_tar_gz(package: &Path, dest_root: &Path) -> Result<(), String> {
     let file = std::fs::File::open(package)
         .map_err(common_err_ctx_key!("errors.file.read", "打开 JDK 包失败"))?;
     let gz = flate2::read::GzDecoder::new(file);
-    let mut archive = tar::Archive::new(gz);
-    let entries = archive
+    let mut tar_archive = tar::Archive::new(gz);
+    let entries = tar_archive
         .entries()
         .map_err(common_err_ctx_key!("errors.file.read", "读取 JDK 包失败"))?;
     for entry in entries {
@@ -801,19 +786,7 @@ fn extract_tar_gz(package: &Path, dest_root: &Path) -> Result<(), String> {
             name = stripped.to_string();
         }
         let out = dest_root.join(safe_relative_path(&name)?);
-        if let Some(parent) = out.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
-        let mut file_out = std::fs::File::create(&out).map_err(common_err_ctx_key!(
-            "errors.file.write",
-            "创建 {} 失败",
-            out.display()
-        ))?;
-        std::io::copy(&mut entry, &mut file_out).map_err(common_err_ctx_key!(
-            "errors.file.extract",
-            "解压 {} 失败",
-            out.display()
-        ))?;
+        archive::extract_entry_to(&mut entry, &out)?;
     }
     Ok(())
 }

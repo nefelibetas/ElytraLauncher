@@ -127,12 +127,12 @@ watch(
 <style scoped>
 .cs-search-form { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .cs-form-row { display: flex; align-items: center; gap: 8px; }
-.cs-form-label { font-size: 12px; color: var(--text-secondary); flex-shrink: 0; width: 36px; }
+.cs-form-label { font-size: var(--fs-sm); color: var(--text-secondary); flex-shrink: 0; width: 36px; }
 .cs-input {
   flex: 1; height: 30px; padding: 0 10px;
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
-  background: var(--surface-page); color: var(--text-primary); font-size: 13px; outline: none;
-  transition: border-color 0.15s;
+  background: var(--surface-page); color: var(--text-primary); font-size: var(--fs-base); outline: none;
+  transition: border-color var(--dur-fast);
 }
 .cs-input:focus { border-color: var(--color-brand); }
 /* DropSelect 填充 flex 行（class 落根 .ds） */
@@ -144,8 +144,8 @@ watch(
 .cs-btn {
   padding: 6px 24px;
   border: 1px solid var(--border-default); border-radius: var(--radius-md);
-  background: var(--surface-card); color: var(--text-primary); font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-card); color: var(--text-primary); font-size: var(--fs-base); font-weight: 600;
+  cursor: pointer; transition: all var(--dur-fast); display: inline-flex; align-items: center; gap: 6px;
 }
 .cs-btn:hover { border-color: var(--color-brand); }
 .cs-btn-primary { background: var(--color-brand); border-color: var(--color-brand); color: var(--text-inverse); }
@@ -160,7 +160,7 @@ watch(
 .card { background-color: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .card-title {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; font-size: 14px; font-weight: 600;
+  padding: 12px 16px; font-size: var(--fs-md); font-weight: 600;
   color: var(--text-primary); user-select: none; outline: none;
 }
 .card-body { overflow: hidden; }

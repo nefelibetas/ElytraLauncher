@@ -24,6 +24,7 @@ import { installModpack } from "../store/task/modpack";
 import { getInstanceModTarget } from "../store/task/versionSetup";
 import { LOADER_TITLES } from "../utils/versionMeta";
 import ModDownloadDialog from "../component/download/ModDownloadDialog.vue";
+import VersionFilterSelect from "../component/download/VersionFilterSelect.vue";
 import { fmtCount, fmtSize, fmtModDate } from "../utils/format";
 import IconImage from "../component/common/IconImage.vue";
 
@@ -115,25 +116,13 @@ function loaderLabel(l: string): string {
 
 const openFilter = ref<"" | "loader" | "game">("");
 
-const POP_MAX_H = 260;
-/** 弹层最大高度：按下方可视空间动态计算（向下展开，不扩展外层容器 scrollHeight） */
-const popMaxH = ref(POP_MAX_H);
-
-const loaderDrop = ref<HTMLElement | null>(null);
-const gameDrop = ref<HTMLElement | null>(null);
-
-function toggleFilter(kind: "" | "loader" | "game") {
-  if (openFilter.value === kind) {
-    openFilter.value = "";
-    return;
-  }
-  const drop = kind === "loader" ? loaderDrop.value : gameDrop.value;
-  if (drop) {
-    const rect = drop.getBoundingClientRect();
-    popMaxH.value = Math.max(80, Math.min(POP_MAX_H, window.innerHeight - rect.bottom - 8));
-  }
-  openFilter.value = kind;
-}
+/** 下拉浮层选项：筛选值 → 展示名。 */
+const loaderSelectOptions = computed(() =>
+  loaderOptions.value.map(l => ({ value: l, label: loaderLabel(l) })),
+);
+const gameSelectOptions = computed(() =>
+  gameVersionOptions.value.map(gv => ({ value: gv, label: gv })),
+);
 
 function pickLoader(l: string) {
   loaderFilter.value = l;
@@ -720,27 +709,26 @@ async function copyName() {
                 @click="submitDownload"
               >{{ isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
 
-              <div v-if="isMod" ref="loaderDrop" class="mv-drop" @pointerdown.stop @click.stop="toggleFilter('loader')">
-                <span class="mv-drop-label">{{ loaderFilter ? loaderLabel(loaderFilter) : t("download.search.allLoaders") }}</span>
-                <span class="mv-drop-arrow" :class="{ open: openFilter === 'loader' }"></span>
-                <Transition name="expand">
-                  <div v-if="openFilter === 'loader'" class="mv-drop-pop" :style="{ '--expand-h': popMaxH + 'px' }">
-                    <div class="mv-drop-opt" :class="{ sel: !loaderFilter }" @click.stop="pickLoader('')">{{ t("download.search.allLoaders") }}</div>
-                    <div v-for="l in loaderOptions" :key="l" class="mv-drop-opt" :class="{ sel: loaderFilter === l }" @click.stop="pickLoader(l)">{{ loaderLabel(l) }}</div>
-                  </div>
-                </Transition>
-              </div>
+              <VersionFilterSelect
+                v-if="isMod"
+                :open="openFilter === 'loader'"
+                :label="loaderFilter ? loaderLabel(loaderFilter) : t('download.search.allLoaders')"
+                :all-label="t('download.search.allLoaders')"
+                :options="loaderSelectOptions"
+                :selected="loaderFilter"
+                @update:open="openFilter = $event ? 'loader' : ''"
+                @select="pickLoader"
+              />
 
-              <div ref="gameDrop" class="mv-drop" @pointerdown.stop @click.stop="toggleFilter('game')">
-                <span class="mv-drop-label">{{ gameVersionFilter || t("download.search.allVersions") }}</span>
-                <span class="mv-drop-arrow" :class="{ open: openFilter === 'game' }"></span>
-                <Transition name="expand">
-                  <div v-if="openFilter === 'game'" class="mv-drop-pop" :style="{ '--expand-h': popMaxH + 'px' }">
-                    <div class="mv-drop-opt" :class="{ sel: !gameVersionFilter }" @click.stop="pickGame('')">{{ t("download.search.allVersions") }}</div>
-                    <div v-for="gv in gameVersionOptions" :key="gv" class="mv-drop-opt" :class="{ sel: gameVersionFilter === gv }" @click.stop="pickGame(gv)">{{ gv }}</div>
-                  </div>
-                </Transition>
-              </div>
+              <VersionFilterSelect
+                :open="openFilter === 'game'"
+                :label="gameVersionFilter || t('download.search.allVersions')"
+                :all-label="t('download.search.allVersions')"
+                :options="gameSelectOptions"
+                :selected="gameVersionFilter"
+                @update:open="openFilter = $event ? 'game' : ''"
+                @select="pickGame"
+              />
             </div>
 
             <div v-if="loadingVersions" class="mv-state">
@@ -956,7 +944,7 @@ async function copyName() {
 
 .md-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -964,7 +952,7 @@ async function copyName() {
 }
 
 .md-title-en {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--text-tertiary);
   white-space: nowrap;
@@ -975,10 +963,10 @@ async function copyName() {
 /* ModLoader 徽章（与外部 item 同款；专属色随主题变量切换） */
 .md-ld {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--color-brand-bg);
   color: var(--color-brand);
 }
@@ -1019,9 +1007,9 @@ async function copyName() {
 
 .md-badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text-inverse);
   font-weight: 600;
 }
@@ -1031,7 +1019,7 @@ async function copyName() {
 .md-sub {
   flex-shrink: 0;
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
 }
@@ -1040,7 +1028,7 @@ async function copyName() {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle, var(--border-default));
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   line-height: 1.6;
 }
@@ -1060,10 +1048,10 @@ async function copyName() {
   border-radius: var(--radius-md);
   background: var(--surface-card);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .md-btn:hover {
@@ -1087,14 +1075,14 @@ async function copyName() {
 }
 
 .mv-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
 }
 
 .mv-count {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 400;
   color: var(--text-tertiary);
 }
@@ -1111,10 +1099,10 @@ async function copyName() {
   border-radius: var(--radius-sm);
   background: var(--color-brand);
   color: var(--text-inverse);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   outline: none;
 }
 .mv-dl:hover:not(.mv-dl-disabled) {
@@ -1132,84 +1120,6 @@ async function copyName() {
 
 /* ── 自定义下拉 ── */
 
-.mv-drop {
-  position: relative;
-  flex: 0 0 140px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  cursor: pointer;
-  user-select: none;
-  transition: border-color 0.15s;
-}
-.mv-drop:hover,
-.mv-drop.open {
-  border-color: var(--color-brand);
-}
-
-.mv-drop-label {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mv-drop-arrow {
-  flex-shrink: 0;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--text-tertiary);
-  transition: transform 0.15s;
-}
-.mv-drop-arrow.open {
-  transform: rotate(180deg);
-}
-
-.mv-drop-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  max-height: var(--expand-h, 260px);
-  overflow-y: auto;
-  background: var(--surface-card);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  padding: 4px;
-}
-
-.mv-drop-opt {
-  padding: 6px 10px;
-  border-radius: var(--radius-xs, 4px);
-  font-size: 13px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background 0.1s, color 0.1s;
-}
-.mv-drop-opt:hover {
-  background: var(--surface-hover);
-  color: var(--color-brand);
-}
-.mv-drop-opt.sel {
-  color: var(--color-brand);
-  font-weight: 600;
-}
-
 /* expand 动画由共享骨架（styles/transitions.css）提供；元素通过内联 --expand-h 注入目标高度 */
 
 .mv-state {
@@ -1220,12 +1130,12 @@ async function copyName() {
   justify-content: center;
   gap: 10px;
   padding: 30px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
 }
 .mv-state.err { color: var(--color-danger); }
-.mv-state-text { font-size: 12.5px; color: var(--text-tertiary); }
-.mv-retry { flex: 0 0 auto; padding: 5px 20px; font-size: 12px; }
+.mv-state-text { font-size: var(--fs-base); color: var(--text-tertiary); }
+.mv-retry { flex: 0 0 auto; padding: 5px 20px; font-size: var(--fs-sm); }
 
 .spinner {
   width: 32px; height: 32px;
@@ -1276,7 +1186,7 @@ async function copyName() {
 .mv-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1287,8 +1197,8 @@ async function copyName() {
 .mv-type {
   flex: none;
   padding: 0 6px;
-  border-radius: 8px;
-  font-size: 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-2xs);
   font-weight: 700;
   line-height: 1.6;
   text-transform: uppercase;
@@ -1306,10 +1216,10 @@ async function copyName() {
 
 .mv-tag {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .mv-tag.gv { background: var(--surface-hover); color: var(--text-secondary); }
 
@@ -1320,8 +1230,8 @@ async function copyName() {
   align-items: flex-end;
   gap: 2px;
 }
-.mv-date { font-size: 10.5px; color: var(--text-tertiary); }
-.mv-size { font-size: 11px; color: var(--text-secondary); }
+.mv-date { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.mv-size { font-size: var(--fs-xs); color: var(--text-secondary); }
 
 /* ── 前置依赖（右侧面板，选中版本后出现）── */
 .md-dep-empty,
@@ -1331,7 +1241,7 @@ async function copyName() {
   justify-content: center;
   padding: 14px 10px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-tertiary);
   background: var(--surface-page);
@@ -1346,7 +1256,7 @@ async function copyName() {
 }
 .md-dep-state.err {
   color: var(--color-danger);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .md-dep-warn {
@@ -1361,24 +1271,24 @@ async function copyName() {
   background: var(--color-danger-bg);
 }
 .md-dep-warn-title {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--color-danger);
 }
 .md-dep-warn-item {
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .md-dep-warn-tip {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
   opacity: 0.85;
 }
 .md-dep-state-text {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .md-dep-list {
@@ -1395,7 +1305,7 @@ async function copyName() {
   background: var(--surface-page);
   border: 1px solid var(--border-default);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
 }
 .md-dep-item:hover {
   border-color: var(--color-brand);
@@ -1409,7 +1319,7 @@ async function copyName() {
   gap: 2px;
 }
 .md-dep-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
@@ -1417,7 +1327,7 @@ async function copyName() {
   text-overflow: ellipsis;
 }
 .md-dep-desc {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -1429,7 +1339,7 @@ async function copyName() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
   background: var(--surface-page);
 }

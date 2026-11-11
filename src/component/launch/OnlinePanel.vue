@@ -209,7 +209,7 @@ async function copyRoomCode() {
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -237,7 +237,7 @@ async function copyRoomCode() {
 .online-status-text { font-weight: 500; }
 
 .online-protocol {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   text-align: right;
   margin: -2px 0 6px;
@@ -249,14 +249,14 @@ async function copyRoomCode() {
 }
 
 .online-sec-title {
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
 
 .online-desc {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   line-height: 1.5;
   margin: 0 0 10px;
@@ -271,7 +271,7 @@ async function copyRoomCode() {
 
 .online-label {
   flex: 0 0 64px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -280,7 +280,7 @@ async function copyRoomCode() {
   min-width: 0;
   height: 32px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -302,7 +302,7 @@ async function copyRoomCode() {
 
 .online-room-code {
   font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--color-brand);
   letter-spacing: 0.5px;
@@ -310,13 +310,13 @@ async function copyRoomCode() {
 }
 
 .online-hint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
 .online-waiting {
   padding: 8px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
   font-style: italic;
 }
@@ -335,14 +335,14 @@ async function copyRoomCode() {
   gap: 6px;
   height: 32px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .online-btn:hover:not(:disabled) {
@@ -360,21 +360,21 @@ async function copyRoomCode() {
 }
 
 .online-btn-primary {
-  color: #fff;
+  color: var(--text-inverse);
   background-color: var(--color-brand);
   border-color: var(--color-brand);
 }
 
 .online-btn-primary:hover:not(:disabled) {
   background-color: var(--color-brand);
-  color: #fff;
+  color: var(--text-inverse);
   filter: brightness(1.08);
 }
 
 .online-error {
   margin-top: 8px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--color-danger);
   background-color: var(--color-danger-bg);
@@ -399,8 +399,8 @@ async function copyRoomCode() {
   gap: 8px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  background-color: var(--surface-default);
-  background-color: color-mix(in srgb, var(--surface-default) 60%, transparent);
+  background-color: var(--surface-page);
+  background-color: color-mix(in srgb, var(--surface-page) 60%, transparent);
 }
 
 .online-player-dot {
@@ -421,7 +421,7 @@ async function copyRoomCode() {
 .online-player-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -430,7 +430,7 @@ async function copyRoomCode() {
 
 .online-player-tag {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -446,11 +446,11 @@ async function copyRoomCode() {
   align-items: center;
   gap: 4px;
   padding: 1px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background-color: var(--surface-default);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-page);
 }
 
 .online-path-badge.is-direct {
@@ -462,13 +462,13 @@ async function copyRoomCode() {
 }
 
 .online-path-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 .online-relay-warning {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--color-danger);
 }

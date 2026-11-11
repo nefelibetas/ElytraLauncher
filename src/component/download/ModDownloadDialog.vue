@@ -433,11 +433,11 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 /* 遮罩从标题栏下方开始：模态确认不阻塞标题栏导航与窗口控制。 */
 .dialog-overlay {
   position: fixed;
-  top: var(--titlebar-h, 48px);
+  top: var(--titlebar-h);
   right: 0;
   bottom: 0;
   left: 0;
-  z-index: var(--z-modal, 1100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -450,7 +450,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--overlay, rgba(15, 23, 42, 0.5));
+  background: var(--overlay);
   backdrop-filter: blur(2px);
   pointer-events: none;
 }
@@ -473,7 +473,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .mod-dep-card {
   width: min(560px, 92vw);
-  max-height: calc(100vh - var(--titlebar-h, 48px) - 32px);
+  max-height: calc(100vh - var(--titlebar-h) - 32px);
 }
 
 .dialog-header {
@@ -493,7 +493,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 
 .dialog-title {
-  font-size: 16px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--color-brand);
 }
@@ -544,7 +544,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dep-main-name {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -572,7 +572,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -593,7 +593,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dep-state {
   padding: 18px 0;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -617,7 +617,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dep-version-hint {
   margin-bottom: 10px;
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -631,7 +631,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .dep-error-text {
   color: var(--color-danger);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   line-height: 1.6;
   word-break: break-word;
 }
@@ -649,7 +649,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   border: 0;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -673,7 +673,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .dep-caret {
   flex: none;
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-fast) ease;
 }
 
 .dep-caret.collapsed {
@@ -682,10 +682,10 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .dep-count {
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-hover);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   line-height: 16px;
 }
@@ -700,7 +700,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   border: 0;
   background: transparent;
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 
@@ -721,7 +721,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   gap: 8px;
   min-height: 34px;
   padding: 8px 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
 }
 
 .dep-row + .dep-row {
@@ -769,7 +769,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   flex-basis: 100%;
   min-width: 0;
   color: var(--color-danger);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -785,10 +785,10 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dep-tag {
   flex: none;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--color-brand-bg);
   color: var(--color-brand);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   line-height: 16px;
 }
@@ -826,7 +826,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dep-version-select :deep(.ds-btn) {
   height: 26px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .dep-version {
@@ -834,7 +834,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -861,7 +861,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   padding: 8px 10px;
   border-top: 1px solid var(--border-default);
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
 }
 
 .dialog-btn {
@@ -870,9 +870,9 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .dialog-btn:hover {

@@ -660,6 +660,16 @@ pub fn fill_missing_xuid(auth: &mut AuthMode) {
 
 /// 启动类命令共享的前置：构造账号（补 xuid）→ 加载配置与版本 JSON。
 #[allow(clippy::type_complexity)]
+/// 启动装配结果：认证信息、JDK、版本 JSON、游戏目录与启动配置。
+pub struct LaunchPrep {
+    pub auth: AuthMode,
+    pub java_path: PathBuf,
+    pub version_json: VersionJson,
+    pub mc_dir: PathBuf,
+    pub launcher_config: LaunchOptions,
+    pub java_major: u32,
+}
+
 pub async fn prepare_launch(
     version_dir_name: &str,
     auth_mode: &str,
@@ -667,7 +677,7 @@ pub async fn prepare_launch(
     access_token: &str,
     uuid: &str,
     xuid: &str,
-) -> Result<(AuthMode, PathBuf, VersionJson, PathBuf, LaunchOptions, u32), String> {
+) -> Result<LaunchPrep, String> {
     let mut auth = build_auth(auth_mode, username, access_token, uuid, xuid);
     fill_missing_xuid(&mut auth);
     let (java_path, version_json, mc_dir, launcher_config, java_major) =
@@ -681,14 +691,14 @@ pub async fn prepare_launch(
             )
         })?;
     }
-    Ok((
+    Ok(LaunchPrep {
         auth,
         java_path,
         version_json,
         mc_dir,
         launcher_config,
         java_major,
-    ))
+    })
 }
 
 #[cfg(test)]

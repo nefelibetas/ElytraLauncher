@@ -49,7 +49,7 @@ withDefaults(
 
 .menu-pop :slotted(.menu-item) {
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
   cursor: pointer;

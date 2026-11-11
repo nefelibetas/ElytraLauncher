@@ -51,7 +51,7 @@ function measure(el: Element) {
 .card-title {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 16px;
-  font-size: 14px; font-weight: 600;
+  font-size: var(--fs-md); font-weight: 600;
   color: var(--text-primary);
   user-select: none;
   outline: none;
@@ -73,7 +73,7 @@ function measure(el: Element) {
 .expandable:hover { box-shadow: var(--shadow-sm); }
 
 .card-count {
-  font-size: 12px; font-weight: 500;
+  font-size: var(--fs-sm); font-weight: 500;
   color: var(--text-tertiary);
   margin-left: auto;
 }

@@ -6,12 +6,10 @@ import { useRouter } from "vue-router";
 import { Pencil, Folder, FolderOpen, CloudDownload, Puzzle, Map, Settings2, Palette, Database, Sun, ImagePlus, Users, ChevronDown, ChevronUp, X } from "@lucide/vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import { fmtUnix } from "../../utils/format";
-import { ensureGameFolder, renameVersionDir } from "../../store/config/gameDirs";
+import { openGameFolder, renameVersionDir } from "../../store/config/gameDirs";
 import { scanMissingFiles, submitMissingDownload } from "../../store/task/download";
-import { openFolder } from "../../utils/fs";
 import { classifyVersion } from "../../utils/versionClassify";
 import { LOADER_ICONS, LOADER_TITLES } from "../../utils/versionMeta";
-import { fmtCount, fmtSize } from "../../utils/format";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
 import {
@@ -23,11 +21,11 @@ import OnlinePanel from "./OnlinePanel.vue";
 import VersionItem from "../download/VersionItem.vue";
 import AlertDialog from "../common/AlertDialog.vue";
 import IconImage from "../common/IconImage.vue";
+import CommunityFileMeta from "../common/CommunityFileMeta.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import EmptyState from "../common/EmptyState.vue";
 import ErrorState from "../common/ErrorState.vue";
 import { dlState } from "../../store/task/download";
-import { dlTranslateMode } from "../../store/config/downloaderConfig";
 import { selectedVersion, setSelected } from "../../store/app/selectedVersion";
 import {
   worlds, worldsLoading, worldsError, worldIcons,
@@ -229,12 +227,7 @@ onBeforeUnmount(() => {
 
 // ── 打开文件夹（不存在则先由后端 ensure_game_folder 创建）──
 async function openVersionFolder(kind: "saves" | "version" | "mods" | "resourcepacks" | "datapacks" | "shaderpacks") {
-  try {
-    const target = await ensureGameFolder(kind, versionName.value);
-    await openFolder(target);
-  } catch (e) {
-    showToast(errMsg(e));
-  }
+  await openGameFolder(kind, versionName.value);
 }
 
 // ── 修复：扫描缺失 → 提交任务中心 ──
@@ -405,30 +398,8 @@ async function confirmRename() {
           </div>
           <div class="vdc-mod-list">
             <template v-for="m in mods" :key="m.file_name">
-              <!-- 已识别：社区元数据样式 -->
-              <div v-if="m.project_id" class="vdc-mod">
-                <IconImage :src="m.icon_url" :size="32" />
-                <span class="vdc-mod-info">
-                  <span class="vdc-mod-title-row">
-                    <span class="vdc-mod-title">{{ m.title_zh ?? m.title ?? m.file_name }}</span>
-                    <span v-if="m.title_zh" class="vdc-mod-file">{{ m.file_name }}</span>
-                    <span v-if="m.downloads" class="vdc-mod-sub">{{ t("launch.version.downloads", { count: fmtCount(m.downloads) }, m.downloads) }}</span>
-                  </span>
-                  <span v-if="m.description" class="vdc-mod-desc">
-                    {{ dlTranslateMode === "en" ? m.description : (m.description_zh ?? m.description) }}
-                  </span>
-                  <span v-if="m.current_version" class="vdc-mod-support">
-                    <span class="vdc-mod-ver">v{{ m.current_version }}</span>
-                  </span>
-                </span>
-              </div>
-              <!-- 未识别：本地文件样式 -->
-              <div v-else class="vdc-mod vdc-mod-local">
-                <Puzzle :size="20" class="vdc-mod-local-icon" />
-                <span class="vdc-mod-info">
-                  <span class="vdc-mod-local-name">{{ m.file_name }}</span>
-                  <span class="vdc-mod-local-meta">{{ fmtSize(m.size) }}</span>
-                </span>
+              <div class="vdc-mod">
+                <CommunityFileMeta :item="m" :local-icon="Puzzle" />
               </div>
             </template>
           </div>
@@ -449,30 +420,8 @@ async function confirmRename() {
           </div>
           <div class="vdc-mod-list">
             <template v-for="f in res.list" :key="f.file_name">
-              <!-- 已匹配社区项目 -->
-              <div v-if="f.project_id" class="vdc-mod">
-                <IconImage :src="f.icon_url" :size="32" />
-                <span class="vdc-mod-info">
-                  <span class="vdc-mod-title-row">
-                    <span class="vdc-mod-title">{{ f.title_zh ?? f.title ?? f.file_name }}</span>
-                    <span v-if="f.title_zh" class="vdc-mod-file">{{ f.file_name }}</span>
-                    <span v-if="f.downloads" class="vdc-mod-sub">{{ t("launch.version.downloads", { count: fmtCount(f.downloads) }, f.downloads) }}</span>
-                  </span>
-                  <span v-if="f.description" class="vdc-mod-desc">
-                    {{ dlTranslateMode === "en" ? f.description : (f.description_zh ?? f.description) }}
-                  </span>
-                  <span v-if="f.current_version" class="vdc-mod-support">
-                    <span class="vdc-mod-ver">v{{ f.current_version }}</span>
-                  </span>
-                </span>
-              </div>
-              <!-- 未匹配：本地文件 -->
-              <div v-else class="vdc-mod vdc-mod-local">
-                <component :is="resIcon" :size="20" class="vdc-mod-local-icon" />
-                <span class="vdc-mod-info">
-                  <span class="vdc-mod-local-name">{{ f.file_name }}</span>
-                  <span class="vdc-mod-local-meta">{{ fmtSize(f.size) }}</span>
-                </span>
+              <div class="vdc-mod">
+                <CommunityFileMeta :item="f" :local-icon="resIcon" />
               </div>
             </template>
           </div>
@@ -586,7 +535,7 @@ async function confirmRename() {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vdc-icon-btn:hover {
@@ -628,11 +577,11 @@ async function confirmRename() {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vdc-side-btn:hover {
@@ -653,11 +602,11 @@ async function confirmRename() {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vdc-side-open:hover {
@@ -688,7 +637,7 @@ async function confirmRename() {
 
 .vdc-fade-enter-active,
 .vdc-fade-leave-active {
-  transition: opacity 0.15s ease;
+  transition: opacity var(--dur-fast) ease;
 }
 
 .vdc-fade-enter-from,
@@ -698,7 +647,7 @@ async function confirmRename() {
 
 .vdc-err {
   padding: 20px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   text-align: center;
 }
@@ -750,7 +699,7 @@ async function confirmRename() {
 
 .vdc-world-thumb {
   flex: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-default);
 }
@@ -764,7 +713,7 @@ async function confirmRename() {
 }
 
 .vdc-row-name {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -773,13 +722,13 @@ async function confirmRename() {
 }
 
 .vdc-row-meta {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 /* ===== Mod 列表 ===== */
 .vdc-net-warn {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
   padding: 6px 16px 0;
   text-align: center;
@@ -804,100 +753,6 @@ async function confirmRename() {
   background: var(--surface-hover);
 }
 
-.vdc-mod-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.vdc-mod-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.vdc-mod-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vdc-mod-file {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-}
-
-.vdc-mod-sub {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.vdc-mod-desc {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.vdc-mod-support {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.vdc-mod-ver {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 5px;
-  border-radius: 6px;
-  background: var(--color-brand-bg);
-  color: var(--color-brand);
-}
-
-/* 未识别 mod：本地文件样式 */
-.vdc-mod-local {
-  gap: 10px;
-}
-
-.vdc-mod-local-icon {
-  flex: none;
-  color: var(--text-tertiary);
-  margin-left: 6px;
-}
-
-.vdc-mod-local-name {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vdc-mod-local-meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
 /* ===== 联机条 ===== */
 .vdc-online {
   position: relative;
@@ -916,10 +771,10 @@ async function confirmRename() {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
 }
 
 .vdc-online-trigger:hover,
@@ -938,7 +793,7 @@ async function confirmRename() {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .vdc-online-trigger.active .vdc-online-state { color: var(--text-secondary); }
@@ -992,7 +847,7 @@ async function confirmRename() {
   justify-content: space-between;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-default);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1017,7 +872,7 @@ async function confirmRename() {
 
 .online-pop-enter-active,
 .online-pop-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
 .online-pop-enter-from,
@@ -1047,9 +902,9 @@ async function confirmRename() {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vdc-foot-btn:hover {
@@ -1088,9 +943,9 @@ async function confirmRename() {
   border-radius: var(--radius-md);
   background: var(--surface-page);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .vdc-input:focus {

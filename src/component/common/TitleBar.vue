@@ -144,7 +144,7 @@ function onMouseDown(e: MouseEvent) {
 .tl { display: flex; align-items: center; width: auto; min-width: 0; }
 
 .logo {
-  font-size: 18px;
+  font-size: var(--fs-2xl);
   font-weight: 800;
   color: var(--color-brand);
   letter-spacing: -0.5px;
@@ -168,8 +168,8 @@ function onMouseDown(e: MouseEvent) {
   color: var(--titlebar-fg-dim);
   color: color-mix(in srgb, var(--titlebar-fg) 85%, transparent);
   cursor: pointer; border-radius: var(--radius-sm);
-  font-size: 14px; font-weight: 500;
-  transition: all 0.15s;
+  font-size: var(--fs-md); font-weight: 500;
+  transition: all var(--dur-fast);
   outline: none;
 }
 .back-btn svg { flex-shrink: 0; }
@@ -194,9 +194,9 @@ function onMouseDown(e: MouseEvent) {
   border-radius: var(--radius-sm);
   color: var(--titlebar-fg-dim);
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   outline: none;
 }
 
@@ -219,7 +219,7 @@ function onMouseDown(e: MouseEvent) {
   background-color: color-mix(in srgb, var(--titlebar-fg) 22%, transparent);
 }
 
-.label { font-size: 13px; }
+.label { font-size: var(--fs-base); }
 
 .nav-badge {
   min-width: 16px;
@@ -228,10 +228,10 @@ function onMouseDown(e: MouseEvent) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background-color: rgba(255, 255, 255, 0.9);
   color: var(--color-brand-dark);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -253,7 +253,7 @@ function onMouseDown(e: MouseEvent) {
   color: color-mix(in srgb, var(--titlebar-fg) 65%, transparent);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   outline: none;
 }
 

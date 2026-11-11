@@ -19,13 +19,13 @@
 }
 
 .stg-card-hdr h3 {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .stg-card-sub {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 /* ===== 通用控件 ===== */
@@ -38,10 +38,10 @@
   border-radius: var(--radius-md);
   background: var(--surface-card);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   white-space: nowrap;
 }
 
@@ -57,7 +57,7 @@
 
 .err {
   color: var(--color-danger);
-  font-size: 13px;
+  font-size: var(--fs-base);
   padding: 10px 0 0;
 }
 
@@ -78,7 +78,7 @@
 .lo-label {
   flex: none;
   width: 96px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -86,13 +86,13 @@
   flex: 1;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-input, var(--surface-card));
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .lo-input:hover,
@@ -130,7 +130,7 @@ input[type="number"] {
 .lo-times {
   flex: none;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 .lo-top {
@@ -145,7 +145,7 @@ input[type="number"] {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   line-height: 1.6;
   font-family: inherit;
   color: var(--text-primary);
@@ -158,7 +158,7 @@ input[type="number"] {
   white-space: nowrap;
   overflow-x: auto;
   overflow-y: auto;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .lo-textarea:hover,
@@ -184,7 +184,7 @@ input[type="range"] {
 
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: linear-gradient(
     to right,
     var(--color-brand) 0 var(--range-pct, 0%),
@@ -211,7 +211,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 input[type="range"]::-moz-range-track {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: linear-gradient(
     to right,
     var(--color-brand) 0 var(--range-pct, 0%),

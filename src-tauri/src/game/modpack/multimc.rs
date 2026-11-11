@@ -1,6 +1,6 @@
 //! MultiMC / Prism 实例包解析（`mmc-pack.json` 组件 + `instance.cfg` 回退）。
 
-use crate::task::{LoaderChoice, LoaderKind};
+use crate::game::loader::{LoaderChoice, LoaderKind};
 
 use super::detect::Detected;
 use super::model::{OverridesRef, PackMetaInfo};

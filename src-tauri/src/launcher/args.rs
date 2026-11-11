@@ -80,8 +80,6 @@ const PLACEHOLDER_CLASSPATH_SEPARATOR: &str = "${classpath_separator}";
 
 const NATIVES_READY_MARKER: &str = ".elytra-ready";
 const EXT_JAR: &str = "jar";
-const EXT_JSON: &str = "json";
-const JSON_MAIN_CLASS_KEY: &str = "\"mainClass\"";
 
 // 离线模式固定值（token 为占位，游戏仅校验非空；用户类型协议枚举）
 const OFFLINE_TOKEN_PLACEHOLDER: &str = "00000000FFFFFFFFFFFFFFFFFFFFFF96436";
@@ -810,41 +808,6 @@ pub fn resolve_client_jar(version_dir: &Path, version_dir_name: &str) -> Option<
         sb.cmp(&sa).then_with(|| a.file_name().cmp(&b.file_name()))
     });
     jars.into_iter().next()
-}
-
-pub fn find_file_in_dir(dir: &Path, ext: &str) -> Option<PathBuf> {
-    std::fs::read_dir(dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .find_map(|e| {
-            let p = e.path();
-            if p.extension()? == ext && p.is_file() {
-                Some(p)
-            } else {
-                None
-            }
-        })
-}
-
-/// 定位版本 JSON：优先 `{dir_name}.json`，否则扫描目录内含 `"mainClass"` 者（PCL2 隔离实例目录混有游戏数据 json，字典序第一个会报 "missing field assetIndex"）。
-pub fn find_version_json(dir: &Path, dir_name: &str) -> Option<PathBuf> {
-    let named = dir.join(format!("{dir_name}.{EXT_JSON}"));
-    if named.is_file() {
-        return Some(named);
-    }
-    std::fs::read_dir(dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .find_map(|e| {
-            let p = e.path();
-            if p.extension()? == EXT_JSON && p.is_file() {
-                let text = std::fs::read_to_string(&p).ok()?;
-                if text.contains(JSON_MAIN_CLASS_KEY) {
-                    return Some(p);
-                }
-            }
-            None
-        })
 }
 
 struct JvmArgs<'a> {

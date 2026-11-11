@@ -5,11 +5,12 @@ import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { RefreshCw, Undo2 } from "@lucide/vue";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
+import MemoryUsageBar from "../launch/MemoryUsageBar.vue";
 import CheckToggle from "../common/CheckToggle.vue";
 import RangeSlider from "../common/RangeSlider.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import { memState, startMemoryMonitor } from "../../store/app/memory";
-import { fmtGb, memLabelLeft } from "../../utils/format";
+import { fmtGb } from "../../utils/format";
 import {
   autoAllocMb, memCeilMb, snapMemMb, MEM_FLOOR_MB, MEM_STEP_MB,
 } from "../../utils/memory";
@@ -228,17 +229,6 @@ const memRange = computed<[number, number]>({
     draft.value.min_memory = value[0];
     draft.value.memory = { Custom: value[1] };
   },
-});
-
-const memUsedMb = computed(() => Math.max(0, memState.totalMb - memState.availMb));
-const memGameMb = computed(() =>
-  Math.min(memUpperMb.value, memState.availMb || Number.MAX_SAFE_INTEGER));
-const memUsedPct = computed(() =>
-  memState.totalMb ? (memUsedMb.value / memState.totalMb) * 100 : 0);
-const memGamePct = computed(() => {
-  const remain = Math.max(0, memState.totalMb - memUsedMb.value);
-  const game = Math.min(memGameMb.value, remain);
-  return memState.totalMb ? (game / memState.totalMb) * 100 : 0;
 });
 
 // ── 窗口 / 下拉 ──
@@ -475,18 +465,7 @@ function setWindowMode(value: string) {
               />
               <span class="mem-bound" :title="t('settings.launch.memoryMax')">{{ fmtGb(memUpperMb) }}</span>
             </div>
-            <div class="mem-status">
-              <div class="mem-bar-labels">
-                <span class="mem-bar-label">{{ t("settings.launch.memoryUsed", { size: fmtGb(memUsedMb) }) }}</span>
-                <span v-if="memGamePct > 0" class="mem-bar-label" :style="{ left: memLabelLeft(memUsedPct) }">{{ t("settings.launch.memoryGame", { size: fmtGb(memGameMb) }) }}</span>
-              </div>
-              <div class="mem-bar">
-                <div class="mem-seg mem-used" :style="{ width: memUsedPct + '%' }"></div>
-                <div class="mem-seg mem-game" :style="{ width: memGamePct + '%' }"></div>
-                <div class="mem-seg mem-free"></div>
-              </div>
-              <div class="mem-total">{{ fmtGb(memUsedMb) }} / {{ fmtGb(memState.totalMb) }}</div>
-            </div>
+            <MemoryUsageBar />
           </div>
         </div>
 
@@ -557,12 +536,6 @@ function setWindowMode(value: string) {
 </style>
 
 <style scoped>
-.vs-page {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
 
 .inst-follow,
 .inst-toolbar {
@@ -575,7 +548,7 @@ function setWindowMode(value: string) {
 .inst-follow {
   padding: 4px 0 2px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 .inst-toolbar {
@@ -584,7 +557,7 @@ function setWindowMode(value: string) {
 
 .inst-status {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -594,7 +567,7 @@ function setWindowMode(value: string) {
 
 .inst-note {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -607,58 +580,11 @@ function setWindowMode(value: string) {
 .mem-bound {
   flex: none;
   width: 56px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.mem-status {
-  margin-top: 2px;
-}
-
-.mem-bar-labels {
-  position: relative;
-  height: 16px;
-}
-
-.mem-bar-label {
-  position: absolute;
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.mem-bar {
-  display: flex;
-  height: 10px;
-  border-radius: 5px;
-  overflow: hidden;
-  background: var(--border-default);
-}
-
-.mem-seg {
-  height: 100%;
-  transition: width 0.4s ease;
-}
-
-.mem-used {
-  background: var(--color-danger);
-}
-
-.mem-game {
-  background: var(--color-success);
-}
-
-.mem-free {
-  flex: 1;
-}
-
-.mem-total {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .lo-win-custom {

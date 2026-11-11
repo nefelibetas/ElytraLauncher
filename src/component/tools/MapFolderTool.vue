@@ -179,13 +179,13 @@ function clear() {
   border-radius: var(--radius-sm);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .wft-select-btn.placeholder {
@@ -213,7 +213,7 @@ function clear() {
   border-radius: var(--radius-sm);
   background: var(--surface-elevated);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 

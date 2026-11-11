@@ -18,8 +18,8 @@ use crate::downloader::hash::file_sha1_matches;
 use crate::downloader::progress;
 use crate::game::resource::assets::AssetIndexRef;
 use crate::game::resource::{assets, extract, library};
+use crate::game::version::dir::{find_file_in_dir, find_version_json};
 use crate::game::version::model::{Artifact, Library, VersionJson};
-use crate::launcher;
 use crate::persist;
 use crate::task::{self, StepStatus, TaskProgress, TaskStatus};
 use crate::util::sha1_sub_dir;
@@ -35,7 +35,7 @@ pub struct MissingReport {
 /// 读取版本目录的 version json（按文件名扫描，不假设文件名=目录名）。
 fn read_version_json(vdir: &Path) -> Result<VersionJson, String> {
     let dir_name = vdir.file_name().and_then(|s| s.to_str()).unwrap_or("");
-    let vj_path = launcher::args::find_version_json(vdir, dir_name).ok_or_else(|| {
+    let vj_path = find_version_json(vdir, dir_name).ok_or_else(|| {
         format!(
             "版本 JSON 缺失\n目录 {} 下未找到版本 JSON 文件，无法修复，请删除该版本后重新下载安装",
             vdir.display()
@@ -86,7 +86,7 @@ pub async fn scan_missing(version_dir_name: &str) -> Result<MissingReport, Strin
     let vdir = mc.join("versions").join(version_dir_name);
     let vj = read_version_json(&vdir)?;
 
-    let jar_missing = match launcher::args::find_file_in_dir(&vdir, "jar") {
+    let jar_missing = match find_file_in_dir(&vdir, "jar") {
         Some(p) => {
             let len_zero = p.metadata().map(|m| m.len() == 0).unwrap_or(true);
             if len_zero {
@@ -549,7 +549,7 @@ async fn repair_jar(
     cancel: &AtomicBool,
 ) -> Result<(), Vec<String>> {
     if jar_missing {
-        if let Some(bad) = launcher::args::find_file_in_dir(vdir, "jar") {
+        if let Some(bad) = find_file_in_dir(vdir, "jar") {
             let bad_jar = bad.metadata().map(|m| m.len() == 0).unwrap_or(true)
                 || vj
                     .downloads

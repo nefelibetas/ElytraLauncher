@@ -247,17 +247,17 @@ function modsSummary(mods?: ItemMods): string {
 
 <style scoped>
 .nb-mini-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
 .nb-add-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
 .nb-error {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   margin-bottom: 8px;
 }

@@ -219,34 +219,34 @@ async function handleDismissPaused(task: TaskItem) {
 }
 
 .ov-pct {
-  font-size: 26px;
+  font-size: var(--fs-display);
   font-weight: 800;
   color: var(--color-brand);
   flex: none;
   font-variant-numeric: tabular-nums;
 }
 
-.ov-unit { font-size: 14px; font-weight: 700; }
+.ov-unit { font-size: var(--fs-md); font-weight: 700; }
 
 .ov-bar {
   flex: 1;
   height: 8px;
-  border-radius: 4px;
-  background-color: var(--surface-inset, var(--surface-hover));
+  border-radius: var(--radius-xs);
+  background-color: var(--surface-hover);
   overflow: hidden;
   min-width: 60px;
 }
 
 .ov-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--color-brand-gradient, var(--color-brand));
   transition: width 0.25s ease;
 }
 
 .ov-sub {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   white-space: nowrap;
 }
@@ -265,14 +265,14 @@ async function handleDismissPaused(task: TaskItem) {
 }
 
 .ov-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   letter-spacing: 0.3px;
 }
 
 .ov-value {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -298,7 +298,7 @@ async function handleDismissPaused(task: TaskItem) {
   justify-content: center;
   gap: 8px;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 
 .empty-icon {
@@ -308,7 +308,7 @@ async function handleDismissPaused(task: TaskItem) {
 }
 
 .empty-sub {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   opacity: 0.8;
 }
 
@@ -323,13 +323,13 @@ async function handleDismissPaused(task: TaskItem) {
   background: var(--color-brand-bg);
   border: 1px solid var(--color-brand);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
 }
 
 .rb-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .rb-sub {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -345,9 +345,9 @@ async function handleDismissPaused(task: TaskItem) {
   border: 1px solid var(--border-strong);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .rb-btn:hover { border-color: var(--color-brand); }
@@ -378,7 +378,7 @@ async function handleDismissPaused(task: TaskItem) {
 .tc-name {
   flex: 1;
   min-width: 0;
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.2;
@@ -391,7 +391,7 @@ async function handleDismissPaused(task: TaskItem) {
   flex: none;
   padding: 2px 8px;
   border-radius: 9px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -412,7 +412,7 @@ async function handleDismissPaused(task: TaskItem) {
   background: transparent;
   cursor: pointer;
   color: var(--text-tertiary);
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .tc-cancel:hover {
@@ -431,21 +431,21 @@ async function handleDismissPaused(task: TaskItem) {
 .tc-progress-bar {
   flex: 1;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background-color: var(--surface-hover);
   overflow: hidden;
 }
 
 .tc-progress-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: var(--color-brand-gradient, var(--color-brand));
   transition: width 0.25s ease;
 }
 
 .tc-progress-pct {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 700;
   color: var(--color-brand);
   min-width: 36px;
@@ -454,7 +454,7 @@ async function handleDismissPaused(task: TaskItem) {
 
 .tc-progress-speed {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   min-width: 64px;
   text-align: right;
@@ -462,7 +462,7 @@ async function handleDismissPaused(task: TaskItem) {
 
 .tc-err {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   line-height: 1.5;
   word-break: break-all;
@@ -527,7 +527,7 @@ async function handleDismissPaused(task: TaskItem) {
 
 .tc-st-name {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -549,7 +549,7 @@ async function handleDismissPaused(task: TaskItem) {
 
 .tc-st-pct {
   flex: none;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   min-width: 34px;
   text-align: right;
@@ -563,9 +563,9 @@ async function handleDismissPaused(task: TaskItem) {
   border-radius: var(--radius-sm);
   background: var(--surface-hover);
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .tc-more:hover { color: var(--color-brand); }

@@ -63,14 +63,14 @@ const { t } = useI18n();
 }
 
 .lp-title {
-  font-size: 17px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .lp-version {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -141,7 +141,7 @@ const { t } = useI18n();
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
 }
 
@@ -156,7 +156,7 @@ const { t } = useI18n();
 
 .lp-done {
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--color-success);
   font-weight: 500;
 }
@@ -174,10 +174,10 @@ const { t } = useI18n();
   border-radius: var(--radius-md);
   background-color: var(--surface-elevated);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .lp-cancel:hover {

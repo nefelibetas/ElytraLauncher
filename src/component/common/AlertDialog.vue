@@ -121,7 +121,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 1100);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +172,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 
 .dialog-title {
-  font-size: 16px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--color-brand);
 }
@@ -187,7 +187,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 .dialog-body p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1.6;
   color: var(--text-secondary);
   white-space: pre-wrap;
@@ -220,9 +220,9 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .dialog-copy:hover {
@@ -240,11 +240,11 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 
 .dialog-leave-active {
-  transition: opacity 0.15s ease-in;
+  transition: opacity var(--dur-fast) ease-in;
 }
 
 .dialog-leave-active .dialog-card {
-  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+  transition: opacity var(--dur-fast) ease-in, transform var(--dur-fast) ease-in;
 }
 
 .dialog-enter-from {

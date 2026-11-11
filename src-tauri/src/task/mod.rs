@@ -19,11 +19,12 @@ mod emit;
 mod manager;
 mod spawn;
 
+pub use crate::game::loader::{LoaderChoice, LoaderKind};
 pub use manager::{global, TaskManager, WaitingDecision};
 pub use model::{
     DownloadFileItem, DownloadFileKind, DownloadFileTask, DownloadFilesTask, DownloadTask,
-    FabricApi, LoaderChoice, LoaderKind, ModpackInstallSpec, StepInfo, StepKind, StepStatus,
-    TaskProgress, TaskStatus, TaskText,
+    FabricApi, ModpackInstallSpec, StepInfo, StepKind, StepStatus, TaskProgress, TaskStatus,
+    TaskText,
 };
 pub use spawn::{spawn_download, spawn_install_jdk, spawn_task_with_sink};
 pub use steps::{StepSpec, TaskSpec};

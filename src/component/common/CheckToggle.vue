@@ -56,7 +56,7 @@ function onChange(e: Event) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   cursor: pointer;
   user-select: none;
@@ -87,10 +87,10 @@ function onChange(e: Event) {
   width: var(--ck-size, 15px);
   height: var(--ck-size, 15px);
   border: 1.5px solid var(--text-tertiary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   display: inline-block;
   position: relative;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
 }
 
 .ck input[type="radio"] + .ck-box {

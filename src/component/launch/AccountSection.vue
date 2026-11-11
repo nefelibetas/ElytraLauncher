@@ -488,11 +488,11 @@ function useOfflineName(name: string) {
   min-width: 0;
   height: 28px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .ext-input:focus {
@@ -502,16 +502,16 @@ function useOfflineName(name: string) {
   flex: none;
   max-width: 180px;
   height: 28px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .ext-error {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -520,7 +520,7 @@ function useOfflineName(name: string) {
 .acct-server {
   flex: none;
   max-width: 140px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -528,11 +528,11 @@ function useOfflineName(name: string) {
 }
 
 .ext-hint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .ext-name {
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   text-align: center;
@@ -546,7 +546,7 @@ function useOfflineName(name: string) {
   position: relative;
   /* 默认隐藏（占位不塌缩），hover 用户区显示 */
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--dur-fast);
 }
 .ext-actions.show {
   opacity: 1;
@@ -562,7 +562,7 @@ function useOfflineName(name: string) {
   background-color: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 .ext-icon:hover {
   color: var(--color-brand);
@@ -580,9 +580,9 @@ function useOfflineName(name: string) {
 
 .ext-act {
   padding: 3px 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -602,7 +602,7 @@ function useOfflineName(name: string) {
   min-width: 120px;
   padding: 4px;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-elevated);
   box-shadow: var(--shadow-md);
 }
@@ -611,10 +611,10 @@ function useOfflineName(name: string) {
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   min-width: 170px;
 }
 .ext-role:hover {
@@ -625,7 +625,7 @@ function useOfflineName(name: string) {
   flex: none;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   object-fit: contain;
   image-rendering: pixelated;
 }
@@ -641,7 +641,7 @@ function useOfflineName(name: string) {
 }
 .ext-role-empty {
   padding: 8px 12px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   white-space: nowrap;
   text-align: center;
@@ -662,9 +662,9 @@ function useOfflineName(name: string) {
   position: relative;
   z-index: 2;
   padding: 6px 18px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   border: 1px solid var(--color-brand);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--color-brand);
   color: var(--text-inverse);
   cursor: pointer;
@@ -711,10 +711,10 @@ function useOfflineName(name: string) {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .auth-btn span {
@@ -779,7 +779,7 @@ function useOfflineName(name: string) {
   z-index: 1;
   cursor: pointer;
   border-radius: var(--radius-md);
-  transition: box-shadow 0.15s;
+  transition: box-shadow var(--dur-fast);
 }
 
 .avatar.clickable:hover {
@@ -812,7 +812,7 @@ function useOfflineName(name: string) {
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+  transition: opacity var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
 }
 
 .avatar:hover .avatar-retry,
@@ -826,7 +826,7 @@ function useOfflineName(name: string) {
 }
 
 .uname {
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -841,12 +841,12 @@ function useOfflineName(name: string) {
   border-bottom: 2px solid var(--border-default);
   background: transparent;
   padding: 4px 0;
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 500;
   color: var(--text-primary);
   text-align: center;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
   /* 盖过热区，保证可点击聚焦 */
   position: relative;
   z-index: 1;
@@ -873,7 +873,7 @@ function useOfflineName(name: string) {
   height: 26px;
   border: none;
   background: transparent;
-  transition: transform 0.15s ease, color 0.15s;
+  transition: transform var(--dur-fast) ease, color var(--dur-fast);
 }
 
 .icon-btn.hist-btn:hover {
@@ -934,7 +934,7 @@ function useOfflineName(name: string) {
   background-color: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .icon-btn:hover {
@@ -949,7 +949,7 @@ function useOfflineName(name: string) {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -990,7 +990,7 @@ function useOfflineName(name: string) {
 
 .acct-check {
   color: var(--color-brand);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* 凭证临近/已过期标记（token 约 24h，自动续签，仅提醒不阻断） */
@@ -1004,7 +1004,7 @@ function useOfflineName(name: string) {
   border-radius: 50%;
   background: var(--color-danger);
   color: var(--text-inverse);
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
 }
 
@@ -1019,7 +1019,7 @@ function useOfflineName(name: string) {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1;
   cursor: pointer;
   opacity: 0;
@@ -1052,7 +1052,7 @@ function useOfflineName(name: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -1062,9 +1062,9 @@ function useOfflineName(name: string) {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .ms-cancel:hover {
@@ -1094,9 +1094,9 @@ function useOfflineName(name: string) {
   border: 1px solid var(--border-default);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   white-space: nowrap;
 }
 

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::task::LoaderChoice;
+use crate::game::loader::LoaderChoice;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

@@ -46,6 +46,12 @@ const route = useRoute();
 /** 版本目录名，由路由 query 传入。 */
 const versionName = computed(() => String(route.query.name ?? ""));
 
+/** 资源列表刷新：详细列表 + 快速扫描（同步主页卡片图标判定）。 */
+function refreshResource(kind: "resourcepacks" | "shaderpacks" | "datapacks") {
+  void loadResourceDetailed(versionName.value, kind);
+  void loadResourceQuick(versionName.value, kind);
+}
+
 /** 各管理 tab 的刷新动作（侧边 hover 刷新按钮，强制重载并更新缓存标记）。 */
 const REFRESHERS: Record<TabKey, () => void> = {
   mods: () => {
@@ -55,18 +61,9 @@ const REFRESHERS: Record<TabKey, () => void> = {
   saves: () => {
     void loadWorlds(versionName.value);
   },
-  resourcepacks: () => {
-    void loadResourceDetailed(versionName.value, "resourcepacks");
-    void loadResourceQuick(versionName.value, "resourcepacks");
-  },
-  shaderpacks: () => {
-    void loadResourceDetailed(versionName.value, "shaderpacks");
-    void loadResourceQuick(versionName.value, "shaderpacks");
-  },
-  datapacks: () => {
-    void loadResourceDetailed(versionName.value, "datapacks");
-    void loadResourceQuick(versionName.value, "datapacks");
-  },
+  resourcepacks: () => refreshResource("resourcepacks"),
+  shaderpacks: () => refreshResource("shaderpacks"),
+  datapacks: () => refreshResource("datapacks"),
   export: () => {},
   logs: () => {},
   server: () => {},
@@ -128,6 +125,10 @@ onMounted(() => {
     </SideNav>
   </div>
 </template>
+
+<style>
+@import "../styles/version-setup-shared.css";
+</style>
 
 <style scoped>
 .vs {

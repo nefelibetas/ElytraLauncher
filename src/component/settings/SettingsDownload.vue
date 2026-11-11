@@ -297,7 +297,7 @@ function openCurseforgeConsole() {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 .dl-detail-toggle:hover,
 .dl-detail-toggle.open {
@@ -318,13 +318,13 @@ function openCurseforgeConsole() {
 }
 .dl-source-detail .dl-label {
   flex-basis: 84px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
 .dl-label {
   flex: 0 0 112px;
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -340,7 +340,7 @@ function openCurseforgeConsole() {
 .dl-val {
   flex: 0 0 auto;
   min-width: 86px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -358,7 +358,7 @@ function openCurseforgeConsole() {
   min-width: 0;
   height: 30px;
   padding: 0 9px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-input, var(--surface-card));
   border: 1px solid var(--border-default);
@@ -373,7 +373,7 @@ function openCurseforgeConsole() {
   flex: 0 0 auto;
   height: 30px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-hover);
   border: 1px solid var(--border-default);
@@ -397,7 +397,7 @@ function openCurseforgeConsole() {
   align-items: center;
   gap: 8px;
   margin: -2px 0 4px 126px;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   line-height: 1.4;
   color: var(--text-secondary);
 }
@@ -416,13 +416,13 @@ function openCurseforgeConsole() {
 
 .dl-error {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
 }
 
 .dl-note {
   margin: -4px 0 4px 126px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   line-height: 1.5;
 }

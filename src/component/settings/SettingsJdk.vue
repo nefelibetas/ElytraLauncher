@@ -211,7 +211,7 @@ function onJdkPick(value: string) {
 
 .jdk-dl-label {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }

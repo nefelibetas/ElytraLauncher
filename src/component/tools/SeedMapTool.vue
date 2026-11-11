@@ -13,6 +13,7 @@ import {
   type SeedMapStructure,
   type SeedMapVersion,
 } from "../../api/seedmap";
+import { structureColor } from "../../utils/seedmapColors";
 import SeedMapCanvas from "./SeedMapCanvas.vue";
 import DropSelect from "../common/DropSelect.vue";
 import EmptyState from "../common/EmptyState.vue";
@@ -375,7 +376,7 @@ function onError(message: string) {
       <span class="smt-biome">{{ biomeText }}</span>
       <span class="smt-legend">
         <span v-for="item in LEGEND" :key="item.kind" class="smt-legend-item">
-          <i class="smt-dot" :class="`dot-${item.kind}`"></i>
+          <i class="smt-dot" :style="{ background: structureColor(item.kind) }"></i>
           {{ t(`tools.seedmap.structures.${item.key}`) }}
         </span>
       </span>
@@ -418,7 +419,7 @@ function onError(message: string) {
 
 .smt-label {
   padding-left: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1;
   color: var(--text-tertiary);
 }
@@ -432,7 +433,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: var(--surface-input);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   outline: none;
 }
 
@@ -448,7 +449,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: var(--color-brand-bg);
   color: var(--color-brand);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -466,7 +467,7 @@ function onError(message: string) {
   align-items: center;
   gap: 12px;
   min-height: 20px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -484,7 +485,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: var(--surface-elevated);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 
@@ -505,7 +506,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: var(--color-warning-bg);
   color: var(--color-warning);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -529,7 +530,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: var(--surface-card);
   color: var(--color-brand);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   pointer-events: none;
 }
 
@@ -547,7 +548,7 @@ function onError(message: string) {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-card);
-  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.18));
+  box-shadow: var(--shadow-md);
 }
 
 .smt-results-head {
@@ -558,7 +559,7 @@ function onError(message: string) {
   padding: 4px 6px 4px 8px;
   border-bottom: 1px solid var(--border-default);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .smt-results-toggle {
@@ -597,7 +598,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 15px;
+  font-size: var(--fs-lg);
   line-height: 1;
   cursor: pointer;
 }
@@ -626,7 +627,7 @@ function onError(message: string) {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   text-align: left;
   cursor: pointer;
 }
@@ -666,7 +667,7 @@ function onError(message: string) {
 }
 
 .smt-empty-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -676,7 +677,7 @@ function onError(message: string) {
   gap: 12px;
   flex-wrap: wrap;
   min-height: 18px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -710,13 +711,5 @@ function onError(message: string) {
   background: var(--text-tertiary);
 }
 
-.dot-village { background: #f2c14e; }
-.dot-outpost { background: #db7b6b; }
-.dot-monument { background: #59b6a5; }
-.dot-mansion { background: #b28bd6; }
-.dot-ancient_city { background: #6d7cff; }
-.dot-trial_chambers { background: #e879f9; }
-.dot-ruined_portal { background: #c084fc; }
-.dot-treasure { background: #f59e0b; }
 
 </style>

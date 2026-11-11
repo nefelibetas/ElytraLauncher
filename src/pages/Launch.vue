@@ -133,7 +133,7 @@ onMounted(async () => {
 }
 
 .right-hint p {
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 
 /* 右侧 hint ↔ 版本卡片切换动画 */

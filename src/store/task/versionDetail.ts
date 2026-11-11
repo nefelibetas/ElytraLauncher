@@ -368,26 +368,6 @@ export interface ResourceListResult {
   network_error: boolean;
 }
 
-export const resourcepacks = ref<ModFileDetail[]>([]);
-export const resourcepacksLoading = ref(false);
-export const resourcepacksError = ref("");
-export const resourcepacksNetworkError = ref(false);
-export const resourcepacksLoadedFor = ref("");
-export const datapacks = ref<ModFileDetail[]>([]);
-export const datapacksLoading = ref(false);
-export const datapacksError = ref("");
-export const datapacksNetworkError = ref(false);
-export const datapacksLoadedFor = ref("");
-export const shaderpacks = ref<ModFileDetail[]>([]);
-export const shaderpacksLoading = ref(false);
-export const shaderpacksError = ref("");
-export const shaderpacksNetworkError = ref(false);
-export const shaderpacksLoadedFor = ref("");
-
-export const resourcepacksQuick = ref<ResourceFile[]>([]);
-export const datapacksQuick = ref<ResourceFile[]>([]);
-export const shaderpacksQuick = ref<ResourceFile[]>([]);
-
 export interface ResourceRefs {
   list: Ref<ModFileDetail[]>;
   loading: Ref<boolean>;
@@ -399,22 +379,47 @@ export interface ResourceRefs {
 
 const RESOURCE_KINDS = ["resourcepacks", "datapacks", "shaderpacks"] as const;
 
-export function resourceRefs(kind: ResourceKind): ResourceRefs {
-  const map: Record<ResourceKind, ResourceRefs> = {
-    resourcepacks: {
-      list: resourcepacks, loading: resourcepacksLoading, error: resourcepacksError,
-      networkError: resourcepacksNetworkError, quick: resourcepacksQuick, loadedFor: resourcepacksLoadedFor,
-    },
-    datapacks: {
-      list: datapacks, loading: datapacksLoading, error: datapacksError,
-      networkError: datapacksNetworkError, quick: datapacksQuick, loadedFor: datapacksLoadedFor,
-    },
-    shaderpacks: {
-      list: shaderpacks, loading: shaderpacksLoading, error: shaderpacksError,
-      networkError: shaderpacksNetworkError, quick: shaderpacksQuick, loadedFor: shaderpacksLoadedFor,
-    },
+/** 三类资源目录状态同构：统一工厂创建，避免逐类型复制 ref。 */
+function createResourceState(): ResourceRefs {
+  return {
+    list: ref<ModFileDetail[]>([]),
+    loading: ref(false),
+    error: ref(""),
+    networkError: ref(false),
+    quick: ref<ResourceFile[]>([]),
+    loadedFor: ref(""),
   };
-  return map[kind];
+}
+
+const resourceStates: Record<ResourceKind, ResourceRefs> = {
+  resourcepacks: createResourceState(),
+  datapacks: createResourceState(),
+  shaderpacks: createResourceState(),
+};
+
+export const resourcepacks = resourceStates.resourcepacks.list;
+export const resourcepacksLoading = resourceStates.resourcepacks.loading;
+export const resourcepacksError = resourceStates.resourcepacks.error;
+export const resourcepacksNetworkError = resourceStates.resourcepacks.networkError;
+export const resourcepacksLoadedFor = resourceStates.resourcepacks.loadedFor;
+export const resourcepacksQuick = resourceStates.resourcepacks.quick;
+
+export const datapacks = resourceStates.datapacks.list;
+export const datapacksLoading = resourceStates.datapacks.loading;
+export const datapacksError = resourceStates.datapacks.error;
+export const datapacksNetworkError = resourceStates.datapacks.networkError;
+export const datapacksLoadedFor = resourceStates.datapacks.loadedFor;
+export const datapacksQuick = resourceStates.datapacks.quick;
+
+export const shaderpacks = resourceStates.shaderpacks.list;
+export const shaderpacksLoading = resourceStates.shaderpacks.loading;
+export const shaderpacksError = resourceStates.shaderpacks.error;
+export const shaderpacksNetworkError = resourceStates.shaderpacks.networkError;
+export const shaderpacksLoadedFor = resourceStates.shaderpacks.loadedFor;
+export const shaderpacksQuick = resourceStates.shaderpacks.quick;
+
+export function resourceRefs(kind: ResourceKind): ResourceRefs {
+  return resourceStates[kind];
 }
 
 export async function loadResourceQuick(versionName: string, kind: ResourceKind) {

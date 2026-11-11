@@ -325,215 +325,6 @@ input, textarea {
   opacity: 1;
 }
 
-/* 主题 token 事实源（CSS 侧）：以下 8 个核心色板键与 src/store/theme.ts builtinVars() 逐键重复
-   （--color-brand/--text-primary/--text-secondary/--text-tertiary/--surface-page/--surface-hover/--border-default/--border-strong），两处任一改动必须同步另一处（双写避免首屏 FOUC）。 */
-:root {
-  --titlebar-h: 48px;
-  /* 标题栏铺品牌渐变，前景独立于正文语义色 */
-  --titlebar-fg: #FFFFFF;
-  --titlebar-fg-dim: rgba(255, 255, 255, 0.7);
-  /* color-mix() 低版本 WebKitGTK 不可用，故给出前序等价 token（双声明降级） */
-  --titlebar-hover: rgba(255, 255, 255, 0.16);
-  --titlebar-active: rgba(255, 255, 255, 0.22);
-  /* 侧栏布局页（版本设置 / 设置 / 工具）内容区宽度上界：各 tab 卡片等宽，超宽窗口下右侧留白 */
-  --content-max: 720px;
-  /* 层级：FAB < 模态弹窗 < 内容/边缘加深 < 右键菜单 < toast < tooltip；组件一律引用变量，禁止裸写数值 */
-  --z-fab: 900;
-  --z-menu: 2100;
-  --z-modal: 1100;
-  --z-toast: 3000;
-  --z-tooltip: 3100;
-  /* 组件以 style="--range-pct: N%" 内联覆盖，此处仅为静态解析兜底 */
-  --range-pct: 0%;
-  /* 命令块 / MOTD 预览等等宽文本使用 */
-  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  /* brand —— 默认主题 Grass（草方块绿）；data-theme 覆盖块见下 */
-  --color-brand: #059669;
-  --color-brand-dark: #047857;
-  --color-brand-hover: #047857;
-  --color-brand-bg: rgba(5, 150, 105, 0.08);
-  --color-brand-glow: rgba(5, 150, 105, 0.22);
-  --color-brand-gradient: linear-gradient(135deg, #059669, #10B981);
-
-  /* text */
-  --text-primary: #1F2937;
-  --text-secondary: #6B7280;
-  --text-tertiary: #9CA3AF;
-  --text-inverse: #FFFFFF;
-
-  /* surface */
-  --surface-page: #F2F6F3;
-  --surface-card: #FFFFFF;
-  --surface-elevated: #FFFFFF;
-  --surface-input: var(--surface-card);
-  --surface-hover: rgba(15, 23, 42, 0.05);
-
-  /* border */
-  --border-default: #DFE5E1;
-  --border-strong: #CBD5D1;
-  --border-subtle: rgba(0, 0, 0, 0.08);
-
-  /* shadow */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.10);
-
-  /* 语义色（危险操作与状态统一收口） */
-  --color-danger: #E5484D;
-  --color-danger-bg: rgba(229, 72, 77, 0.1);
-  --color-success: #10B981;
-  --color-warning: #D97706;
-  --color-warning-bg: rgba(217, 119, 6, 0.12);
-
-  /* ModLoader 标签色（fabric/forge/neoforge/quilt 区分，随主题覆盖切换） */
-  --ld-fabric: #D97706;
-  --ld-forge: #DC2626;
-  --ld-neoforge: #16A34A;
-  --ld-quilt: #7C3AED;
-  --ld-optifine: #0284C7;
-
-  /* 平台品牌徽章色（Modrinth / CurseForge 官方色，不随主题变化） */
-  --color-modrinth: #1bd96a;
-  --color-curseforge: #f16436;
-
-  /* 非平台徽章（如远古版本）；独立于 ModLoader 标签色 */
-  --color-badge-alt: #7C3AED;
-  --color-badge-alt-bg: rgba(124, 58, 237, 0.1);
-
-  /* 弹窗遮罩 */
-  --overlay: rgba(15, 23, 42, 0.5);
-  --toast-bg: #1F2937;
-
-  /* radius */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  /* scrollbar */
-  --scrollbar-thumb: #CBD5D1;
-
-  /* .edge-shade 覆盖层；色相取各主题深色调（无边框窗口与外部背景接近时易难辨边界） */
-  --edge-line: rgba(6, 78, 59, 0.20);
-  --edge-shade: rgba(6, 78, 59, 0.08);
-}
-
-/* ===== 主题 End（末影紫）；键与色值须与 src/store/theme.ts builtinVars("end") 同步 ===== */
-[data-theme="end"] {
-  --color-brand: #7C3AED;
-  --color-brand-dark: #6D28D9;
-  --color-brand-hover: #6D28D9;
-  --color-brand-bg: rgba(124, 58, 237, 0.08);
-  --color-brand-glow: rgba(124, 58, 237, 0.2);
-  --color-brand-gradient: linear-gradient(135deg, #7C3AED, #A855F7);
-
-  --text-primary: #241B45;
-  --text-secondary: #6B6580;
-  --text-tertiary: #9A93B0;
-
-  --surface-page: #F6F3FB;
-  --surface-hover: rgba(36, 27, 69, 0.06);
-
-  --border-default: #E3DEF1;
-  --border-strong: #D2CBEA;
-
-  --shadow-sm: 0 1px 2px rgba(36, 27, 69, 0.06);
-  --shadow-md: 0 2px 8px rgba(36, 27, 69, 0.08);
-  --shadow-lg: 0 4px 16px rgba(36, 27, 69, 0.10);
-
-  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #D2CBEA;
-
-  --edge-line: rgba(76, 29, 149, 0.18);
-  --edge-shade: rgba(76, 29, 149, 0.07);
-
-  --ld-fabric: #B45309;
-  --ld-forge: #E11D48;
-  --ld-neoforge: #059669;
-  --ld-quilt: #A855F7;
-  --ld-optifine: #0891B2;
-}
-
-/* ===== 主题 Nether（下界橙/烈焰）；键与色值须与 src/store/theme.ts builtinVars("nether") 同步 ===== */
-[data-theme="nether"] {
-  --color-brand: #EA580C;
-  --color-brand-dark: #C2410C;
-  --color-brand-hover: #C2410C;
-  --color-brand-bg: rgba(234, 88, 12, 0.08);
-  --color-brand-glow: rgba(234, 88, 12, 0.2);
-  --color-brand-gradient: linear-gradient(135deg, #EA580C, #F97316);
-
-  --text-primary: #292524;
-  --text-secondary: #78716C;
-  --text-tertiary: #A8A29E;
-
-  --surface-page: #FBF5F0;
-  --surface-hover: rgba(41, 37, 36, 0.05);
-
-  --border-default: #EDE3DC;
-  --border-strong: #DED2C8;
-
-  --shadow-sm: 0 1px 2px rgba(41, 37, 36, 0.06);
-  --shadow-md: 0 2px 8px rgba(41, 37, 36, 0.08);
-  --shadow-lg: 0 4px 16px rgba(41, 37, 36, 0.10);
-
-  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #DED2C8;
-
-  --edge-line: rgba(124, 45, 18, 0.18);
-  --edge-shade: rgba(124, 45, 18, 0.07);
-
-  --ld-fabric: #EA580C;
-  --ld-forge: #DC2626;
-  --ld-neoforge: #65A30D;
-  --ld-quilt: #C026D3;
-  --ld-optifine: #0369A1;
-}
-
-/* ===== 主题 Ice（冰霜青）；键与色值须与 src/store/theme.ts builtinVars("ice") 同步 ===== */
-[data-theme="ice"] {
-  --color-brand: #0EA5E9;
-  --color-brand-dark: #0284C7;
-  --color-brand-hover: #0284C7;
-  --color-brand-bg: rgba(14, 165, 233, 0.08);
-  --color-brand-glow: rgba(14, 165, 233, 0.2);
-  --color-brand-gradient: linear-gradient(135deg, #0EA5E9, #38BDF8);
-
-  --text-primary: #1E293B;
-  --text-secondary: #64748B;
-  --text-tertiary: #94A3B8;
-
-  --surface-page: #F2F7FA;
-  --surface-hover: rgba(15, 23, 42, 0.05);
-
-  --border-default: #DCE7EE;
-  --border-strong: #C6D6E0;
-
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 4px 16px rgba(15, 23, 42, 0.10);
-
-  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
-  --scrollbar-thumb: #C6D6E0;
-
-  --edge-line: rgba(12, 74, 110, 0.18);
-  --edge-shade: rgba(12, 74, 110, 0.07);
-
-  --ld-fabric: #F59E0B;
-  --ld-forge: #F43F5E;
-  --ld-neoforge: #10B981;
-  --ld-quilt: #8B5CF6;
-  --ld-optifine: #1D4ED8;
-}
-
 * {
   margin: 0;
   padding: 0;
@@ -573,7 +364,7 @@ html.theme-switching:not(.i18n-switching) *::after {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
 }
 
 .app-layout {
@@ -612,9 +403,9 @@ html.theme-switching:not(.i18n-switching) *::after {
    用块级排版而非 flex：离开项 position:absolute 需要静态位置保持原位，flex 容器会把绝对定位子项拉回主起点而跳位。 */
 .toast-stack {
   position: fixed;
-  top: calc(var(--titlebar-h, 48px) + 12px);
+  top: calc(var(--titlebar-h) + 12px);
   right: 12px;
-  z-index: var(--z-toast, 3000);
+  z-index: var(--z-toast);
   width: 320px;
   pointer-events: none; /* 仅条目本身接管事件，不遮挡下层内容 */
 }
@@ -633,7 +424,7 @@ html.theme-switching:not(.i18n-switching) *::after {
   background-color: var(--surface-card);
   background-image: linear-gradient(90deg, var(--color-brand-bg), rgba(255, 255, 255, 0));
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.45;
   box-shadow: var(--shadow-lg);
 }
@@ -657,7 +448,7 @@ html.theme-switching:not(.i18n-switching) *::after {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .toast-close:hover {
@@ -686,7 +477,7 @@ html.theme-switching:not(.i18n-switching) *::after {
 
 /* 文件下载失败等待决策弹窗（WaitingForUser） */
 .dialog-overlay {
-  position: fixed; inset: 0; z-index: var(--z-modal, 1100);
+  position: fixed; inset: 0; z-index: var(--z-modal);
   display: flex; align-items: center; justify-content: center;
   background: var(--overlay);
 }
@@ -696,19 +487,19 @@ html.theme-switching:not(.i18n-switching) *::after {
   padding: 22px 24px;
   background: var(--surface-card);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg, 12px);
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
-.wd-title { margin: 0 0 10px; font-size: 16px; color: var(--text-primary); }
+.wd-title { margin: 0 0 10px; font-size: var(--fs-xl); color: var(--text-primary); }
 
 .wd-file {
-  margin: 0 0 6px; font-size: 13px; font-weight: 600;
+  margin: 0 0 6px; font-size: var(--fs-base); font-weight: 600;
   color: var(--text-primary); word-break: break-all;
 }
 
 .wd-err {
-  margin: 0 0 18px; font-size: 13px; color: var(--text-tertiary);
+  margin: 0 0 18px; font-size: var(--fs-base); color: var(--text-tertiary);
   word-break: break-all; max-height: 140px; overflow-y: auto;
   line-height: 1.6;
 }
@@ -716,10 +507,10 @@ html.theme-switching:not(.i18n-switching) *::after {
 .wd-actions { display: flex; gap: 8px; justify-content: flex-start; }
 
 .wd-btn {
-  padding: 6px 14px; font-size: 13px; cursor: pointer;
+  padding: 6px 14px; font-size: var(--fs-base); cursor: pointer;
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   background: var(--surface-page); color: var(--text-primary);
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
 }
 
 .wd-retry { background: var(--color-brand); border-color: var(--color-brand); color: var(--text-inverse); }
@@ -734,9 +525,9 @@ html.theme-switching:not(.i18n-switching) *::after {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .dialog-btn:hover {
@@ -762,17 +553,17 @@ html.theme-switching:not(.i18n-switching) *::after {
   opacity: 0.88;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-active, .fade-leave-active { transition: opacity var(--dur-fast) ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 /* v-tooltip 气泡（替换 UA 原生 title tooltip） */
 .elytra-tooltip {
   position: fixed;
-  z-index: var(--z-tooltip, 3100);
+  z-index: var(--z-tooltip);
   max-width: 320px;
   padding: 6px 10px;
   color: var(--text-inverse);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);

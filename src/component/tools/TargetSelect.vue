@@ -184,13 +184,13 @@ const extraText = computed({
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
 .ts-preview {
   font-family: Consolas, "Courier New", monospace;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;

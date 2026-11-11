@@ -4,7 +4,7 @@ import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Copy, ExternalLink, RefreshCw, Waypoints } from "@lucide/vue";
+import { Check, Copy, ExternalLink, RefreshCw, Waypoints } from "@lucide/vue";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
 import { checkLauncherUpdate, updateState, updateInfo } from "../../store/app/update";
@@ -194,20 +194,29 @@ async function copyVersionInfo() {
             {{ t("settings.about.copyVersion") }}
           </button>
           <button type="button" :disabled="updateState === 'checking'" @click="handleCheckUpdate">
-            <RefreshCw :size="13" />
+            <RefreshCw :size="13" :class="{ 'ab-spin': updateState === 'checking' }" />
             {{ updateState === "checking" ? t("settings.about.checkingUpdate") : t("settings.about.checkUpdate") }}
           </button>
         </div>
-        <div v-if="updateState === 'available' && updateInfo" class="ab-update">
-          <span class="ab-update-new">
-            {{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}
+        <!-- 常驻固定高度状态槽：检查结果只替换内容，不参与卡片高度计算，避免点击后整块下移。 -->
+        <div class="ab-update-slot" role="status" aria-live="polite">
+          <template v-if="updateState === 'available' && updateInfo">
+            <span class="ab-update-new">
+              {{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}
+            </span>
+            <button type="button" class="ab-update-download" @click="openUpdatePage">
+              {{ t("settings.about.downloadUpdate") }}
+            </button>
+          </template>
+          <span v-else-if="updateState === 'latest'" class="ab-update-ok">
+            <Check :size="13" />
+            {{ t("settings.about.upToDate") }}
           </span>
-          <button type="button" class="ab-update-download" @click="openUpdatePage">
-            {{ t("settings.about.downloadUpdate") }}
-          </button>
+          <span v-else-if="updateState === 'none'" class="ab-update-muted">
+            {{ t("settings.about.noRelease") }}
+          </span>
+          <span v-else class="ab-update-hint">{{ t("settings.about.updateHint") }}</span>
         </div>
-        <p v-else-if="updateState === 'latest'" class="ab-update-muted">{{ t("settings.about.upToDate") }}</p>
-        <p v-else-if="updateState === 'none'" class="ab-update-muted">{{ t("settings.about.noRelease") }}</p>
       </div>
     </header>
 
@@ -381,21 +390,21 @@ async function copyVersionInfo() {
 
 .ab-title-row h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--fs-3xl);
   color: var(--text-primary);
 }
 
 .ab-version {
   padding: 2px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--surface-hover);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .ab-tagline {
   margin: 4px 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -411,7 +420,7 @@ async function copyVersionInfo() {
   gap: 5px;
   height: 28px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -429,12 +438,14 @@ async function copyVersionInfo() {
   cursor: not-allowed;
 }
 
-.ab-update {
+.ab-update-slot {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 10px;
-  font-size: 12px;
+  height: 26px;
+  margin-top: 6px;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 
 .ab-update-new {
@@ -445,7 +456,7 @@ async function copyVersionInfo() {
 .ab-update-download {
   height: 26px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-brand);
   background: var(--surface-elevated);
   border: 1px solid var(--color-brand);
@@ -453,10 +464,26 @@ async function copyVersionInfo() {
   cursor: pointer;
 }
 
+.ab-update-hint,
 .ab-update-muted {
-  margin: 10px 0 0;
-  font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.ab-update-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-success);
+}
+
+.ab-spin {
+  animation: ab-spin 0.9s linear infinite;
+}
+
+@keyframes ab-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ab-section {
@@ -467,14 +494,14 @@ async function copyVersionInfo() {
 
 .ab-section > h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .ab-section-note {
   margin: -2px 0 2px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -507,7 +534,7 @@ async function copyVersionInfo() {
   padding: 4px;
   overflow: hidden;
   background: var(--surface-elevated);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 .ab-feature.is-featured .ab-feature-icon {
@@ -523,13 +550,13 @@ async function copyVersionInfo() {
 
 .ab-feature h4 {
   margin: 0 0 4px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
   color: var(--text-primary);
 }
 
 .ab-feature p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   line-height: 1.6;
   color: var(--text-secondary);
 }
@@ -542,7 +569,7 @@ async function copyVersionInfo() {
 }
 
 .ab-note {
-  font-size: 11px !important;
+  font-size: var(--fs-xs) !important;
   line-height: 1.5 !important;
   color: var(--text-tertiary) !important;
 }
@@ -558,7 +585,7 @@ async function copyVersionInfo() {
   align-items: center;
   gap: 3px;
   padding: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-brand);
   background: none;
   border: none;
@@ -586,7 +613,7 @@ async function copyVersionInfo() {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: border-color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .ab-credit:hover {
@@ -603,7 +630,7 @@ async function copyVersionInfo() {
   padding: 3px;
   overflow: hidden;
   background: var(--surface-elevated);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .ab-credit-icon img {
@@ -618,14 +645,14 @@ async function copyVersionInfo() {
 
 .ab-credit-body b {
   display: block;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
 }
 
 .ab-credit-body small {
   display: block;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--text-tertiary);
 }
@@ -642,7 +669,7 @@ async function copyVersionInfo() {
   flex-wrap: wrap;
   gap: 10px;
   align-items: baseline;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 

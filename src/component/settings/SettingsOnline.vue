@@ -306,13 +306,13 @@ async function handleSaveNickname() {
   padding-top: 0;
 }
 .online-sec-title {
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
 .online-desc {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   line-height: 1.5;
   margin: 0 0 10px;
@@ -321,7 +321,7 @@ async function handleSaveNickname() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-brand);
   text-decoration: none;
   margin-bottom: 8px;
@@ -338,7 +338,7 @@ async function handleSaveNickname() {
   box-sizing: border-box;
   height: 32px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -361,14 +361,14 @@ async function handleSaveNickname() {
   gap: 6px;
   height: 32px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 .online-btn:hover:not(:disabled) {
   border-color: var(--color-brand);
@@ -408,7 +408,7 @@ async function handleSaveNickname() {
   flex: 1;
   min-width: 0;
   font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -422,7 +422,7 @@ async function handleSaveNickname() {
   color: var(--text-tertiary);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .online-node-remove:hover {
@@ -431,12 +431,12 @@ async function handleSaveNickname() {
 }
 .online-empty {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .online-node-check-status {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   white-space: nowrap;
 }
 .online-node-check-status.is-ok {
@@ -452,7 +452,7 @@ async function handleSaveNickname() {
 }
 .online-hint {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   line-height: 1.5;
 }

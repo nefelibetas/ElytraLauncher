@@ -163,7 +163,7 @@ function onBlur() {
   box-sizing: border-box;
   height: 30px;
   padding: 0 10px 0 28px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -211,19 +211,19 @@ function onBlur() {
 }
 
 .ss-opt-name {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
 }
 
 .ss-opt-id {
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 .ss-empty {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 </style>

@@ -28,6 +28,7 @@ export default {
     loading: "Loading…",
     empty: "Nothing here",
     error: "Failed to load",
+    downloads: "{count} download | {count} downloads",
   },
   language: {
     title: "Language",

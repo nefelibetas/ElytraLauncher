@@ -259,12 +259,12 @@ async function copy(text: string, label: string) {
 }
 
 .nb-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 .nb-copy-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
 }
 

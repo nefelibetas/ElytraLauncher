@@ -171,9 +171,9 @@ function select(o: SelOption) {
   border-radius: var(--radius-sm);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .ds-btn:hover,
@@ -198,7 +198,7 @@ function select(o: SelOption) {
 .ds-chev {
   flex: none;
   color: var(--text-tertiary);
-  transition: transform 0.15s;
+  transition: transform var(--dur-fast);
 }
 
 .ds-chev.flip {
@@ -232,7 +232,7 @@ function select(o: SelOption) {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -265,7 +265,7 @@ function select(o: SelOption) {
 
 .ds-opt-desc {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -280,7 +280,7 @@ function select(o: SelOption) {
 /* 面板展开动画（对齐 jdk-dropdown 的 drop） */
 .drop-enter-active,
 .drop-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
 .drop-enter-from,

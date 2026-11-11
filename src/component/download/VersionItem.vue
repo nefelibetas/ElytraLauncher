@@ -32,7 +32,7 @@ const emit = defineEmits<{ select: [] }>();
 .ver-item {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 16px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   transition: background 0.1s;
   user-select: none;
   cursor: pointer;
@@ -40,7 +40,7 @@ const emit = defineEmits<{ select: [] }>();
 
 .ver-item:hover { background-color: var(--surface-hover); }
 
-.ver-icon { flex-shrink: 0; border-radius: 3px; }
+.ver-icon { flex-shrink: 0; border-radius: var(--radius-2xs); }
 
 .ver-info {
   flex: 1;
@@ -56,13 +56,13 @@ const emit = defineEmits<{ select: [] }>();
   gap: 6px;
 }
 
-.ver-id { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+.ver-id { font-weight: 600; color: var(--text-primary); font-size: var(--fs-base); }
 
-.ver-sub { font-size: 11px; color: var(--text-tertiary); }
+.ver-sub { font-size: var(--fs-xs); color: var(--text-tertiary); }
 
 .ver-badge {
-  font-size: 10px; font-weight: 500;
-  padding: 1px 6px; border-radius: 8px;
+  font-size: var(--fs-2xs); font-weight: 500;
+  padding: 1px 6px; border-radius: var(--radius-md);
   white-space: nowrap;
 }
 

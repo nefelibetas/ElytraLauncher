@@ -16,6 +16,7 @@ import type { AutoTaskStep } from "../../types/launcher/AutoTaskStep";
 import { worlds, loadWorlds } from "../../store/task/versionDetail";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
+import SetupCard from "../common/SetupCard.vue";
 
 const props = withDefaults(defineProps<{ mode?: "instance" | "global" }>(), {
   mode: "instance",
@@ -154,16 +155,13 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 
 <template>
   <div :class="isInstance ? 'vs-page' : 'auto-tasks-global'">
-    <div class="setup-card">
-      <div class="setup-card-hdr">
-        <div class="setup-card-titles">
-          <div class="setup-card-title">{{ t("settings.autoTasks.title") }}</div>
-          <div class="setup-desc">
-            {{ t("settings.autoTasks.subtitle") }}
-          </div>
-        </div>
+    <SetupCard
+      :title="t('settings.autoTasks.title')"
+      :desc="t('settings.autoTasks.subtitle')"
+    >
+      <template #actions>
         <button class="vsh-save" :disabled="saving || !loaded" @click="save">{{ t("settings.autoTasks.save") }}</button>
-      </div>
+      </template>
 
       <div v-if="isInstance" class="vsh-mode">
         <button
@@ -349,53 +347,20 @@ function toggleWorld(name: string, step: AutoTaskStep) {
           {{ t("settings.autoTasks.note") }}
         </div>
       </div>
-    </div>
+    </SetupCard>
   </div>
 </template>
 
 <style scoped>
-.vs-page {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-.setup-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-}
-.setup-card-hdr {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.setup-card-titles {
-  min-width: 0;
-}
-.setup-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-}
-.setup-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
 .vsh-save {
   flex: none;
   height: 28px;
   padding: 0 14px;
-  font-size: 12.5px;
-  color: var(--text-on-brand, #fff);
+  font-size: var(--fs-base);
+  color: var(--text-inverse);
   background: var(--color-brand);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .vsh-save:disabled {
@@ -413,11 +378,11 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 .vsh-mode-btn {
   height: 26px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .vsh-mode-btn.active {
@@ -426,7 +391,7 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 }
 .vsh-mode-hint {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .vsh-phases {
@@ -441,12 +406,12 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   margin-bottom: 6px;
 }
 .vsh-phase-title {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
 .vsh-phase-desc {
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .vsh-run {
@@ -456,23 +421,23 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   gap: 4px;
   height: 24px;
   padding: 0 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .vsh-progress {
   margin-bottom: 6px;
   padding: 6px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--color-brand);
   background: var(--surface-elevated);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .vsh-empty {
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   padding: 4px 0;
 }
@@ -481,7 +446,7 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   margin-bottom: 6px;
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .vsh-step.readonly {
   display: flex;
@@ -502,9 +467,9 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 }
 .vsh-step-kind {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border-default);
   color: var(--text-tertiary);
 }
@@ -512,14 +477,14 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   color: var(--text-secondary);
 }
 .vsh-step-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .vsh-step-off {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 .vsh-del {
@@ -533,11 +498,11 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   color: var(--text-tertiary);
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .vsh-del:hover {
-  color: var(--error, #e5484d);
+  color: var(--color-danger);
 }
 .vsh-edit {
   display: flex;
@@ -555,11 +520,11 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   min-width: 0;
   height: 28px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-card);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .vsh-input:focus {
@@ -570,18 +535,18 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .vsh-timeout input {
   width: 56px;
   height: 24px;
   padding: 0 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-card);
   border: 1px solid var(--border-default);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .vsh-backup-row {
   display: flex;
@@ -592,7 +557,7 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -602,13 +567,13 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   gap: 8px;
   padding: 6px 8px;
   background: var(--surface-card);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .vsh-world {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -621,11 +586,11 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   gap: 4px;
   height: 24px;
   padding: 0 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: transparent;
   border: 1px dashed var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .vsh-add-menu {
@@ -639,17 +604,17 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   padding: 4px;
   background: var(--surface-card);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
 .vsh-add-item {
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   text-align: left;
   color: var(--text-primary);
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .vsh-add-item:hover {
@@ -663,14 +628,14 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   border-top: 1px solid var(--border-default);
 }
 .vsh-prefailure-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 .vsh-note {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 </style>

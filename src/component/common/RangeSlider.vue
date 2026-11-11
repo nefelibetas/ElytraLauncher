@@ -108,7 +108,7 @@ function emitChange() {
   top: 50%;
   height: 6px;
   margin-top: -3px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   pointer-events: none;
 }
 
@@ -152,7 +152,7 @@ function emitChange() {
 
 .rs-input::-webkit-slider-runnable-track {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: transparent;
 }
 
@@ -172,7 +172,7 @@ function emitChange() {
 
 .rs-input::-moz-range-track {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: transparent;
 }
 

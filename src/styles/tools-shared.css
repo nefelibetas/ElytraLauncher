@@ -14,7 +14,7 @@
 .gen-output-cmd {
   display: block;
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-primary);
 }
@@ -28,7 +28,7 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .nb-tag-x:hover {
@@ -51,12 +51,12 @@
 
 .tool-card-hdr h3 {
   margin: 0 0 4px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
   color: var(--text-primary);
 }
 
 .tool-card-sub {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -71,7 +71,7 @@
 
 .nb-label {
   flex: 0 0 auto;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   min-width: 56px;
 }
@@ -86,7 +86,7 @@
   min-width: 80px;
   height: 30px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -108,7 +108,7 @@
   width: 64px;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -126,20 +126,20 @@
 }
 
 .nb-sec-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .nb-add-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
   margin-left: auto;
 }
 
 .nb-mini-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
   display: inline-flex;
   align-items: center;
@@ -153,7 +153,7 @@
 
 .nb-error {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
 }
 
@@ -169,18 +169,18 @@
   align-items: center;
   gap: 4px;
   padding: 3px 6px 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .nb-output-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
@@ -194,7 +194,7 @@
   min-width: 0;
   padding: 6px 10px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-primary);
   background-color: var(--surface-page);
@@ -217,7 +217,7 @@
   width: 18px;
   height: 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   padding: 0;
   cursor: pointer;
   transition: transform 0.1s;
@@ -245,7 +245,7 @@
   height: 20px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: none;
   cursor: pointer;
 }
@@ -256,12 +256,12 @@
 }
 
 .nb-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 .nb-note {
   margin: 8px 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }

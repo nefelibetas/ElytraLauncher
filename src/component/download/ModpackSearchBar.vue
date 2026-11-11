@@ -36,8 +36,8 @@ async function importLocal() {
 .cs-btn {
   padding: 6px 24px;
   border: 1px solid var(--border-default); border-radius: var(--radius-md);
-  background: var(--surface-card); color: var(--text-primary); font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-card); color: var(--text-primary); font-size: var(--fs-base); font-weight: 600;
+  cursor: pointer; transition: all var(--dur-fast); display: inline-flex; align-items: center; gap: 6px;
 }
 .cs-btn:hover { border-color: var(--color-brand); }
 .cs-btn:disabled { opacity: 0.6; cursor: not-allowed; }

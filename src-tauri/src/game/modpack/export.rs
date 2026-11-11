@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::downloader::hash::{sha1_hex, sha512_hex};
 use crate::game::community::modrinth_version_files;
-use crate::launcher::args::find_version_json;
+use crate::game::version::dir::find_version_json;
 use crate::util::{infer_loader_from_json, loader_from_dir, mc_version_from_dir};
 
 // ── 导出侧（与上方导入解析对称；命令层 export_modpack 只做壳）──

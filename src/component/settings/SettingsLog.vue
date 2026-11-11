@@ -75,9 +75,9 @@ async function openLogDir() {
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -92,12 +92,12 @@ async function openLogDir() {
   max-height: 55vh;
   overflow: auto;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.55;
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;

@@ -34,7 +34,7 @@ defineProps<{ text?: string }>();
 }
 
 .ls-text {
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
   user-select: none;
 }

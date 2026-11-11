@@ -52,7 +52,7 @@ const { t } = useI18n();
 }
 .card-title {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; font-size: 14px; font-weight: 600;
+  padding: 12px 16px; font-size: var(--fs-md); font-weight: 600;
   color: var(--text-primary); user-select: none; outline: none;
 }
 </style>

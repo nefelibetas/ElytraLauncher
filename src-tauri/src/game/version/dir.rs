@@ -3,7 +3,6 @@
 
 use crate::config::downloader::DownloaderConfig;
 use crate::config::game_dirs;
-use crate::launcher::args::find_version_json;
 use crate::persist::downloader_config;
 use crate::util::{infer_loader_from_json, is_simple_name};
 use parking_lot::Mutex;
@@ -333,6 +332,44 @@ pub fn resolve_version_dir(mc: &Path, version_id: &str) -> (String, PathBuf) {
     }
     // 循环必 return，此行仅为类型检查
     unreachable!()
+}
+
+const EXT_JSON: &str = "json";
+const JSON_MAIN_CLASS_KEY: &str = "\"mainClass\"";
+
+/// 定位版本 JSON：优先 `{dir_name}.json`，否则扫描目录内含 `"mainClass"` 者（PCL2 隔离实例目录混有游戏数据 json，字典序第一个会报 "missing field assetIndex"）。
+pub fn find_version_json(dir: &Path, dir_name: &str) -> Option<PathBuf> {
+    let named = dir.join(format!("{dir_name}.{EXT_JSON}"));
+    if named.is_file() {
+        return Some(named);
+    }
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .find_map(|e| {
+            let p = e.path();
+            if p.extension()? == EXT_JSON && p.is_file() {
+                let text = std::fs::read_to_string(&p).ok()?;
+                if text.contains(JSON_MAIN_CLASS_KEY) {
+                    return Some(p);
+                }
+            }
+            None
+        })
+}
+
+pub fn find_file_in_dir(dir: &Path, ext: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .find_map(|e| {
+            let p = e.path();
+            if p.extension()? == ext && p.is_file() {
+                Some(p)
+            } else {
+                None
+            }
+        })
 }
 
 #[cfg(test)]

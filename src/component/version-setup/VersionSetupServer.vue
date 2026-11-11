@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n";
 import { loadVersionServer, saveVersionServer } from "../../store/task/versionSetup";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
+import SetupCard from "../common/SetupCard.vue";
 
 const route = useRoute();
 const { t } = useI18n();
@@ -42,13 +43,10 @@ async function save() {
 
 <template>
   <div class="vs-page">
-    <div class="setup-card">
-      <div class="setup-card-hdr">
-        <div class="setup-card-titles">
-          <div class="setup-card-title">{{ t("settings.version.setup.server.title") }}</div>
-          <div class="setup-desc">{{ t("settings.version.setup.server.subtitle") }}</div>
-        </div>
-      </div>
+    <SetupCard
+      :title="t('settings.version.setup.server.title')"
+      :desc="t('settings.version.setup.server.subtitle')"
+    >
       <div class="vssrv">
         <div class="vssrv-row">
           <label class="vssrv-label" for="vssrv-server">{{ t("settings.version.setup.server.address") }}</label>
@@ -82,44 +80,12 @@ async function save() {
           {{ t("settings.version.setup.server.note") }}
         </p>
       </div>
-    </div>
+    </SetupCard>
   </div>
 </template>
 
 <style scoped>
-.vs-page {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-.setup-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-}
-.setup-card-hdr {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.setup-card-titles {
-  min-width: 0;
-}
-.setup-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-}
-.setup-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
+
 .vssrv {
   display: flex;
   flex-direction: column;
@@ -133,18 +99,18 @@ async function save() {
 .vssrv-label {
   flex: none;
   width: 72px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 .vssrv-input {
   flex: 1;
   height: 32px;
   padding: 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .vssrv-input:focus {
@@ -152,12 +118,12 @@ async function save() {
 }
 .vssrv-saved {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-brand);
 }
 .vssrv-note {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-tertiary);
 }

@@ -120,8 +120,8 @@ mod tests {
 
         // Fabric + Fabric API：追加 下载本体/Fabric API/生成配置(最后)
         let mut t = valid_task();
-        t.loader = Some(crate::task::model::LoaderChoice {
-            kind: crate::task::model::LoaderKind::Fabric,
+        t.loader = Some(crate::task::LoaderChoice {
+            kind: crate::task::LoaderKind::Fabric,
             version: "0.19.3".into(),
         });
         t.fabric_api = Some(crate::task::model::FabricApi {
@@ -154,8 +154,8 @@ mod tests {
         t.optifine_patch = Some("G8".into());
         assert_eq!(t.name(), "26.2 OptiFine 安装");
         let mut t = valid_task();
-        t.loader = Some(crate::task::model::LoaderChoice {
-            kind: crate::task::model::LoaderKind::Quilt,
+        t.loader = Some(crate::task::LoaderChoice {
+            kind: crate::task::LoaderKind::Quilt,
             version: "1.0".into(),
         });
         assert_eq!(t.name(), "26.2 Quilt-1.0 安装");

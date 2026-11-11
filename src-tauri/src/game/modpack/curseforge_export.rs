@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use crate::game::community::curseforge_fingerprint_matches;
-use crate::launcher::args::find_version_json;
-use crate::task::{LoaderChoice, LoaderKind};
+use crate::game::loader::{LoaderChoice, LoaderKind};
+use crate::game::version::dir::find_version_json;
 use crate::util::{loader_from_dir, mc_version_from_dir};
 
 use super::export::add_dir_to_zip;

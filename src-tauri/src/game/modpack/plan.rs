@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::config::downloader::DownloaderConfig;
 use crate::game::community::curseforge_files;
-use crate::game::resource::extract::open_zip;
+use crate::game::loader::LoaderChoice;
 use crate::game::version::manifest::fetch_version_list;
-use crate::task::LoaderChoice;
+use crate::util::open_zip;
 use crate::util::safe_relative_path;
 
 use super::curseforge::{direct_pack_file, parse_curseforge_manifest, resolve_cf_files};

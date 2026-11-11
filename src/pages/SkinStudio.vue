@@ -657,10 +657,10 @@ function savePickedSkin() {
 .type-tag {
   padding: 3px 10px;
   border: 1px solid var(--border-default);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--surface-card);
   box-shadow: var(--shadow-sm);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.4px;
   color: var(--text-secondary);
@@ -705,9 +705,9 @@ function savePickedSkin() {
   border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .anim-btn:hover {
@@ -729,10 +729,10 @@ function savePickedSkin() {
   border: 1px solid var(--border-default);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   white-space: nowrap;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 /* 浮动按钮：实底 + 投影，浮在 3D 图之上；接管指针（与模板 @pointerdown.stop 配套） */
@@ -776,7 +776,7 @@ function savePickedSkin() {
 
 .err {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   white-space: pre-line;
   word-break: break-all;
@@ -784,7 +784,7 @@ function savePickedSkin() {
 
 .hint {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -831,10 +831,10 @@ function savePickedSkin() {
   border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .tab:hover {
@@ -854,7 +854,7 @@ function savePickedSkin() {
 }
 
 .panel-count {
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -900,7 +900,7 @@ function savePickedSkin() {
   border-radius: var(--radius-md);
   background-color: var(--surface-card);
   cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-fast), background-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 
 .card:hover {
@@ -936,7 +936,7 @@ function savePickedSkin() {
 .thumb {
   width: 64px;
   height: 64px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background-color: var(--surface-hover);
   background-repeat: no-repeat;
   image-rendering: pixelated;
@@ -964,7 +964,7 @@ function savePickedSkin() {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -985,8 +985,8 @@ function savePickedSkin() {
   top: 5px;
   left: 5px;
   padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 9.5px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.4px;
   color: var(--text-tertiary);
@@ -994,7 +994,7 @@ function savePickedSkin() {
 }
 
 .card-tag.variant {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
 }
 
 .card-tag.variant.slim {
@@ -1066,7 +1066,7 @@ function savePickedSkin() {
 }
 
 .model-desc {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   line-height: 1.6;
 }
@@ -1089,7 +1089,7 @@ function savePickedSkin() {
   background-color: var(--surface-card);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: border-color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .model-opt:hover {
@@ -1120,7 +1120,7 @@ function savePickedSkin() {
 }
 
 .model-name {
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1130,7 +1130,7 @@ function savePickedSkin() {
 }
 
 .model-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 

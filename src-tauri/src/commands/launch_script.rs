@@ -19,16 +19,22 @@ pub async fn export_launch_script(
     } else {
         access_token
     };
-    let (auth, java_path, version_json, mc_dir, launcher_config, java_major) =
-        process::prepare_launch(
-            &version_dir_name,
-            &auth_mode,
-            &username,
-            &access_token,
-            &uuid,
-            &xuid,
-        )
-        .await?;
+    let process::LaunchPrep {
+        auth,
+        java_path,
+        version_json,
+        mc_dir,
+        launcher_config,
+        java_major,
+    } = process::prepare_launch(
+        &version_dir_name,
+        &auth_mode,
+        &username,
+        &access_token,
+        &uuid,
+        &xuid,
+    )
+    .await?;
     let cmd = args::build_launch_command(
         &java_path,
         &version_json,

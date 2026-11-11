@@ -36,7 +36,8 @@ const RAKNET_PING_ID: u8 = 0x01;
 const RAKNET_PONG_ID: u8 = 0x1C;
 
 /// 服务器状态（前端展示；serde 直出 JSON 给 JS）。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export_to = "server_status/")]
 pub struct ServerStatus {
     /// 版本类型："java" | "bedrock"。
     pub edition: String,

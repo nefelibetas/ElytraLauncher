@@ -103,7 +103,7 @@ const { t } = useI18n();
   border: 1px solid var(--color-warning);
   border-radius: var(--radius-sm);
   color: var(--color-warning);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .cs-result-card {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
@@ -119,31 +119,31 @@ const { t } = useI18n();
 .cs-card-body {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 8px 14px; background: transparent;
-  color: var(--text-primary); font-size: 13px; user-select: none;
+  color: var(--text-primary); font-size: var(--fs-base); user-select: none;
   transition: background 0.1s;
 }
 .cs-card-body:hover { background-color: var(--surface-hover); }
 .cs-card-body { cursor: pointer; }
 .cs-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .cs-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.cs-title { font-weight: 600; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-title { font-weight: 600; font-size: var(--fs-base); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-title-en {
-  font-size: 11px; font-weight: 400; color: var(--text-tertiary);
+  font-size: var(--fs-xs); font-weight: 400; color: var(--text-tertiary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cs-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; color: var(--text-inverse); flex-shrink: 0; font-weight: 600; }
+.cs-badge { font-size: var(--fs-2xs); padding: 1px 6px; border-radius: var(--radius-md); color: var(--text-inverse); flex-shrink: 0; font-weight: 600; }
 .cs-badge.modrinth { background: var(--color-modrinth); }
 .cs-badge.curseforge { background: var(--color-curseforge); }
-.cs-sub { flex-shrink: 0; margin-left: auto; font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+.cs-sub { flex-shrink: 0; margin-left: auto; font-size: var(--fs-xs); color: var(--text-tertiary); white-space: nowrap; }
 .cs-desc {
-  font-size: 11px; color: var(--text-tertiary); line-height: 1.4;
+  font-size: var(--fs-xs); color: var(--text-tertiary); line-height: 1.4;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
 .cs-support { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .cs-ld {
-  flex-shrink: 0; font-size: 10px; font-weight: 600; padding: 0 5px;
-  border-radius: 6px; background: var(--color-brand-bg); color: var(--color-brand);
+  flex-shrink: 0; font-size: var(--fs-2xs); font-weight: 600; padding: 0 5px;
+  border-radius: var(--radius-sm); background: var(--color-brand-bg); color: var(--color-brand);
 }
 /* 加载器配色：与详情页 .md-ld-* 共用 --ld-* token；未匹配的加载器保留品牌色兜底。 */
 .cs-ld.fabric { color: var(--ld-fabric); }
@@ -160,7 +160,7 @@ const { t } = useI18n();
   .cs-ld.optifine { background: color-mix(in srgb, var(--ld-optifine) 12%, transparent); }
 }
 .cs-gv {
-  font-size: 10px; color: var(--text-tertiary);
+  font-size: var(--fs-2xs); color: var(--text-tertiary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -176,15 +176,15 @@ const { t } = useI18n();
 .cs-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .cs-result-count {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-  font-size: 12px; color: var(--text-tertiary); user-select: none;
+  font-size: var(--fs-sm); color: var(--text-tertiary); user-select: none;
 }
 .cs-pager-btn {
   padding: 5px 14px;
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
-  background: var(--surface-card); color: var(--text-primary); font-size: 12px;
-  cursor: pointer; transition: all 0.15s;
+  background: var(--surface-card); color: var(--text-primary); font-size: var(--fs-sm);
+  cursor: pointer; transition: all var(--dur-fast);
 }
 .cs-pager-btn:hover:not(:disabled) { border-color: var(--color-brand); }
 .cs-pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.cs-pager-info { font-size: 12px; color: var(--text-tertiary); user-select: none; }
+.cs-pager-info { font-size: var(--fs-sm); color: var(--text-tertiary); user-select: none; }
 </style>

@@ -3,7 +3,7 @@
 //! `addons` 声明 game 与 loader；`files` 分 addon（相对 overrides 的 path + sha1，走 `fileApi`）
 //! 与 curse（projectID/fileID，走 CF API）。`libraries`/`launchInfo` 暂不消费。
 
-use crate::task::{LoaderChoice, LoaderKind};
+use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::util::{safe_relative_path, sanitize_fs_name};
 
 use super::detect::{existing_overrides, Detected};

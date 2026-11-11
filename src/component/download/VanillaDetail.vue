@@ -131,18 +131,18 @@ const fabricLikeMain = computed(
   width: 32px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   border: none; background: transparent; color: var(--text-secondary);
-  cursor: pointer; border-radius: var(--radius-sm); transition: all 0.15s; flex-shrink: 0;
+  cursor: pointer; border-radius: var(--radius-sm); transition: all var(--dur-fast); flex-shrink: 0;
 }
 .det-back:hover { background-color: var(--surface-hover); color: var(--text-primary); }
-.det-icon { flex-shrink: 0; border-radius: 3px; width: 28px; height: 28px; }
+.det-icon { flex-shrink: 0; border-radius: var(--radius-2xs); width: 28px; height: 28px; }
 .det-input {
   flex: 1; height: 32px; padding: 0 10px;
   border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: var(--surface-page); color: var(--text-primary);
-  font-size: 13px; font-weight: 600; outline: none; cursor: text; transition: border-color 0.15s;
+  font-size: var(--fs-base); font-weight: 600; outline: none; cursor: text; transition: border-color var(--dur-fast);
 }
 .det-dir {
-  flex: 0 0 auto; font-size: 11px; color: var(--text-tertiary);
+  flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-tertiary);
   white-space: nowrap; user-select: none;
 }
 .det-input:focus { border-color: var(--color-brand); }
@@ -150,17 +150,17 @@ const fabricLikeMain = computed(
 .det-ld-hdr {
   width: 100%; display: flex; align-items: center; gap: 12px;
   padding: 10px 16px; border: none; background: transparent;
-  color: var(--text-primary); font-size: 13px;
+  color: var(--text-primary); font-size: var(--fs-base);
   cursor: default; transition: background 0.1s; outline: none; user-select: none;
 }
 .det-ld-hdr.clickable { cursor: pointer; }
 .det-ld-hdr.clickable:hover { background-color: var(--surface-hover); }
-.det-ld-icon { flex-shrink: 0; border-radius: 3px; width: 32px; height: 32px; }
+.det-ld-icon { flex-shrink: 0; border-radius: var(--radius-2xs); width: 32px; height: 32px; }
 .det-ld-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; }
-.det-ld-title { font-weight: 600; color: var(--text-primary); font-size: 13px; }
-.det-ld-sub { font-size: 11px; color: var(--text-tertiary); display: flex; align-items: center; gap: 6px; }
+.det-ld-title { font-weight: 600; color: var(--text-primary); font-size: var(--fs-base); }
+.det-ld-sub { font-size: var(--fs-xs); color: var(--text-tertiary); display: flex; align-items: center; gap: 6px; }
 .det-ld-warn {
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   color: var(--color-warning);
   font-weight: 500;
   flex-shrink: 0;
@@ -172,18 +172,18 @@ const fabricLikeMain = computed(
   border: none; background: transparent;
   color: var(--text-tertiary);
   cursor: pointer; border-radius: var(--radius-sm);
-  transition: all 0.15s; flex-shrink: 0;
+  transition: all var(--dur-fast); flex-shrink: 0;
 }
 .det-ld-remove:hover { color: var(--color-danger); background-color: var(--color-danger-bg); }
 .det-ld-arrow { flex-shrink: 0; color: var(--text-tertiary); transition: transform 0.2s; }
 .det-ld-arrow.open { transform: rotate(180deg); }
 .det-ld-ver {
   display: flex; align-items: center; gap: 12px; padding: 8px 16px;
-  font-size: 13px; color: var(--text-primary); cursor: pointer;
+  font-size: var(--fs-base); color: var(--text-primary); cursor: pointer;
   transition: background 0.1s; user-select: none;
 }
 .det-ld-ver:hover { background-color: var(--surface-hover); }
-.det-ld-ver-icon { flex-shrink: 0; border-radius: 3px; width: 24px; height: 24px; }
+.det-ld-ver-icon { flex-shrink: 0; border-radius: var(--radius-2xs); width: 24px; height: 24px; }
 .det-ld-ver-text { font-weight: 500; }
 
 .dl-spacer { flex: 1; min-height: 12px; }
@@ -195,14 +195,14 @@ const fabricLikeMain = computed(
   padding: 10px 40px;
   border: none; border-radius: var(--radius-lg);
   background-color: var(--color-brand);
-  color: var(--text-inverse); font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
+  color: var(--text-inverse); font-size: var(--fs-md); font-weight: 600;
+  cursor: pointer; transition: all var(--dur-fast);
   align-self: center; display: inline-flex; align-items: center; gap: 8px;
 }
 .dl-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .dl-btn:hover:not(:disabled) { background-color: var(--color-brand-hover); box-shadow: var(--shadow-md); }
 .dl-btn:active:not(:disabled) { transform: scale(0.97); }
-.dl-done { font-size: 14px; font-weight: 600; color: var(--color-success); text-align: center; padding: 10px 40px; }
+.dl-done { font-size: var(--fs-md); font-weight: 600; color: var(--color-success); text-align: center; padding: 10px 40px; }
 
 /* expand 目标高度由共享骨架（styles/transitions.css）提供；须与 max-height 320px 一致，超高时内部滚动 */
 .det-ld-body { border-top: 1px solid var(--border-default); max-height: 320px; overflow-y: auto; --expand-h: 320px; }

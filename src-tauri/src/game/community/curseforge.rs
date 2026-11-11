@@ -266,14 +266,7 @@ pub(super) async fn search_curseforge(
     offset: u64,
     page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
-    let cache_query = SearchQuery {
-        query: query.to_string(),
-        game_version: game_version.map(str::to_string),
-        loader: loader.map(str::to_string),
-        category: category.map(str::to_string),
-        offset,
-        page_size,
-    };
+    let cache_query = SearchQuery::new(query, game_version, loader, category, offset, page_size);
     if let Some(page) = cache::get_search("curseforge", &cache_query) {
         return Ok(page);
     }

@@ -37,11 +37,13 @@ use crate::map::world_info::MapWorldInfo;
 use crate::seedmap::{
     ResolvedVersion, SeedMapBlock, SeedMapSlimeChunk, SeedMapStructure, SeedMapVersion,
 };
+use crate::server_status::ServerStatus;
 use crate::task::files::WaitingUserPayload;
 use crate::task::model::{
-    DownloadFileKind, DownloadTask, FabricApi, LoaderChoice, LoaderKind, StepInfo, StepKind,
-    StepStatus, TaskProgress, TaskStatus,
+    DownloadFileKind, DownloadTask, FabricApi, StepInfo, StepKind, StepStatus, TaskProgress,
+    TaskStatus,
 };
+use crate::task::{LoaderChoice, LoaderKind};
 use crate::tooldl::{ToolDlSnapshot, ToolDlStatus};
 
 /// 导出全部登记类型到 `TS_RS_EXPORT_DIR`（见 `src-tauri/.cargo/config.toml`）。
@@ -111,4 +113,5 @@ pub fn export_all() {
     SeedMapStructure::export().unwrap();
     SeedMapVersion::export().unwrap();
     ResolvedVersion::export().unwrap();
+    ServerStatus::export().unwrap();
 }

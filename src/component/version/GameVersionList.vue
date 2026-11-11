@@ -3,7 +3,7 @@
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Settings2, Trash2 } from "@lucide/vue";
-import AlertDialog from "../common/AlertDialog.vue";
+import ConfirmDialog from "../common/ConfirmDialog.vue";
 import VersionCard from "../download/VersionCard.vue";
 import VersionItem from "../download/VersionItem.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
@@ -99,17 +99,12 @@ function goDownload() {
     </template>
 
     <!-- 删除版本确认 dialog -->
-    <AlertDialog v-model="deleteDialog" :title="t('settings.version.select.deleteVersion')">
-      <div class="vs-dialog-body">
-        <div class="vs-dialog-text">
-          {{ t("settings.version.select.deleteConfirm", { name: deleteTarget }) }}
-        </div>
-      </div>
-      <template #actions>
-        <button class="dialog-btn danger" @click="confirmDeleteVersion">{{ t("settings.version.setup.common.delete") }}</button>
-        <button class="dialog-btn" @click="deleteDialog = false">{{ t("settings.version.setup.common.cancel") }}</button>
-      </template>
-    </AlertDialog>
+    <ConfirmDialog
+      v-model="deleteDialog"
+      :title="t('settings.version.select.deleteVersion')"
+      :message="t('settings.version.select.deleteConfirm', { name: deleteTarget })"
+      @confirm="confirmDeleteVersion"
+    />
   </div>
 </template>
 
@@ -139,9 +134,9 @@ function goDownload() {
   border-radius: var(--radius-md);
   background: var(--surface-card);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .vs-search-input:focus {
@@ -169,7 +164,7 @@ function goDownload() {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vs-item-setup:hover {
@@ -189,7 +184,7 @@ function goDownload() {
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vs-item-del:hover {
@@ -209,7 +204,7 @@ function goDownload() {
 
 .vs-empty p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
 }
 
@@ -219,11 +214,11 @@ function goDownload() {
   border-radius: var(--radius-md);
   background: var(--color-brand-gradient);
   color: var(--text-inverse);
-  font-size: 13.5px;
+  font-size: var(--fs-md);
   font-weight: 600;
   cursor: pointer;
   /* 渐变色切换不插值（会闪变），只过渡 transform/阴影 */
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast);
 }
 
 .vs-empty-btn:hover {
@@ -234,20 +229,4 @@ function goDownload() {
 .vs-empty-btn:active {
   transform: scale(0.97);
 }
-
-
-
-.vs-dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.vs-dialog-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-
 </style>

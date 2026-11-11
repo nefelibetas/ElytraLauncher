@@ -200,7 +200,7 @@ function onCustomColor(e: Event) {
 
 .nb-label {
   flex: 0 0 auto;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   min-width: 56px;
 }
@@ -210,7 +210,7 @@ function onCustomColor(e: Event) {
   min-width: 80px;
   height: 30px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -227,7 +227,7 @@ function onCustomColor(e: Event) {
   width: 64px;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -240,7 +240,7 @@ function onCustomColor(e: Event) {
 }
 
 .nb-add-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
@@ -255,18 +255,18 @@ function onCustomColor(e: Event) {
   align-items: center;
   gap: 4px;
   padding: 3px 6px 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .me-color {
   width: 18px;
   height: 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   padding: 0;
   cursor: pointer;
   transition: transform 0.1s;
@@ -286,7 +286,7 @@ function onCustomColor(e: Event) {
   height: 20px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: none;
   cursor: pointer;
 }
@@ -299,7 +299,7 @@ function onCustomColor(e: Event) {
 .me-clear {
   height: 22px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -320,7 +320,7 @@ function onCustomColor(e: Event) {
   min-width: 220px;
   padding: 5px 8px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -335,7 +335,7 @@ function onCustomColor(e: Event) {
 
 .me-raw-err {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
 }
 </style>

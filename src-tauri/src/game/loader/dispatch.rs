@@ -1,6 +1,6 @@
 //! 统一 ModLoader 安装入口：按种类分派四个安装器。
 
-use crate::task::LoaderKind;
+use crate::game::loader::LoaderKind;
 
 use super::ctx::{InstallCtx, VersionTarget};
 use super::fabric::{install_fabric, install_quilt};

@@ -232,6 +232,18 @@ export async function ensureGameFolder(
   return await invoke<string>("ensure_game_folder", { kind, versionName });
 }
 
+/** 打开版本资源子目录（不存在先创建）；失败统一 toast。 */
+export async function openGameFolder(
+  kind: "saves" | "version" | "mods" | "resourcepacks" | "datapacks" | "shaderpacks",
+  versionName: string,
+): Promise<void> {
+  try {
+    await openFolder(await ensureGameFolder(kind, versionName));
+  } catch (e) {
+    showToast(errMsg(e));
+  }
+}
+
 /** 已安装版本信息（Rust `InstalledVersionInfo`：`loader` 由版本 json 推断，读不到时为空串）。 */
 export type { InstalledVersionInfo };
 

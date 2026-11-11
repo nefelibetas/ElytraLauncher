@@ -3,7 +3,7 @@
 //! `pack.json` 是 HMCL 的 `GameInstanceManifest`（可能含 `patches[]`），只用来提取 MC/loader；
 //! 游戏本体仍按官方版本清单重装，`minecraft/` 下除清单外的文件整体作为覆盖内容。
 
-use crate::task::LoaderChoice;
+use crate::game::loader::LoaderChoice;
 use crate::util::{infer_loader_from_json, mc_version_from_dir};
 
 use super::detect::Detected;

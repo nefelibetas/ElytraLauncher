@@ -91,6 +91,27 @@ pub struct SearchQuery {
     pub page_size: u32,
 }
 
+impl SearchQuery {
+    /// 搜索入口共用：可选筛选项统一转 owned，避免各源重复拼缓存键。
+    pub(crate) fn new(
+        query: &str,
+        game_version: Option<&str>,
+        loader: Option<&str>,
+        category: Option<&str>,
+        offset: u64,
+        page_size: u32,
+    ) -> Self {
+        Self {
+            query: query.to_string(),
+            game_version: game_version.map(str::to_string),
+            loader: loader.map(str::to_string),
+            category: category.map(str::to_string),
+            offset,
+            page_size,
+        }
+    }
+}
+
 /// 搜索（按来源分派）。`page_size` 每源条数（聚合模式前端传减半值，单源默认 30）；`translate` 批量查 MCIM 简介（失败静默降级）。
 /// 中文查询先经内置百科表反查英文词：两平台只认英文，直发中文只会得到按热度排的无关结果。
 pub async fn search_community(

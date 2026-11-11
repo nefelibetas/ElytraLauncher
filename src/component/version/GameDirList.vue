@@ -145,7 +145,7 @@ async function menuImportPack() {
 }
 
 .vs-group-label {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -161,13 +161,13 @@ async function menuImportPack() {
 
 .vs-dir-empty {
   padding: 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--text-secondary);
 }
 
 .vs-dir-empty-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -228,13 +228,13 @@ async function menuImportPack() {
 }
 
 .vs-dir-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .vs-dir-sub {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,7 +253,7 @@ async function menuImportPack() {
   gap: 10px;
   padding: 9px 10px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s;
@@ -265,7 +265,7 @@ async function menuImportPack() {
 }
 
 .vs-err {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   padding: 6px 8px;
 }
@@ -280,7 +280,7 @@ async function menuImportPack() {
 }
 
 .vs-dialog-label {
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -291,9 +291,9 @@ async function menuImportPack() {
   border-radius: var(--radius-md);
   background: var(--surface-page);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--dur-fast);
 }
 
 .vs-input:focus {

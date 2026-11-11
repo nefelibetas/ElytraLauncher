@@ -477,7 +477,7 @@ async function copyCommand() {
   /* 固定宽：label 随字数变宽会让各行控件左缘参差（实测 4 字 56px vs 5 字 63px） */
   flex: 0 0 64px;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -486,7 +486,7 @@ async function copyCommand() {
   min-width: 0;
   height: 30px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -503,7 +503,7 @@ async function copyCommand() {
   width: 64px;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -525,7 +525,7 @@ async function copyCommand() {
 }
 
 .give-sec-title {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 8px;
@@ -541,7 +541,7 @@ async function copyCommand() {
 
 
 .give-empty {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   padding: 8px 0;
 }
@@ -550,7 +550,7 @@ async function copyCommand() {
 .give-color-none {
   height: 22px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -567,7 +567,7 @@ async function copyCommand() {
   width: 18px;
   height: 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   padding: 0;
   cursor: pointer;
   transition: transform 0.1s;
@@ -587,7 +587,7 @@ async function copyCommand() {
   height: 20px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-2xs);
   background: none;
   cursor: pointer;
 }
@@ -602,7 +602,7 @@ async function copyCommand() {
   flex: 1;
   min-width: 0;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   color: var(--text-primary);
   background-color: var(--surface-page);
@@ -625,7 +625,7 @@ async function copyCommand() {
 
 /* ===== 附魔/属性标签 ===== */
 .give-add-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 10px;
 }
 
@@ -641,11 +641,11 @@ async function copyCommand() {
   align-items: center;
   gap: 4px;
   padding: 3px 6px 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 /* ===== 输出 ===== */
@@ -653,18 +653,18 @@ async function copyCommand() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
 
 .give-copy-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
 }
 
 .give-hint {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-top: 6px;
 }
@@ -683,7 +683,7 @@ async function copyCommand() {
   /* 与 .give-label 同宽，保证附加 NBT 的 textarea 与上方控件左缘对齐 */
   flex: 0 0 64px;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   line-height: 1.8;
 }
@@ -692,7 +692,7 @@ async function copyCommand() {
   flex: 1;
   padding: 5px 8px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -707,7 +707,7 @@ async function copyCommand() {
 
 .give-raw-err {
   margin: -4px 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
 }
 </style>

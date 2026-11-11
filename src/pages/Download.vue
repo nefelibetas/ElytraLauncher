@@ -235,7 +235,7 @@ watch(tab, (t) => {
   padding: 12px 12px 6px; margin-top: 8px; user-select: none;
 }
 .nav-divider span {
-  font-size: 11px; font-weight: 500;
+  font-size: var(--fs-xs); font-weight: 500;
   color: var(--text-tertiary);
   text-transform: uppercase; letter-spacing: 0.8px;
 }

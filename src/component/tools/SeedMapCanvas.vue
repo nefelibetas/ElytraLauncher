@@ -11,6 +11,7 @@ import {
   type SeedMapStructure,
 } from "../../api/seedmap";
 import { errMsg } from "../../utils/error";
+import { structureColor } from "../../utils/seedmapColors";
 
 interface SeedMapHover {
   x: number;
@@ -371,7 +372,7 @@ function draw() {
         if (sx < -12 || sy < -12 || sx > rect.width + 12 || sy > rect.height + 12) continue;
         ctx.beginPath();
         ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = STRUCTURE_COLORS[s.kind] ?? "#e5e7eb";
+        ctx.fillStyle = structureColor(s.kind);
         ctx.fill();
         ctx.lineWidth = 1;
         ctx.strokeStyle = "rgba(10, 14, 18, 0.75)";
@@ -381,24 +382,7 @@ function draw() {
   }
 }
 
-const STRUCTURE_COLORS: Record<string, string> = {
-  village: "#f2c14e",
-  desert_pyramid: "#e0b15a",
-  jungle_temple: "#5fbf77",
-  swamp_hut: "#7a9e5a",
-  igloo: "#bfe6ff",
-  ocean_ruin: "#7bc8d9",
-  shipwreck: "#b08b62",
-  monument: "#59b6a5",
-  mansion: "#b28bd6",
-  outpost: "#db7b6b",
-  ruined_portal: "#c084fc",
-  ancient_city: "#6d7cff",
-  treasure: "#f59e0b",
-  trail_ruins: "#d4a373",
-  trial_chambers: "#e879f9",
-  abandoned_camp: "#f97316",
-};
+
 
 function loop() {
   raf = requestAnimationFrame(loop);

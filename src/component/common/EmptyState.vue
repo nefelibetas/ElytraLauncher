@@ -26,7 +26,7 @@
 }
 
 .es-box :deep(p) {
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.7;
   margin: 0;
 }

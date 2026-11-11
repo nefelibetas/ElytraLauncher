@@ -1211,7 +1211,7 @@ watch(mode, () => {
 
 .pp-hd-text h3 {
   margin: 0 0 3px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
   color: var(--text-primary);
 }
 
@@ -1222,7 +1222,7 @@ watch(mode, () => {
 
 .pp-hd-text p {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -1248,9 +1248,9 @@ watch(mode, () => {
   border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .pp-kind button.on {
@@ -1266,7 +1266,7 @@ watch(mode, () => {
   height: 30px;
   padding: 0 14px;
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 500;
   cursor: pointer;
 }
@@ -1324,7 +1324,7 @@ watch(mode, () => {
   background-color: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s, box-shadow 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 
 .pp-tool:hover:not(:disabled) {
@@ -1469,16 +1469,16 @@ watch(mode, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 .pp-parts-all {
   padding: 1px 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .pp-parts-all:disabled {
@@ -1495,11 +1495,11 @@ watch(mode, () => {
   align-items: center;
   gap: 5px;
   padding: 4px 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .pp-part.off {
@@ -1538,9 +1538,9 @@ watch(mode, () => {
   border-radius: var(--radius-sm);
   background-color: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: color 0.15s, background-color 0.15s;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 
 .pp-anim-btn:hover {
@@ -1608,7 +1608,7 @@ watch(mode, () => {
 }
 
 .pp-foot-label {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -1626,7 +1626,7 @@ watch(mode, () => {
 .pp-zoom {
   min-width: 38px;
   text-align: center;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 

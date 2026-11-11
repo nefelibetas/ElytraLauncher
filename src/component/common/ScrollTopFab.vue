@@ -58,7 +58,7 @@ onBeforeUnmount(() => {
 /* stylelint-disable-next-line plugin/no-unsupported-browser-features -- 包装层仅承载 Transition，按钮自身仍进无障碍树 */
 .scroll-top-fab-wrap { display: contents; }
 .scroll-top-fab {
-  position: fixed; z-index: var(--z-fab, 900);
+  position: fixed; z-index: var(--z-fab);
   bottom: 24px; right: 24px;
   width: 40px; height: 40px;
   border: 1px solid var(--border-default); border-radius: 50%;
@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   color: var(--text-secondary);
-  transition: color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
 }
 .scroll-top-fab:hover {
   color: var(--color-brand);

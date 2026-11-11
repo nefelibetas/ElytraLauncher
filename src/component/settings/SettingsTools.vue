@@ -163,14 +163,14 @@ onBeforeUnmount(() => {
 
 .stg-tools-head h2 {
   margin: 0 0 4px;
-  font-size: 17px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .stg-tools-head p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-tertiary);
 }
 
@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast);
 }
 
 .stg-tool-card:hover {
@@ -215,13 +215,13 @@ onBeforeUnmount(() => {
 }
 
 .stg-tool-title {
-  font-size: 14px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .stg-tool-desc {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-tertiary);
 }
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
   border: none;
   background: var(--surface-page);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 

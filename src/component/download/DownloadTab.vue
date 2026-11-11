@@ -31,8 +31,8 @@ const { t } = useI18n();
   display: flex; align-items: center; gap: 8px;
   padding: 8px 36px 8px 12px; border-radius: var(--radius-sm);
   border: none; background: transparent;
-  color: var(--text-secondary); font-size: 13px; font-weight: 500;
-  cursor: pointer; transition: all 0.15s;
+  color: var(--text-secondary); font-size: var(--fs-base); font-weight: 500;
+  cursor: pointer; transition: all var(--dur-fast);
   text-align: left;
 }
 
@@ -53,7 +53,7 @@ const { t } = useI18n();
   color: var(--text-tertiary);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: opacity 0.15s, visibility 0.15s;
+  transition: opacity var(--dur-fast), visibility var(--dur-fast);
   opacity: 0;
   visibility: hidden; /* 隐藏态移出命中测试（WebView2 pointer-events 过渡不可靠） */
 }

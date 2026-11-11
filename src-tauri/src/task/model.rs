@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::game::modpack::ModpackRequest;
 
 /// 任务状态（进度事件 payload，前端 ProgressPayload.status 为 string）。
@@ -178,48 +179,6 @@ pub struct StepInfo {
     pub kind: Option<StepKind>,
     pub status: StepStatus,
     pub progress: f64, // 0–100, meaningful only when status=running
-}
-
-/// ModLoader 种类。前端传 "fabric"/"forge"/"neoforge"/"quilt"。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export_to = "task/")]
-pub enum LoaderKind {
-    #[serde(rename = "fabric")]
-    Fabric,
-    #[serde(rename = "forge")]
-    Forge,
-    #[serde(rename = "neoforge")]
-    NeoForge,
-    #[serde(rename = "quilt")]
-    Quilt,
-}
-
-impl LoaderKind {
-    /// 英文标识（目录名/URL 模板用），与 serde rename 一致。
-    pub fn name(&self) -> &'static str {
-        match self {
-            LoaderKind::Fabric => "fabric",
-            LoaderKind::Forge => "forge",
-            LoaderKind::NeoForge => "neoforge",
-            LoaderKind::Quilt => "quilt",
-        }
-    }
-
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            LoaderKind::Fabric => "Fabric",
-            LoaderKind::Forge => "Forge",
-            LoaderKind::NeoForge => "NeoForge",
-            LoaderKind::Quilt => "Quilt",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export_to = "task/")]
-pub struct LoaderChoice {
-    pub kind: LoaderKind,
-    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]

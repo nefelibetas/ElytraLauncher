@@ -192,7 +192,7 @@ function removeCustom(id: string) {
   background: var(--surface-elevated);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .appearance-item:hover {
@@ -220,7 +220,7 @@ function removeCustom(id: string) {
   display: flex;
   gap: 4px;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--dur-fast);
 }
 
 .appearance-item:hover .appearance-custom-ops {
@@ -238,7 +238,7 @@ function removeCustom(id: string) {
   background: var(--surface-elevated);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .appearance-op:hover {
@@ -263,7 +263,7 @@ function removeCustom(id: string) {
   justify-content: center;
   border-radius: 18px;
   box-shadow: var(--shadow-md);
-  color: #FFFFFF;
+  color: var(--text-inverse);
   flex-shrink: 0;
 }
 
@@ -280,12 +280,12 @@ function removeCustom(id: string) {
 }
 
 .appearance-name {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
 }
 
 .appearance-desc {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   text-align: center;
   line-height: 1.4;

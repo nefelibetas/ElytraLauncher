@@ -7,6 +7,7 @@ import { loadGameLog } from "../../store/app/launch";
 import { openFolder } from "../../utils/fs";
 import { RefreshCw, FolderOpen } from "@lucide/vue";
 import { activePath } from "../../store/config/gameDirs";
+import SetupCard from "../common/SetupCard.vue";
 
 const route = useRoute();
 const { t } = useI18n();
@@ -46,12 +47,11 @@ async function openLogDir() {
 
 <template>
   <div class="vs-page">
-    <div class="setup-card">
-      <div class="setup-card-hdr">
-        <div class="setup-card-titles">
-          <div class="setup-card-title">{{ t("settings.version.setup.logs.title") }}</div>
-          <div class="setup-desc">{{ t("settings.version.setup.logs.subtitle") }}</div>
-        </div>
+    <SetupCard
+      :title="t('settings.version.setup.logs.title')"
+      :desc="t('settings.version.setup.logs.subtitle')"
+    >
+      <template #actions>
         <div class="vslog-actions">
           <button class="vslog-refresh" @click="openLogDir">
             <FolderOpen :size="13" />
@@ -62,58 +62,29 @@ async function openLogDir() {
             {{ t("settings.version.setup.logs.refresh") }}
           </button>
         </div>
-      </div>
+      </template>
       <pre class="vslog-pre">{{ logText }}</pre>
-    </div>
+    </SetupCard>
   </div>
 </template>
 
 <style scoped>
-.vs-page {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-.setup-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-}
+
 .vslog-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
 }
-.setup-card-hdr {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.setup-card-titles { min-width: 0; }
-.setup-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-}
-.setup-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
+
 .vslog-refresh {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -128,12 +99,12 @@ async function openLogDir() {
   max-height: 60vh;
   overflow: auto;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.55;
   color: var(--text-secondary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;

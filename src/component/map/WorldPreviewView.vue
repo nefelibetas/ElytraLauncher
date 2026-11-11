@@ -641,7 +641,7 @@ defineExpose({ reload });
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-card);
-  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 0.18));
+  box-shadow: var(--shadow-md);
   backdrop-filter: blur(10px);
   background: color-mix(in srgb, var(--surface-card) 86%, transparent);
 }
@@ -659,7 +659,7 @@ defineExpose({ reload });
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -709,7 +709,7 @@ defineExpose({ reload });
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -791,7 +791,7 @@ defineExpose({ reload });
 }
 
 .wp-group-title {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
@@ -801,7 +801,7 @@ defineExpose({ reload });
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
 }
 
@@ -813,7 +813,7 @@ defineExpose({ reload });
   border-radius: var(--radius-sm);
   background: var(--surface-page);
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .wp-check {
@@ -821,7 +821,7 @@ defineExpose({ reload });
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 
@@ -835,7 +835,7 @@ defineExpose({ reload });
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -844,7 +844,7 @@ defineExpose({ reload });
 .wp-link:disabled { opacity: 0.45; cursor: default; }
 
 .wp-find-status {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   word-break: break-all;
 }
@@ -923,7 +923,7 @@ defineExpose({ reload });
 
 .wp-coord-text {
   font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   white-space: nowrap;
   text-align: center;
@@ -934,7 +934,7 @@ defineExpose({ reload });
 .wp-biome {
   padding: 2px 4px 0;
   text-align: center;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -949,7 +949,7 @@ defineExpose({ reload });
   border-radius: var(--radius-sm);
   background: var(--surface-card);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 

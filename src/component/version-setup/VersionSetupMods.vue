@@ -4,18 +4,17 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Search, RefreshCw, Upload, Puzzle, Folder, Trash2, Ban, Power } from "@lucide/vue";
-import { ensureGameFolder } from "../../store/config/gameDirs";
-import { openFolder } from "../../utils/fs";
-import { fmtCount, fmtSize } from "../../utils/format";
+import { openGameFolder } from "../../store/config/gameDirs";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
-import { dlTranslateMode } from "../../store/config/downloaderConfig";
-import IconImage from "../common/IconImage.vue";
-import AlertDialog from "../common/AlertDialog.vue";
+import CommunityFileMeta from "../common/CommunityFileMeta.vue";
+import ConfirmDialog from "../common/ConfirmDialog.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import EmptyState from "../common/EmptyState.vue";
 import ErrorState from "../common/ErrorState.vue";
+import BatchActionBar from "./BatchActionBar.vue";
 import { useSelectable } from "../../utils/useSelectable";
+import { useBatchDelete } from "../../utils/useBatchDelete";
 import {
   mods, modsLoading, modsError, modsNetworkError, disabledMods,
   updates, updatesChecked, checkingUpdates, updatesError, updatingFiles,
@@ -66,34 +65,19 @@ async function doBatchUpdate() {
   clear();
 }
 
-const deleteDialog = ref(false);
-const deleteLabel = ref("");
-const deletePending = ref<string[]>([]);
-
-function doBatchDelete() {
-  const names = [...selected.value];
-  if (names.length === 0) return;
-  deleteLabel.value = names.length === 1
+const {
+  dialog: deleteDialog,
+  message: deleteMessage,
+  open: openDelete,
+  confirm: confirmDelete,
+} = useBatchDelete({
+  remove: (name) => deleteMod(versionName.value, name),
+  describe: (names) => names.length === 1
     ? t("settings.version.setup.mods.targetOne", { name: names[0] })
-    : t("settings.version.setup.mods.targetMany", { count: names.length });
-  deletePending.value = names;
-  deleteDialog.value = true;
-}
-
-async function confirmDelete() {
-  const names = [...deletePending.value];
-  deleteDialog.value = false;
-  deletePending.value = [];
-  for (const name of names) {
-    try {
-      await deleteMod(versionName.value, name);
-      showToast(t("settings.version.setup.mods.deleted", { name }));
-    } catch (e) {
-      showToast(errMsg(e));
-    }
-  }
-  if (names.length > 0) clear();
-}
+    : t("settings.version.setup.mods.targetMany", { count: names.length }),
+  success: (name) => t("settings.version.setup.mods.deleted", { name }),
+  after: () => clear(),
+});
 
 const selectedEnabled = computed(() => selected.value.filter(n => !disabledMods.value.has(n)));
 const selectedDisabled = computed(() => selected.value.filter(n => disabledMods.value.has(n)));
@@ -152,19 +136,14 @@ async function doCheckUpdates() {
 
 /** 打开 mods 文件夹（目录不存在先创建）。 */
 async function openModsFolder() {
-  try {
-    const target = await ensureGameFolder("mods", versionName.value);
-    await openFolder(target);
-  } catch (e) {
-    showToast(errMsg(e));
-  }
+  await openGameFolder("mods", versionName.value);
 }
 </script>
 
 <template>
   <div class="vsm">
     <!-- 上层：搜索卡片 -->
-    <div class="vsm-card vsm-search-card">
+    <div class="vs-card vsm-search-card">
       <Search :size="14" class="vsm-search-icon" />
       <input
         v-model="searchQuery"
@@ -176,7 +155,7 @@ async function openModsFolder() {
     </div>
 
     <!-- 下层：列表卡片 -->
-    <div class="vsm-card vsm-list-card">
+    <div class="vs-card vs-list-card">
       <!-- Tab 行：全部 / 可更新 + 右侧操作 -->
       <div class="vsm-tabbar">
         <div class="vsm-tabs">
@@ -208,7 +187,7 @@ async function openModsFolder() {
       </div>
 
       <!-- 内容：Mod items -->
-      <div class="vsm-content">
+      <div class="vs-list-content">
         <Transition name="fade" mode="out-in">
           <LoadingSpinner v-if="modsLoading && mods.length === 0" key="loading" :text="t('settings.version.setup.mods.loading')" />
           <ErrorState v-else-if="modsError" key="err" :text="modsError" />
@@ -225,47 +204,26 @@ async function openModsFolder() {
             </p>
           </EmptyState>
           <div v-else key="list">
-            <div v-if="modsNetworkError" class="vsm-net-warn">{{ t("settings.version.setup.mods.networkWarn") }}</div>
-            <div class="vsm-list">
-              <div v-for="m in items" :key="m.file_name" class="vsm-item">
+            <div v-if="modsNetworkError" class="vs-net-warn">{{ t("settings.version.setup.mods.networkWarn") }}</div>
+            <div class="vs-list">
+              <div v-for="m in items" :key="m.file_name" class="vs-list-item">
                 <div
                   class="vsm-item-body"
                   :class="{ selected: selectedSet.has(m.file_name), 'is-disabled': disabledMods.has(m.file_name) }"
                   @click="toggle(m.file_name)"
                 >
-                  <!-- 已识别：Modrinth 元数据 -->
-                  <template v-if="m.project_id">
-                    <IconImage :src="m.icon_url" :size="32" />
-                    <span class="vsm-info">
-                      <span class="vsm-title-row">
-                        <span class="vsm-title">{{ m.title_zh ?? m.title }}</span>
-                        <span v-if="m.title_zh" class="vsm-file">{{ m.file_name }}</span>
-                        <span v-if="m.downloads" class="vsm-sub">{{ t("settings.version.setup.common.downloads", { count: fmtCount(m.downloads) }) }}</span>
+                  <CommunityFileMeta :item="m" :local-icon="Puzzle">
+                    <template #meta>
+                      <span v-if="updMap[m.file_name]" class="vsm-new">→ v{{ updMap[m.file_name].latest_version }}</span>
+                    </template>
+                    <template #local-meta>
+                      <span v-if="m.identify === 'pending'" class="vsm-query-hint">
+                        <RefreshCw :size="10" class="spin" />{{ t("settings.version.setup.mods.querying") }}
                       </span>
-                      <span v-if="m.description" class="vsm-desc">
-                        {{ dlTranslateMode === "en" ? m.description : (m.description_zh ?? m.description) }}
-                      </span>
-                      <span class="vsm-support">
-                        <span v-if="m.current_version" class="vsm-ver">v{{ m.current_version }}</span>
-                        <span v-if="updMap[m.file_name]" class="vsm-new">→ v{{ updMap[m.file_name].latest_version }}</span>
-                      </span>
-                    </span>
-                  </template>
-                  <!-- 未识别：本地文件 -->
-                  <template v-else>
-                    <Puzzle :size="20" class="vsm-local-icon" />
-                    <span class="vsm-info">
-                      <span class="vsm-local-name">{{ m.file_name }}</span>
-                      <span class="vsm-local-meta">
-                        {{ fmtSize(m.size) }}
-                        <span v-if="m.identify === 'pending'" class="vsm-query-hint">
-                          <RefreshCw :size="10" class="spin" />{{ t("settings.version.setup.mods.querying") }}
-                        </span>
-                        <span v-else-if="m.identify === 'failed'" class="vsm-query-hint">{{ t("settings.version.setup.mods.notFound") }}</span>
-                        <span v-if="disabledMods.has(m.file_name)" class="vsm-off-badge">{{ t("settings.version.setup.mods.disabledBadge") }}</span>
-                      </span>
-                    </span>
-                  </template>
+                      <span v-else-if="m.identify === 'failed'" class="vsm-query-hint">{{ t("settings.version.setup.mods.notFound") }}</span>
+                      <span v-if="disabledMods.has(m.file_name)" class="vsm-off-badge">{{ t("settings.version.setup.mods.disabledBadge") }}</span>
+                    </template>
+                  </CommunityFileMeta>
                 </div>
               </div>
             </div>
@@ -275,12 +233,13 @@ async function openModsFolder() {
 
       <!-- 底部 action 栏：选中 ≥1 时出现 -->
       <Transition name="fade">
-        <div v-if="selecting" class="vs-actions-bar vs-bar-attached">
-          <button class="vs-ab-btn" @click="toggleAll">
-            {{ allVisibleSelected ? t("settings.version.setup.common.deselectAll") : t("settings.version.setup.common.selectAll") }}
-          </button>
-          <button class="vs-ab-btn" @click="clear">{{ t("settings.version.setup.common.deselect") }}</button>
-          <span class="vs-ab-count">{{ t("settings.version.setup.common.selectedCount", { count: selected.length }) }}</span>
+        <BatchActionBar
+          v-if="selecting"
+          :all-selected="allVisibleSelected"
+          :count="selected.length"
+          @toggle-all="toggleAll"
+          @clear="clear"
+        >
           <button
             class="vs-ab-btn update"
             :disabled="updatableSelected.length === 0 || updatingFiles.size > 0"
@@ -298,26 +257,21 @@ async function openModsFolder() {
             <Power v-else :size="13" />
             <span>{{ toggleLabel }}</span>
           </button>
-          <button class="vs-ab-btn danger" @click="doBatchDelete">
+          <button class="vs-ab-btn danger" @click="openDelete([...selected])">
             <Trash2 :size="13" />
             <span>{{ t("settings.version.setup.common.deleteCount", { count: selected.length }) }}</span>
           </button>
-        </div>
+        </BatchActionBar>
       </Transition>
     </div>
 
     <!-- 删除 Mod 确认 dialog -->
-    <AlertDialog v-model="deleteDialog" :title="t('settings.version.setup.mods.deleteTitle')">
-      <div class="vsm-dialog-body">
-        <div class="vsm-dialog-text">
-          {{ t("settings.version.setup.mods.deleteConfirm", { target: deleteLabel }) }}
-        </div>
-      </div>
-      <template #actions>
-        <button class="dialog-btn danger" @click="confirmDelete">{{ t("settings.version.setup.common.delete") }}</button>
-        <button class="dialog-btn" @click="deleteDialog = false">{{ t("settings.version.setup.common.cancel") }}</button>
-      </template>
-    </AlertDialog>
+    <ConfirmDialog
+      v-model="deleteDialog"
+      :title="t('settings.version.setup.mods.deleteTitle')"
+      :message="t('settings.version.setup.mods.deleteConfirm', { target: deleteMessage })"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
 
@@ -335,11 +289,6 @@ async function openModsFolder() {
 }
 
 /* 卡片通用 */
-.vsm-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
 
 /* 上层：搜索卡片 */
 .vsm-search-card {
@@ -362,7 +311,7 @@ async function openModsFolder() {
   outline: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 .vsm-search-input::placeholder {
@@ -370,13 +319,6 @@ async function openModsFolder() {
 }
 
 /* 下层：列表卡：占满剩余高度，内容滚动 */
-.vsm-list-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
 
 /* Tab 行 */
 .vsm-tabbar {
@@ -396,13 +338,13 @@ async function openModsFolder() {
 
 .vsm-tab {
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
   position: relative;
-  transition: color 0.15s;
+  transition: color var(--dur-fast);
 }
 
 .vsm-tab:hover {
@@ -440,9 +382,9 @@ async function openModsFolder() {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
 }
 
 .vsm-act-btn:hover:not(:disabled) {
@@ -466,32 +408,8 @@ async function openModsFolder() {
 }
 
 /* 内容区：卡片内滚动 */
-.vsm-content {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 10px 12px 14px;
-}
-
-.vsm-net-warn {
-  font-size: 11px;
-  color: var(--color-danger);
-  padding: 0 0 8px;
-}
 
 /* 列表 */
-.vsm-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.vsm-item {
-  display: flex;
-  align-items: center;
-  padding: 4px 0;
-}
 
 .vsm-item-body {
   flex: 1;
@@ -504,7 +422,7 @@ async function openModsFolder() {
   border: 2px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
 }
 
 .vsm-item-body:hover {
@@ -527,104 +445,17 @@ async function openModsFolder() {
   border-style: dashed;
 }
 
-.vsm-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.vsm-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.vsm-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vsm-file {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-}
-
-.vsm-sub {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.vsm-desc {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.vsm-support {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.vsm-ver {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 5px;
-  border-radius: 6px;
-  background: var(--color-brand-bg);
-  color: var(--color-brand);
-}
-
 .vsm-new {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
 
 /* 本地文件样式 */
-.vsm-local-icon {
-  flex: none;
-  color: var(--text-tertiary);
-}
-
-.vsm-local-name {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vsm-local-meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
 
 /* 「已禁用」角标（禁用项仍列出，靠它标识状态） */
 .vsm-off-badge {
@@ -632,7 +463,7 @@ async function openModsFolder() {
   padding: 1px 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -642,7 +473,7 @@ async function openModsFolder() {
   align-items: center;
   gap: 3px;
   margin-left: 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -656,19 +487,6 @@ async function openModsFolder() {
 .vs-ab-btn.update:hover:not(:disabled) {
   background: var(--color-brand);
   color: var(--text-inverse);
-}
-
-/* 删除确认 dialog */
-.vsm-dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.vsm-dialog-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
 }
 
 </style>

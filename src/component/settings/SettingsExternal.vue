@@ -251,7 +251,7 @@ onMounted(() => {
 }
 .tp-divider-text {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   transition: color 0.12s;
 }
@@ -273,13 +273,13 @@ onMounted(() => {
   gap: 10px;
   padding: 8px 12px;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-elevated);
 }
 .tp-cur-badge {
   flex: none;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   border-radius: 10px;
   background: var(--color-brand);
   color: var(--text-inverse);
@@ -296,7 +296,7 @@ onMounted(() => {
   gap: 8px;
   padding: 6px 10px;
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: border-color 0.12s;
 }
@@ -317,7 +317,7 @@ onMounted(() => {
   flex: none;
   min-width: 0;
   max-width: 150px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -327,7 +327,7 @@ onMounted(() => {
 .tp-acct-server {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -335,14 +335,14 @@ onMounted(() => {
 }
 
 .tp-cur-name {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
 .tp-cur-server {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -355,7 +355,7 @@ onMounted(() => {
 }
 .tp-label {
   flex: none;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 .tp-input {
@@ -363,11 +363,11 @@ onMounted(() => {
   min-width: 0;
   height: 30px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .tp-input:focus {
@@ -381,7 +381,7 @@ onMounted(() => {
   flex: none;
 }
 .tp-error-row {
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -393,9 +393,9 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -419,7 +419,7 @@ onMounted(() => {
 }
 .tp-error {
   flex: 1;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--color-danger);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -427,7 +427,7 @@ onMounted(() => {
 }
 .tp-compat {
   margin: 0 0 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -441,7 +441,7 @@ onMounted(() => {
   flex: none;
   min-width: 0;
   max-width: 160px;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -451,7 +451,7 @@ onMounted(() => {
 .tp-url {
   flex: 1;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -466,7 +466,7 @@ onMounted(() => {
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -477,7 +477,7 @@ onMounted(() => {
 }
 .tp-empty {
   padding: 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
   text-align: center;
 }
@@ -487,7 +487,7 @@ onMounted(() => {
   gap: 8px;
   padding: 6px 10px;
   border: 1px dashed var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .tp-add-label {
   flex: none;

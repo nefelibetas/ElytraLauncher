@@ -176,7 +176,7 @@ for (const def of COMMANDS) valuesFor(def);
 .cmd-pick-btn {
   padding: 4px 12px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
   background-color: var(--surface-elevated);
   border: 1px solid var(--border-default);
@@ -192,7 +192,7 @@ for (const def of COMMANDS) valuesFor(def);
 
 .cmd-desc {
   margin: 0 0 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -211,7 +211,7 @@ for (const def of COMMANDS) valuesFor(def);
   /* 固定宽：label 随字数变宽会让各行控件左缘参差 */
   flex: 0 0 64px;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
@@ -220,7 +220,7 @@ for (const def of COMMANDS) valuesFor(def);
   min-width: 0;
   height: 30px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -237,7 +237,7 @@ for (const def of COMMANDS) valuesFor(def);
   width: 96px;
   height: 30px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background-color: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -254,7 +254,7 @@ for (const def of COMMANDS) valuesFor(def);
   min-width: 0;
   padding: 6px 10px;
   font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-primary);
   background-color: var(--surface-page);
@@ -270,7 +270,7 @@ for (const def of COMMANDS) valuesFor(def);
 
 .cmd-err {
   margin: -4px 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--color-danger);
 }
 
@@ -285,13 +285,13 @@ for (const def of COMMANDS) valuesFor(def);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
 
 .cmd-copy-btn {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
 }
 </style>

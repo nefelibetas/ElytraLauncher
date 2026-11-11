@@ -12,6 +12,7 @@ pub mod version_query;
 mod ctx;
 mod dispatch;
 mod hook;
+mod model;
 mod shared;
 
 pub use ctx::{InstallCtx, VersionTarget};
@@ -19,6 +20,7 @@ pub use dispatch::install_loader;
 pub use fabric::{install_fabric, install_quilt};
 pub use forge::install_forge;
 pub use hook::{LoaderEvent, LoaderHook};
+pub use model::{LoaderChoice, LoaderKind};
 pub use neoforge::install_neoforge;
 pub use optifine::{install_optifine, OptifineMode};
 pub(crate) use shared::{expand_inheritance, merge_loader_profile, run_installer_command};
@@ -41,9 +43,9 @@ mod matrix {
     use crate::config::game_dirs;
     use crate::downloader::progress::ProgressCounters;
     use crate::game::loader::version_query;
+    use crate::game::loader::LoaderKind;
     use crate::game::version::manifest::fetch_version_list;
     use crate::game::version::meta::fetch_version_json_text;
-    use crate::task::LoaderKind;
 
     /// 一个安装用例：`ver` 为空表示取该 loader 当前最新稳定版（Fabric/Quilt）。
     struct Case {

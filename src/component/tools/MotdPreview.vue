@@ -42,7 +42,7 @@ const segments = computed(() => parseMotd(props.motd));
 
 <style scoped>
 .motd-preview {
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1.7;
   padding: 10px 14px;
   min-height: 24px;

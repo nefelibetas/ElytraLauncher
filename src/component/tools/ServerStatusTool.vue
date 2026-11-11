@@ -1,27 +1,16 @@
 <script setup lang="ts">
 // 服务器状态检测：输入地址（Java/基岩版，自动识别）探测在线状态。
-// 后端 commands/server_status.rs → server_status.rs（SLP / RakNet）。
+// 后端 commands/server_status.rs → server_status/（SLP / RakNet）。
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invoke } from "@tauri-apps/api/core";
 import { Radio, RefreshCw } from "@lucide/vue";
 import MotdPreview from "./MotdPreview.vue";
+import { pingServer, type ServerStatus } from "../../api/serverStatus";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import { errMsg } from "../../utils/error";
 
 const { t } = useI18n();
 
-/** 服务器状态（镜像 Rust ServerStatus）。 */
-interface ServerStatus {
-  edition: string;
-  version_name: string;
-  protocol: number | null;
-  online_players: number;
-  max_players: number;
-  motd: string;
-  player_sample: string[];
-  favicon: string | null;
-}
 
 type Edition = "" | "java" | "bedrock";
 
@@ -50,10 +39,7 @@ async function handlePing() {
   error.value = "";
   const start = performance.now();
   try {
-    status.value = await invoke<ServerStatus>("ping_server", {
-      address: addr,
-      edition: edition.value || null,
-    });
+    status.value = await pingServer(addr, edition.value);
   } catch (e) {
     status.value = null;
     error.value = errMsg(e);
@@ -171,7 +157,7 @@ function editionLabel(): string {
   flex: 1;
   min-width: 0;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   background: var(--surface-page);
   border: 1px solid var(--border-default);
@@ -203,7 +189,7 @@ function editionLabel(): string {
 .ping-error {
   margin-top: 12px;
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.6;
   color: var(--color-danger);
   background: var(--color-danger-bg);
@@ -232,7 +218,7 @@ function editionLabel(): string {
 .ping-icon {
   width: 48px;
   height: 48px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   image-rendering: pixelated;
   flex: 0 0 auto;
 }
@@ -245,7 +231,7 @@ function editionLabel(): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 
 .ping-dot {
@@ -267,15 +253,15 @@ function editionLabel(): string {
 }
 
 .ping-edition {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--color-brand);
   background: var(--color-brand-bg);
 }
 
 .ping-elapsed {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -284,18 +270,18 @@ function editionLabel(): string {
   align-items: center;
   gap: 8px;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
 .ping-protocol {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
 .ping-players {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
@@ -310,7 +296,7 @@ function editionLabel(): string {
 
 .ping-motd-label {
   margin: 12px 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
 
@@ -321,7 +307,7 @@ function editionLabel(): string {
 
 .ping-sample-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
@@ -334,15 +320,15 @@ function editionLabel(): string {
 
 .ping-sample-item {
   padding: 2px 8px;
-  font-size: 12px;
-  border-radius: 999px;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-pill);
   background: var(--surface-hover);
   color: var(--text-secondary);
 }
 
 .ping-sample-more {
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 
@@ -352,7 +338,7 @@ function editionLabel(): string {
   align-items: center;
   gap: 6px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
 </style>

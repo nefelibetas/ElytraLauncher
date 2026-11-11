@@ -115,7 +115,7 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
 }
 
 .sn-divider span {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -129,11 +129,11 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
   gap: 8px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--dur-fast);
   user-select: none;
   text-align: left;
 }
@@ -163,7 +163,7 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  transition: opacity var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
 }
 
 .sn-tab:hover .sn-refresh,

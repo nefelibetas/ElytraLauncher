@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::task::{LoaderChoice, LoaderKind};
+use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::util::{safe_relative_path, sanitize_fs_name};
 
 use super::model::{PackFile, PackMetaInfo};

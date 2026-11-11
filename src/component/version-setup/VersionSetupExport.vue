@@ -13,6 +13,7 @@ import {
 import { save } from "@tauri-apps/plugin-dialog";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
+import SetupCard from "../common/SetupCard.vue";
 import {
   authMode, msAccount, loadMsAccount, username as offlineUsername,
 } from "../../store/auth/auth";
@@ -103,27 +104,25 @@ async function exportModpack(format: ModpackExportFormat) {
 
 <template>
   <div class="vs-page">
-    <div class="setup-card">
-      <div class="setup-card-title">{{ t("settings.version.setup.export.scriptTitle") }}</div>
-      <div class="setup-desc">
-        {{ t("settings.version.setup.export.scriptDesc", { ext: scriptExt.toUpperCase() }) }}
-      </div>
+    <SetupCard
+      :padded="false"
+      :title="t('settings.version.setup.export.scriptTitle')"
+      :desc="t('settings.version.setup.export.scriptDesc', { ext: scriptExt.toUpperCase() })"
+    >
       <div class="setup-btn-row">
         <button class="setup-btn" @click="exportScript">
           <CodeXml :size="15" />
           <span>{{ t("settings.version.setup.export.scriptButton") }}</span>
         </button>
       </div>
-    </div>
+    </SetupCard>
 
-    <div class="setup-card">
-      <div class="setup-card-title">{{ t("settings.version.setup.export.modpackTitle") }}</div>
-      <div class="setup-desc">
-        {{ t("settings.version.setup.export.modpackDesc") }}
-      </div>
-      <div class="setup-desc">
-        {{ t("settings.version.setup.export.curseforgeHint") }}
-      </div>
+    <SetupCard
+      :padded="false"
+      :title="t('settings.version.setup.export.modpackTitle')"
+      :desc="t('settings.version.setup.export.modpackDesc')"
+    >
+      <div class="setup-desc">{{ t("settings.version.setup.export.curseforgeHint") }}</div>
       <div class="setup-btn-row">
         <button class="setup-btn" @click="exportModpack('mrpack')">
           <Package :size="15" />
@@ -134,67 +133,9 @@ async function exportModpack(format: ModpackExportFormat) {
           <span>{{ t("settings.version.setup.export.modpackCurseforgeButton") }}</span>
         </button>
       </div>
-    </div>
+    </SetupCard>
   </div>
 </template>
 
 <style scoped>
-.vs-page {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.setup-card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
-
-.setup-card + .setup-card {
-  margin-top: 12px;
-}
-
-.setup-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  padding: 12px 16px 4px;
-  letter-spacing: 0.5px;
-}
-
-.setup-desc {
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--text-secondary);
-  padding: 4px 16px 0;
-}
-
-.setup-btn-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px 14px;
-  flex-wrap: wrap;
-}
-
-.setup-btn {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.setup-btn:hover {
-  border-color: var(--color-brand);
-  color: var(--color-brand);
-}
 </style>

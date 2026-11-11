@@ -7,7 +7,7 @@ use crate::util::{infer_loader_from_json, mc_version_from_dir};
 use super::detect::Detected;
 use super::model::{OverridesRef, PackMetaInfo};
 use super::version_meta::loader_from_version_json;
-use crate::task::LoaderChoice;
+use crate::game::loader::LoaderChoice;
 
 pub struct DirectoryParsed {
     pub mc_version: String,

@@ -31,6 +31,7 @@ use crate::task::{
     global, update_and_emit, EventSink, LoaderKind, StepInfo, StepKind, StepSpec, StepStatus,
     TaskProgress, TaskStatus,
 };
+use crate::util::archive;
 use crate::util::safe_relative_path;
 
 fn cache_dir() -> PathBuf {
@@ -1265,13 +1266,13 @@ fn extract_member(
     let mut entry = archive
         .by_name(name)
         .map_err(common_err_ctx_key!("errors.file.read", "读取包内资源失败"))?;
-    extract::extract_entry_to(&mut entry, out)
+    archive::extract_entry_to(&mut entry, out)
 }
 
 /// 解压单个覆盖目录到版本目录根（词法穿越防护对齐 jdk safe_runtime_path）。
 fn extract_overrides(ov: &OverridesRef, vdir: &Path) -> Result<(), String> {
     // 文案与解析期一致：本地包的 zip_path 就是用户原文件，非"缓存"
-    let mut archive = extract::open_zip(Path::new(&ov.zip_path), "整合包")?;
+    let mut archive = archive::open_zip(Path::new(&ov.zip_path), "整合包")?;
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
@@ -1292,7 +1293,7 @@ fn extract_overrides(ov: &OverridesRef, vdir: &Path) -> Result<(), String> {
             std::fs::create_dir_all(parent)
                 .map_err(common_err_ctx_key!("errors.file.createDir", "创建目录失败"))?;
         }
-        extract::extract_entry_to(&mut entry, &out)?;
+        archive::extract_entry_to(&mut entry, &out)?;
     }
     Ok(())
 }
@@ -1304,7 +1305,7 @@ fn sum_overrides_bytes(overrides: &[OverridesRef]) -> u64 {
 
 /// 单个覆盖目录的解压总量（未压缩字节，进度基线用；读不到按 0）。
 fn sum_override_bytes(ov: &OverridesRef) -> u64 {
-    let Ok(mut archive) = extract::open_zip(Path::new(&ov.zip_path), "整合包缓存") else {
+    let Ok(mut archive) = archive::open_zip(Path::new(&ov.zip_path), "整合包缓存") else {
         return 0;
     };
     let mut total = 0u64;

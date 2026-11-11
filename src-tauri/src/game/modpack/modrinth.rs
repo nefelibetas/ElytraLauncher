@@ -1,6 +1,6 @@
 //! Modrinth MRPACK（`modrinth.index.json`）解析。
 
-use crate::task::{LoaderChoice, LoaderKind};
+use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::util::safe_relative_path;
 
 use super::model::{PackFile, PackMetaInfo};

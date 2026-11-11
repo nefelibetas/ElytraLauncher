@@ -2,7 +2,7 @@
 // 启动选项 + 内存分配卡片
 import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { memState, startMemoryMonitor } from "../../store/app/memory";
+import { startMemoryMonitor } from "../../store/app/memory";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import AutoTasksEditor from "./AutoTasksEditor.vue";
 import CheckToggle from "../common/CheckToggle.vue";
@@ -11,11 +11,11 @@ import { MEM_FLOOR_MB, MEM_STEP_MB } from "../../utils/memory";
 import {
   loWindowTitle, loPriority, loWinMode, loWinW, loWinH, loGameLang,
   loMemAuto, loMemMb, loMinMem, loMemOptimize, loVerifySsl, launchError,
-  memUsedMb, memGameMb, memUsedPct, memGamePct,
   memLimitMb, memAutoMb, memLowerMb, memUpperMb,
   saveLaunchOptions, loadLaunchOptions,
 } from "../../store/config/launchOptions";
-import { memLabelLeft, fmtGb } from "../../utils/format";
+import { fmtGb } from "../../utils/format";
+import MemoryUsageBar from "../launch/MemoryUsageBar.vue";
 
 const { t } = useI18n();
 
@@ -174,18 +174,7 @@ const gameLangOptions = computed<SelOption[]>(() => [
         />
         <span class="mem-bound" :title="t('settings.launch.memoryMax')">{{ fmtGb(memUpperMb) }}</span>
       </div>
-      <div class="mem-status">
-        <div class="mem-bar-labels">
-          <span class="mem-bar-label">{{ t("settings.launch.memoryUsed", { size: fmtGb(memUsedMb) }) }}</span>
-          <span v-if="memGamePct > 0" class="mem-bar-label" :style="{ left: memLabelLeft(memUsedPct) }">{{ t("settings.launch.memoryGame", { size: fmtGb(memGameMb) }) }}</span>
-        </div>
-        <div class="mem-bar">
-          <div class="mem-seg mem-used" :style="{ width: memUsedPct + '%' }"></div>
-          <div class="mem-seg mem-game" :style="{ width: memGamePct + '%' }"></div>
-          <div class="mem-seg mem-free"></div>
-        </div>
-        <div class="mem-total">{{ fmtGb(memUsedMb) }} / {{ fmtGb(memState.totalMb) }}</div>
-      </div>
+      <MemoryUsageBar />
     </div>
   </div>
 
@@ -206,59 +195,11 @@ const gameLangOptions = computed<SelOption[]>(() => [
 .mem-bound {
   flex: none;
   width: 56px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.mem-status {
-  margin-top: 2px;
-}
-
-.mem-bar-labels {
-  position: relative;
-  height: 16px;
-}
-
-.mem-bar-label {
-  position: absolute;
-  /* 文本起始紧贴色条左侧 */
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.mem-bar {
-  display: flex;
-  height: 10px;
-  border-radius: 5px;
-  overflow: hidden;
-  background: var(--border-default);
-}
-
-.mem-seg {
-  height: 100%;
-  transition: width 0.4s ease;
-}
-
-.mem-used {
-  background: var(--color-danger);
-}
-
-.mem-game {
-  background: var(--color-success);
-}
-
-.mem-free {
-  flex: 1;
-}
-
-.mem-total {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .lo-win-custom {

@@ -28,6 +28,7 @@ export default {
     loading: "加载中…",
     empty: "暂无内容",
     error: "加载失败",
+    downloads: "{count} 次下载",
   },
   language: {
     title: "语言",

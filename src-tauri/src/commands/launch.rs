@@ -94,16 +94,22 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
     } else {
         access_token
     };
-    let (mut auth, java_path, version_json, mc_dir, launcher_config, java_major) =
-        process::prepare_launch(
-            &version_dir_name,
-            &auth_mode,
-            &username,
-            &access_token,
-            &uuid,
-            &xuid,
-        )
-        .await?;
+    let process::LaunchPrep {
+        mut auth,
+        java_path,
+        version_json,
+        mc_dir,
+        launcher_config,
+        java_major,
+    } = process::prepare_launch(
+        &version_dir_name,
+        &auth_mode,
+        &username,
+        &access_token,
+        &uuid,
+        &xuid,
+    )
+    .await?;
 
     skin::apply_offline_skin(&mut auth);
 
