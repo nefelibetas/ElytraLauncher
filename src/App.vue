@@ -698,12 +698,12 @@ html[data-maximized="true"] .edge-shade {
   z-index: var(--z-tooltip);
   max-width: 320px;
   padding: 6px 10px;
-  color: var(--text-inverse);
+  color: var(--tooltip-fg);
   font-size: var(--fs-sm);
   line-height: 1.5;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
-  background: var(--toast-bg);
+  background: var(--tooltip-bg);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;

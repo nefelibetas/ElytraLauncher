@@ -84,9 +84,10 @@
   --color-badge-alt: #7C3AED;
   --color-badge-alt-bg: rgba(124, 58, 237, 0.1);
 
-  /* 弹窗遮罩 */
+  /* 弹窗遮罩 / 提示气泡：气泡始终是深底浅字，不跟随正文反色 */
   --overlay: rgba(15, 23, 42, 0.5);
-  --toast-bg: #1F2937;
+  --tooltip-bg: #1F2937;
+  --tooltip-fg: #FFFFFF;
 
   color-scheme: light;
 
@@ -254,7 +255,8 @@ html[data-mode="dark"]:not([data-theme^="custom-"]) {
   --color-warning: #FBBF24;
   --color-warning-bg: rgba(251, 191, 36, 0.14);
   --overlay: rgba(0, 0, 0, 0.62);
-  --toast-bg: #26332D;
+  --tooltip-bg: #26332D;
+  --tooltip-fg: #F8FAF9;
   --edge-line: rgba(255, 255, 255, 0.10);
   --edge-shade: rgba(0, 0, 0, 0.30);
   --titlebar-fg: #F8FAF9;
