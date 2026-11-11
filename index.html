@@ -27,6 +27,10 @@
                 --bs-brand: #059669;
                 --bs-titlebar: linear-gradient(135deg, #059669, #10b981);
                 --bs-active: rgba(5, 150, 105, 0.12);
+                --bs-logo-bg: rgba(255, 255, 255, 0.95);
+                --bs-logo-fg: var(--bs-brand);
+                --bs-logo-border: transparent;
+                --bs-logo-wing: #047857;
                 --bs-launch: linear-gradient(135deg, rgba(5, 150, 105, 0.18), rgba(16, 185, 129, 0.1));
                 position: fixed;
                 inset: 0;
@@ -63,6 +67,10 @@
                     --bs-titlebar: linear-gradient(135deg, #047857, #34d399);
                     --bs-active: rgba(52, 211, 153, 0.18);
                     --bs-launch: linear-gradient(135deg, rgba(52, 211, 153, 0.22), rgba(16, 185, 129, 0.12));
+                    --bs-logo-bg: rgba(4, 10, 7, 0.34);
+                    --bs-logo-fg: #f8faf9;
+                    --bs-logo-border: rgba(255, 255, 255, 0.16);
+                    --bs-logo-wing: #6ee7b7;
                     color: #e8f0eb;
                 }
             }
@@ -104,8 +112,9 @@
                 height: 30px;
                 padding: 0 10px;
                 border-radius: 8px;
-                background: rgba(255, 255, 255, 0.95);
-                color: var(--bs-brand);
+                background: var(--bs-logo-bg);
+                color: var(--bs-logo-fg);
+                box-shadow: inset 0 0 0 1px var(--bs-logo-border);
                 font-size: 18px;
                 font-weight: 800;
                 letter-spacing: -0.5px;
@@ -113,7 +122,7 @@
             .bs-brand svg {
                 width: 15px;
                 height: 15px;
-                color: #047857;
+                color: var(--bs-logo-wing);
             }
             .bs-tabs {
                 flex: 1;

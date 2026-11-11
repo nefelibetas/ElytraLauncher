@@ -174,6 +174,28 @@ fn init_tray(app: &tauri::App) -> Result<(), String> {
     Ok(())
 }
 
+fn startup_color(win: &tauri::WebviewWindow) -> tauri::window::Color {
+    if matches!(win.theme(), Ok(tauri::Theme::Dark)) {
+        tauri::window::Color(13, 21, 17, 255)
+    } else {
+        tauri::window::Color(242, 246, 243, 255)
+    }
+}
+
+/// 显示主窗口：先铺主题底色（避免透明首帧），恢复几何后显示；圆角由页面加载完成恢复。
+fn reveal_main_window(app: &tauri::AppHandle, background: Option<tauri::window::Color>) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    if win.is_visible().unwrap_or(false) {
+        return;
+    }
+    let color = background.unwrap_or_else(|| startup_color(&win));
+    let _ = win.set_background_color(Some(color));
+    window_state::restore(app);
+    focus_main_window(app);
+}
+
 #[tauri::command]
 fn has_tray() -> bool {
     TRAY_AVAILABLE.load(Ordering::Relaxed)
@@ -226,16 +248,20 @@ pub fn run() {
                 _ => {}
             }
         })
-        // 页面加载完成后恢复几何并显示窗口：启动时隐藏，避免默认位置闪一下。
+        // 导航开始即显示（纯色铺底），加载完成恢复透明圆角；隐藏期间不会闪默认位置。
         .on_page_load(|webview, payload| {
-            if webview.label() != "main"
-                || payload.event() != tauri::webview::PageLoadEvent::Finished
-            {
+            if webview.label() != "main" {
                 return;
             }
             let app = webview.app_handle();
-            window_state::restore(app);
-            focus_main_window(app);
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                reveal_main_window(app, None);
+            } else if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                // 页面加载完成、骨架/页面已可绘制，恢复透明圆角。
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_background_color(None);
+                }
+            }
         })
         .setup(|app| {
             // 配置损坏恢复：运行期经事件推送（启动期由前端 take_config_recovery_notice 拉取兜底）
@@ -433,21 +459,9 @@ pub fn run() {
     app.run(|app_handle, event| match event {
         // Ready 在窗口创建/居中完成后触发，此时设置几何才不会被随后创建流程覆盖。
         tauri::RunEvent::Ready => {
-            // 主窗口启动时隐藏，由前端首帧后调用 show_main_window 显示；
-            // 前端加载失败时兜底显示，避免应用不可见。
-            let handle = app_handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(4));
-                let target = handle.clone();
-                let _ = handle.run_on_main_thread(move || {
-                    if let Some(win) = target.get_webview_window("main") {
-                        if !win.is_visible().unwrap_or(false) {
-                            window_state::restore(&target);
-                            focus_main_window(&target);
-                        }
-                    }
-                });
-            });
+            // 应用一就绪先显示主窗口（骨架已可绘制），再关闭启动画面。
+            // 不能等页面加载事件，否则 WebView 初始化会让窗口迟迟不出现。
+            reveal_main_window(app_handle, None);
         }
         tauri::RunEvent::ExitRequested { .. } => window_state::save(app_handle),
         _ => {}

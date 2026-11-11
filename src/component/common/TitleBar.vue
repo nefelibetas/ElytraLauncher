@@ -183,7 +183,7 @@ onUnmounted(() => unlistenResize?.());
 .logo {
   font-size: var(--fs-2xl);
   font-weight: 800;
-  color: var(--color-brand);
+  color: var(--logo-fg);
   letter-spacing: -0.5px;
   padding: 0 10px;
   height: 30px;
@@ -191,11 +191,12 @@ onUnmounted(() => unlistenResize?.());
   align-items: center;
   gap: 6px;
   border-radius: var(--radius-md);
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: var(--logo-bg);
+  box-shadow: inset 0 0 0 1px var(--logo-border);
 }
 
 .logo-wing {
-  color: var(--color-brand-dark);
+  color: var(--logo-wing);
 }
 
 .back-btn {

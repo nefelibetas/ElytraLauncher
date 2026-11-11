@@ -26,18 +26,19 @@ function hideBootSkeleton() {
     el.classList.add("bs-hide");
     window.setTimeout(() => el.remove(), 220);
   };
-  // 两帧确保真实页面已经上屏；窗口不可见时 rAF 可能暂停，用定时器兜底。
+  // 两帧确保真实页面已经上屏；定时器兜底。
   requestAnimationFrame(() => requestAnimationFrame(fade));
   window.setTimeout(fade, 500);
 }
 
 // 首帧静态骨架留在 index.html；等初始路由组件就绪再挂载，避免 App 已挂载但 router-view 空白。
 let mounted = false;
-function mountApp() {
+async function mountApp() {
   if (mounted) return;
   mounted = true;
   app.mount("#app");
-  hideBootSkeleton();
+  // 窗口在应用就绪时已显示；骨架保持约 0.7s 作为首屏遮罩。
+  window.setTimeout(hideBootSkeleton, 733);
 }
 
 router.isReady().then(mountApp, mountApp);

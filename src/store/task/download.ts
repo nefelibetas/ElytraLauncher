@@ -35,22 +35,6 @@ export interface TaskItem {
   kind?: TaskKind
 }
 
-// 任务栏进度：汇总运行中/暂停中的任务（后端任务中心）。
-watch(
-  () => {
-    const running = dlState.tasks.filter(t => t.status === "running");
-    const paused = dlState.tasks.filter(t => t.status === "paused");
-    const progress = running.length > 0
-      ? running.reduce((sum, t) => sum + t.progress, 0) / running.length
-      : paused.length > 0
-        ? paused.reduce((sum, t) => sum + t.progress, 0) / paused.length
-        : 0;
-    return { running: running.length, paused: paused.length, progress };
-  },
-  state => setTaskbarSource("task", state),
-  { immediate: true },
-);
-
 /** 任务名优先用后端 key；旧任务回退原文。 */
 export function taskLabel(task: TaskItem): string {
   return task.nameKey ? t(task.nameKey, task.nameParams) : task.name;
@@ -264,6 +248,22 @@ export const dlState = reactive({
   /** 任务失败回调：弹出错误 dialog（失败资源由后端清理）。 */
   onTaskError: null as ((taskName: string, error: string) => void) | null,
 })
+
+// 任务栏进度：汇总运行中/暂停中的任务（后端任务中心）。
+watch(
+  () => {
+    const running = dlState.tasks.filter(t => t.status === "running");
+    const paused = dlState.tasks.filter(t => t.status === "paused");
+    const progress = running.length > 0
+      ? running.reduce((sum, t) => sum + t.progress, 0) / running.length
+      : paused.length > 0
+        ? paused.reduce((sum, t) => sum + t.progress, 0) / paused.length
+        : 0;
+    return { running: running.length, paused: paused.length, progress };
+  },
+  state => setTaskbarSource("task", state),
+  { immediate: true },
+);
 
 // ── Event listener ──────────────────────────
 
