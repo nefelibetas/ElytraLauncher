@@ -6,9 +6,9 @@ import { useI18n } from "vue-i18n";
 import { goBack } from "../store/app/nav";
 import { Check, RotateCcw } from "@lucide/vue";
 import {
-  THEMES, customThemes, builtinVars, EDITABLE_VAR_KEYS,
-  createCustomTheme, updateCustomTheme, activateCustomTheme,
-  type CustomThemeVars, type ThemeId,
+  THEMES, customThemes, builtinVars, builtinDarkVars, deriveDarkVars, darkSurfaceVars, EDITABLE_VAR_KEYS,
+  appearanceMode, resolvedAppearanceMode, createCustomTheme, updateCustomTheme, activateCustomTheme,
+  type AppearanceMode, type CustomThemeVars, type ThemeId,
 } from "../store/app/theme";
 
 const route = useRoute();
@@ -17,9 +17,17 @@ const { t } = useI18n();
 /** query.id：存在 = 编辑已有主题；缺失 = 新建。 */
 const editingId = computed(() => (route.query.id as string) || "");
 
+type EditorMode = AppearanceMode;
+
 const editName = ref("");
 const editDesc = ref("");
-const editVars = ref<CustomThemeVars>(initVars());
+const editMode = ref<EditorMode>(appearanceMode.value);
+const resolvedEditMode = computed(() => (editMode.value === "system" ? resolvedAppearanceMode.value : editMode.value));
+const lightVars = ref<CustomThemeVars>(builtinVars("grass"));
+const darkVars = ref<CustomThemeVars>(builtinDarkVars("grass"));
+const editVars = computed<CustomThemeVars>(() =>
+  resolvedEditMode.value === "light" ? lightVars.value : darkVars.value,
+);
 
 /** query.from：显式指定且存在的起点 id（内置主题或已存自定义）。 */
 function fromParam(): ThemeId | undefined {
@@ -30,26 +38,41 @@ function fromParam(): ThemeId | undefined {
   return undefined;
 }
 
-function initVars(): CustomThemeVars {
+function initVars() {
+  editMode.value = appearanceMode.value;
   if (editingId.value && customThemes.value[editingId.value]) {
     const theme = customThemes.value[editingId.value];
     editName.value = theme.name;
     editDesc.value = theme.desc ?? "";
-    return { ...theme.vars };
+    lightVars.value = { ...theme.vars };
+    darkVars.value = { ...(theme.darkVars ?? deriveDarkVars(theme.vars, theme.basedOn)) };
+    return;
   }
   const from = fromParam();
   editName.value = t("settings.appearance.editor.defaultName");
   editDesc.value = "";
-  if (!from) return builtinVars("grass");
-  if (THEMES.some((t) => t.id === from)) return builtinVars(from);
-  return { ...customThemes.value[from].vars };
+  if (!from) {
+    lightVars.value = builtinVars("grass");
+    darkVars.value = builtinDarkVars("grass");
+    return;
+  }
+  if (THEMES.some((t) => t.id === from)) {
+    lightVars.value = builtinVars(from);
+    darkVars.value = builtinDarkVars(from);
+    return;
+  }
+  const source = customThemes.value[from];
+  lightVars.value = { ...source.vars };
+  darkVars.value = { ...(source.darkVars ?? deriveDarkVars(source.vars, source.basedOn)) };
 }
+
+initVars();
 
 /** 同实例下 query 变化（新建 ↔ 编辑）：重建表单与色板状态。 */
 watch(
   () => route.query,
   () => {
-    editVars.value = initVars();
+    initVars();
     activeField.value = null;
     paletteOpen.value = false;
   },
@@ -71,14 +94,15 @@ const PART_LABEL_KEYS: Record<EditableVarKey, string> = {
 const previewStyle = computed(() => {
   const v = editVars.value;
   const brand = v["--color-brand"];
+  const dark = resolvedEditMode.value === "dark";
   return {
     "--pv-color-brand": brand,
-    "--pv-color-brand-bg": colorMix(brand, 10),
+    "--pv-color-brand-bg": colorMix(brand, dark ? 14 : 10),
     "--pv-text-primary": v["--text-primary"],
     "--pv-text-secondary": v["--text-secondary"],
     "--pv-text-tertiary": v["--text-tertiary"],
     "--pv-surface-page": v["--surface-page"],
-    "--pv-surface-card": "#FFFFFF",
+    "--pv-surface-card": dark ? darkSurfaceVars(v["--surface-page"])["--surface-card"] : "#FFFFFF",
     "--pv-surface-hover": visibleHover(v["--surface-hover"]),
     "--pv-border-default": v["--border-default"],
     "--pv-border-strong": v["--border-strong"],
@@ -175,10 +199,11 @@ const currentHex = computed(() => {
   return /^#[0-9a-fA-F]{6}$/.test(v) ? v : "#000000";
 });
 
-/** 重置为默认（grass 值）。 */
+/** 重置为当前模式的 grass 默认值。 */
 function resetField() {
   if (!activeField.value) return;
-  editVars.value[activeField.value] = builtinVars("grass")[activeField.value];
+  const defaults = resolvedEditMode.value === "dark" ? builtinDarkVars("grass") : builtinVars("grass");
+  editVars.value[activeField.value] = defaults[activeField.value];
 }
 
 // ── 保存 / 返回 ──
@@ -187,7 +212,12 @@ function resetField() {
 function save() {
   const name = editName.value.trim() || t("settings.appearance.editor.defaultName");
   const desc = editDesc.value.trim();
-  const patch = { name, desc: desc || undefined, vars: { ...editVars.value } };
+  const patch = {
+    name,
+    desc: desc || undefined,
+    vars: { ...lightVars.value },
+    darkVars: { ...darkVars.value },
+  };
   if (editingId.value && customThemes.value[editingId.value]) {
     updateCustomTheme(editingId.value, patch);
     activateCustomTheme(editingId.value as ThemeId);
@@ -293,6 +323,29 @@ function save() {
 
       <!-- 右栏：上调色板 + 下标题/保存 -->
       <div class="cte-right">
+      <div class="cte-mode-switch" role="group" :aria-label="t('settings.appearance.editor.modeLabel')">
+        <button
+          type="button"
+          class="cte-mode-btn"
+          :class="{ active: editMode === 'system' }"
+          :aria-pressed="editMode === 'system'"
+          @click="editMode = 'system'"
+        >{{ t("settings.appearance.mode.system") }}</button>
+        <button
+          type="button"
+          class="cte-mode-btn"
+          :class="{ active: editMode === 'light' }"
+          :aria-pressed="editMode === 'light'"
+          @click="editMode = 'light'"
+        >{{ t("settings.appearance.editor.light") }}</button>
+        <button
+          type="button"
+          class="cte-mode-btn"
+          :class="{ active: editMode === 'dark' }"
+          :aria-pressed="editMode === 'dark'"
+          @click="editMode = 'dark'"
+        >{{ t("settings.appearance.editor.dark") }}</button>
+      </div>
       <!-- 上：内嵌调色板 -->
       <div class="cte-palette" :class="{ open: paletteOpen }">
         <template v-if="activeField && paletteOpen">
@@ -372,19 +425,56 @@ function save() {
 
 <style scoped>
 .cte {
+  width: 100%;
   height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--surface-page);
 }
 
 /* 右栏：上（调色板）下（标题/保存） */
 .cte-right {
   flex: 0 0 280px;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.cte-mode-switch {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-input);
+}
+
+.cte-mode-btn {
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.cte-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.cte-mode-btn.active {
+  background: var(--surface-elevated);
+  color: var(--color-brand);
+  box-shadow: var(--shadow-sm);
 }
 
 .cte-titles {
@@ -485,6 +575,8 @@ function save() {
 
 .cte-body {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   display: flex;
   gap: 20px;

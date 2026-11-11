@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 外观设置：内置亮色主题（Grass/End/Nether/Ice）+ 自定义色板。
+// 外观设置：内置主题（Grass/End/Nether/Ice）+ 自定义双色板。
 // 即时生效并持久化 localStorage；自定义卡片 hover 显示编辑/删除。
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";

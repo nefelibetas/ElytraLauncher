@@ -89,7 +89,7 @@ export default {
       dark: "深色",
       system: "跟随系统",
     },
-    modeCustomHint: "自定义主题使用自身色板，不随外观模式变化",
+    modeCustomHint: "自定义主题分别使用浅色/深色色板，随外观模式切换",
     addCustom: "添加自定义",
     addCustomDesc: "自定义品牌色与文本配色",
     customDesc: "自定义外观",
@@ -108,6 +108,9 @@ export default {
       emptyHint: "点击左侧预览中的色块调整对应颜色",
       namePlaceholder: "外观名称",
       descPlaceholder: "副标题（可选）",
+      modeLabel: "配色模式",
+      light: "浅色",
+      dark: "深色",
     },
     theme: {
       grass: { label: "草方块绿", desc: "Minecraft 草方块 / 翡翠" },

@@ -92,7 +92,7 @@ export default {
       dark: "Dark",
       system: "Follow system",
     },
-    modeCustomHint: "Custom themes keep their own palette and ignore the appearance mode",
+    modeCustomHint: "Custom themes use separate light and dark palettes and follow the appearance mode",
     addCustom: "Add Custom",
     addCustomDesc: "Customize brand and text colors",
     customDesc: "Custom theme",
@@ -111,6 +111,9 @@ export default {
       emptyHint: "Click a swatch in the preview to adjust its color",
       namePlaceholder: "Theme name",
       descPlaceholder: "Subtitle (optional)",
+      modeLabel: "Palette mode",
+      light: "Light",
+      dark: "Dark",
     },
     theme: {
       grass: { label: "Grass Green", desc: "Minecraft Grass Block / Emerald" },

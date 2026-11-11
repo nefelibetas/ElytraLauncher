@@ -235,9 +235,9 @@
 }
 
 
-/* ===== 深色模式：内置主题共享的中性色板 =====
-   自定义主题是显式色板，不参与深色覆盖（theme.ts 对自定义主题强制 data-mode="light"）。 */
-html[data-mode="dark"]:not([data-theme^="custom-"]) {
+/* ===== 深色模式：所有主题共享的中性色板 =====
+   自定义主题的深色品牌/表面/边框由 theme.ts 注入的 dark 块覆盖，其余令牌继承这里。 */
+html[data-mode="dark"] {
   color-scheme: dark;
   --text-primary: #E8F0EB;
   --text-secondary: #A7B5AC;
