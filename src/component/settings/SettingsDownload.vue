@@ -2,7 +2,7 @@
 // 下载设置卡片：下载源主开关 + 细分折叠 + 网络代理 + 线程数；下拉统一用共享 DropSelect。
 import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown } from "@lucide/vue";
+import { SlidersHorizontal } from "@lucide/vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import CheckToggle from "../common/CheckToggle.vue";
@@ -113,7 +113,7 @@ function openCurseforgeConsole() {
         v-tooltip="t('settings.download.adjustDetail')"
         @click="dlDetailOpen = !dlDetailOpen"
       >
-        <ChevronDown :size="14" />
+        <SlidersHorizontal :size="15" />
       </button>
     </div>
 
@@ -287,27 +287,23 @@ function openCurseforgeConsole() {
 
 .dl-detail-toggle {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
   background: transparent;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.15s;
 }
-.dl-detail-toggle:hover {
-  color: var(--text-primary);
+.dl-detail-toggle:hover,
+.dl-detail-toggle.open {
+  color: var(--color-brand);
   border-color: var(--color-brand);
-}
-.dl-detail-toggle svg {
-  transition: transform 0.2s ease;
-}
-.dl-detail-toggle.open svg {
-  transform: rotate(180deg);
+  background: var(--color-brand-bg);
 }
 
 .dl-source-detail {
