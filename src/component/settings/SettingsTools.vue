@@ -3,6 +3,7 @@
 import type { Component } from "vue";
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { registerLocalBackHandler } from "../../store/app/nav";
 import {
   Server, Type, Sword, PawPrint, Terminal, Paintbrush, Download, Map, MapPin, ArrowLeft,
 } from "@lucide/vue";
@@ -53,23 +54,25 @@ function backToList() {
   selected.value = null;
 }
 
-/** 工具详情内 ESC 回 Grid；有弹窗时让弹窗先处理。 */
-function onEsc(e: KeyboardEvent) {
-  if (!selected.value || e.key !== "Escape" || document.querySelector(".dialog-overlay")) return;
-  e.stopPropagation();
-  backToList();
-}
+let unregisterBack: (() => void) | null = null;
 
-onMounted(() => document.addEventListener("keydown", onEsc, true));
-onBeforeUnmount(() => document.removeEventListener("keydown", onEsc, true));
+onMounted(() => {
+  // 工具详情属于设置页内部层级：侧键 / ESC 返回先回到工具列表，而不是回启动页。
+  unregisterBack = registerLocalBackHandler(() => {
+    if (!selected.value) return false;
+    backToList();
+    return true;
+  });
+});
+onBeforeUnmount(() => {
+  unregisterBack?.();
+  unregisterBack = null;
+});
 </script>
 
 <template>
   <div class="stg-tools">
-    <Transition
-      :name="navDirection === 'forward' ? 'tool-forward' : 'tool-back'"
-      mode="out-in"
-    >
+    <Transition :name="navDirection === 'forward' ? 'tool-forward' : 'tool-back'">
       <div v-if="!active" key="list" class="stg-tools-list">
         <header class="stg-tools-head">
           <h2>{{ t("tools.tabs.title") }}</h2>
@@ -105,6 +108,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onEsc, true));
 
 <style scoped>
 .stg-tools {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -120,31 +124,41 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onEsc, true));
   min-height: 0;
 }
 
+/* 工具 Grid ↔ 详情：与社区资源列表 → 详情一致的横向整页推入。 */
 .tool-forward-enter-active,
 .tool-forward-leave-active,
 .tool-back-enter-active,
 .tool-back-leave-active {
-  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.tool-forward-enter-from {
-  opacity: 0;
-  transform: translateX(24px) scale(0.985);
+.tool-forward-enter-from { transform: translateX(100%); }
+.tool-forward-leave-to { transform: translateX(-100%); }
+.tool-back-enter-from { transform: translateX(-100%); }
+.tool-back-leave-to { transform: translateX(100%); }
+
+.tool-forward-leave-active,
+.tool-back-leave-active {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.tool-forward-leave-to {
-  opacity: 0;
-  transform: translateX(-16px) scale(0.99);
+.tool-forward-enter-active,
+.tool-back-enter-active {
+  position: relative;
+  z-index: 1;
 }
 
-.tool-back-enter-from {
-  opacity: 0;
-  transform: translateX(-24px) scale(0.985);
-}
-
-.tool-back-leave-to {
-  opacity: 0;
-  transform: translateX(16px) scale(0.99);
+@media (prefers-reduced-motion: reduce) {
+  .tool-forward-enter-active,
+  .tool-forward-leave-active,
+  .tool-back-enter-active,
+  .tool-back-leave-active {
+    transition: none;
+  }
 }
 
 .stg-tools-head h2 {
