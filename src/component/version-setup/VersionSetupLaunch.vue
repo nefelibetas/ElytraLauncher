@@ -8,7 +8,7 @@ import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import CheckToggle from "../common/CheckToggle.vue";
 import RangeSlider from "../common/RangeSlider.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
-import { memState } from "../../store/app/memory";
+import { memState, startMemoryMonitor } from "../../store/app/memory";
 import { fmtGb, memLabelLeft } from "../../utils/format";
 import {
   autoAllocMb, memCeilMb, snapMemMb, MEM_FLOOR_MB, MEM_STEP_MB,
@@ -80,7 +80,11 @@ async function load() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  // 内存状态只在本页展示：进页再启动轮询，避免启动器常驻 2s IPC。
+  startMemoryMonitor();
+  void load();
+});
 onBeforeUnmount(() => {
   window.clearTimeout(saveTimer);
   window.clearTimeout(savedTimer);

@@ -117,6 +117,7 @@ async function refreshWorldsSilent(versionName: string) {
 }
 
 export function startWorldsLivePolling(versionName: string) {
+	ensureVersionDirEvents();
 	if (worldsPollTimer !== null && worldsPollVersion === versionName) return;
 	stopWorldsLivePolling();
 	worldsPollVersion = versionName;

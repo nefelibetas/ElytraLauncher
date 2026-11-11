@@ -316,14 +316,12 @@ export async function ensureVersionsWatch() {
       void loadVersions();
     }
   });
-  // 聚焦版本决定后端额外监听哪些版本子目录（变化即重定向）
-  watch(
-    selectedVersion,
-    (v) => {
-      void invoke("set_watched_version", { version: v || null });
-    },
-    { immediate: true },
-  );
+  // 聚焦版本决定后端额外监听哪些版本子目录（变化即重定向）；注册可能晚于首轮版本加载，
+  // 故先按当前值对齐一次，避免漏掉初始选中。
+  void invoke("set_watched_version", { version: selectedVersion.value || null });
+  watch(selectedVersion, (v) => {
+    void invoke("set_watched_version", { version: v || null });
+  });
 }
 
 export function pickVersion(v: string) {

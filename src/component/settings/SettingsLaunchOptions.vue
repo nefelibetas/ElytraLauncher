@@ -2,7 +2,7 @@
 // 启动选项 + 内存分配卡片
 import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { memState } from "../../store/app/memory";
+import { memState, startMemoryMonitor } from "../../store/app/memory";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import AutoTasksEditor from "./AutoTasksEditor.vue";
 import CheckToggle from "../common/CheckToggle.vue";
@@ -19,7 +19,11 @@ import { memLabelLeft, fmtGb } from "../../utils/format";
 
 const { t } = useI18n();
 
-onMounted(loadLaunchOptions);
+onMounted(() => {
+  // 内存状态只在本页展示：进页再启动轮询，避免启动器常驻 2s IPC。
+  startMemoryMonitor();
+  void loadLaunchOptions();
+});
 
 const memRange = computed<[number, number]>(() => [memLowerMb.value, memUpperMb.value]);
 

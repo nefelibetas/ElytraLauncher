@@ -23,6 +23,15 @@ declare module "vue-router" {
 export const ROUTE_DOWNLOAD = "/download";
 export const ROUTE_RESOURCE_DETAIL = "/resource-detail";
 
+let tabPrefetchStarted = false;
+
+/** 首帧后预取顶级 tab 页面的整个动态 import 图，点击时不再等待 chunk 解析。 */
+export function prefetchTabPages(): void {
+  if (tabPrefetchStarted) return;
+  tabPrefetchStarted = true;
+  void Promise.allSettled([Download(), Settings(), DownloadDetail()]);
+}
+
 const routes = [
   { path: "/", name: "launch", component: Launch },
   { path: ROUTE_DOWNLOAD, name: "download", component: Download },
@@ -62,11 +71,11 @@ router.beforeEach((to, from) => {
   const toLevel = routeLevel[to.name as string] ?? 0;
   const fromLevel = routeLevel[from.name as string] ?? 0;
   if (toLevel > fromLevel) {
-    to.meta.transition = "slide-right"; // 进入更深层级
+    to.meta.transition = "slide-left"; // 进入更深层级：新页从右侧推入
   } else if (toLevel < fromLevel) {
-    to.meta.transition = "slide-left"; // 返回上级
+    to.meta.transition = "slide-right"; // 返回上级：新页从左侧推入
   } else {
-    // 同级：tab 顺序（右移左滑，左移右滑）
+    // 同级：按 tab 顺序决定方向（右侧 tab → 内容左移，左侧 tab → 内容右移）
     const fi = tabOrder.indexOf(from.name as string);
     const ti = tabOrder.indexOf(to.name as string);
     to.meta.transition = fi >= 0 && ti >= 0 && ti > fi ? "slide-left" : "slide-right";

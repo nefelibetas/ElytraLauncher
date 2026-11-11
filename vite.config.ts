@@ -12,18 +12,8 @@ export default defineConfig(() => ({
   // 显式固定，勿依赖 Vite 默认 target——它随主版本上移会静默抬高前端基线。
   build: {
     target: ["chrome111", "safari16.4"],
-    // vendor / stores / i18n 独立成块；页面与工具交给路由/动态导入自然分块，首屏不预加载未访问页面。
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            { name: "vendor", test: /node_modules/ },
-            { name: "stores", test: /[\\/]src[\\/]store[\\/]/ },
-            { name: "i18n", test: /[\\/]src[\\/]i18n[\\/]/ },
-          ],
-        },
-      },
-    },
+    // 不手动按目录合并 chunk：本地读取无网络成本，按路由/动态导入自然分块可避免
+    // 未访问页面的 store 与语言包被入口 preload 进启动路径。
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { X, Check, LoaderCircle, RotateCcw, HardDriveDownload, Pause } from "@lucide/vue"
-import { dlState, TaskItem, interruptedJobs, resumingAll, resumeAllInterrupted, dismissAllInterrupted, taskLabel, stepLabel } from "../store/task/download"
+import { dlState, TaskItem, interruptedJobs, checkInterrupted, resumingAll, resumeAllInterrupted, dismissAllInterrupted, taskLabel, stepLabel } from "../store/task/download"
 import { errMsg } from "../utils/error"
 import { fmtSpeed, fmtEta } from "../utils/format"
 import { showToast } from "../utils/toast"
@@ -12,6 +12,11 @@ import ScrollTopFab from "../component/common/ScrollTopFab.vue"
 const MAX_VISIBLE_STEPS = 8
 const expandedSteps = ref<Set<string>>(new Set())
 const { t } = useI18n()
+
+onMounted(() => {
+  // 中断恢复横幅只在本页展示：进页时再查 SQLite，避免拖慢启动。
+  void checkInterrupted()
+})
 
 function visibleSteps(task: TaskItem) {
   if (expandedSteps.value.has(task.taskId) || task.steps.length <= MAX_VISIBLE_STEPS) {

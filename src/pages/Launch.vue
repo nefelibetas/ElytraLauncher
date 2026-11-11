@@ -19,16 +19,21 @@ import { selectedVersion } from "../store/app/selectedVersion";
 const { t } = useI18n();
 
 onMounted(async () => {
-  await loadLastUsername();
-  await ensureAuthReady(); // 正版 / 第三方账号列表（衣柜判定来源也要等这一份）
-  await loadOfflineAccounts();
-  void renderOfflineAvatar(username.value);
+  // 首屏数据互不依赖：账号、离线用户名、历史、版本列表并行；头像/版本卡片尽早出现。
+  const auth = ensureAuthReady(); // 正版 / 第三方账号列表（衣柜判定来源也要等这一份）
+  const last = loadLastUsername();
+  const offline = loadOfflineAccounts();
+  const versions = loadVersions();
+  const listeners = Promise.all([ensureLoginListener(), ensureGameExitListener()]);
+
+  await auth;
   // 账号变化时渲染正版头像（watch 注册在 auth store 模块级，路由往返不累积）
   void renderPremiumAvatar(msAccount.value?.uuid ?? "");
 
-  await ensureLoginListener();
-  await ensureGameExitListener();
-  await loadVersions();
+  await last;
+  void renderOfflineAvatar(username.value);
+
+  await Promise.all([offline, listeners, versions]);
 });
 
 </script>

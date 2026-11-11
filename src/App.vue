@@ -4,14 +4,11 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { X } from "@lucide/vue";
 import { initNavHistory, goBack, goForward } from "./store/app/nav";
+import { prefetchTabPages } from "./router";
 import TitleBar from "./component/common/TitleBar.vue";
 import AlertDialog from "./component/common/AlertDialog.vue";
-import { dlState, ensureListen, checkInterrupted, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
-import { startMemoryMonitor } from "./store/app/memory";
-import { ensureConfigRecoveryWatch } from "./store/config/configRecovery";
+import { dlState, ensureListen, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
 import { ensureAutoTasksListen, lastAutoTasksFinished } from "./store/config/autoTasks";
-import { ensureVersionsWatch } from "./store/config/gameDirs";
-import { ensureVersionDirEvents } from "./store/task/versionDetail";
 import { setSelected } from "./store/app/selectedVersion";
 import { toasts, dismissToast, pauseToast, resumeToast, showToast } from "./utils/toast";
 import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/focusNav";
@@ -84,6 +81,24 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 function onKeyDown(e: KeyboardEvent) {
+  // 鼠标侧键可能被系统映射成 BrowserBack/Forward 或 Alt+←/→，不能依赖 WebView 原生历史。
+  const browserBack = e.key === "BrowserBack" || e.keyCode === 166;
+  const browserForward = e.key === "BrowserForward" || e.keyCode === 167;
+  const altBack =
+    e.altKey && !isEditableTarget(e.target) && e.key === "ArrowLeft";
+  const altForward =
+    e.altKey && !isEditableTarget(e.target) && e.key === "ArrowRight";
+  if (browserBack || browserForward || altBack || altForward) {
+    e.preventDefault();
+    if (e.repeat) return;
+    const now = Date.now();
+    if (now - lastSideAt < 120) return; // 与鼠标事件共用去重窗口
+    lastSideAt = now;
+    if (browserBack || altBack) goBack();
+    else goForward();
+    return;
+  }
+
   // 禁止打开开发者工具：F12 / Ctrl+Shift+I/J/C / Ctrl+U
   if (
     e.key === "F12" ||
@@ -154,6 +169,15 @@ function onContextMenu(e: MouseEvent) {
   e.preventDefault();
 }
 
+/** 首帧后执行非关键启动任务；不支持 requestIdleCallback 的 WebView 回退到定时器。 */
+function afterFirstPaint(task: () => void) {
+  const idle = (window as Window & {
+    requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+  }).requestIdleCallback;
+  if (typeof idle === "function") idle(task, { timeout: 1500 });
+  else window.setTimeout(task, 200);
+}
+
 onMounted(() => {
   pinnedHash = location.hash || "#/";
   router.afterEach(() => {
@@ -167,22 +191,25 @@ onMounted(() => {
   document.addEventListener("mouseup", onSideButton, true);
   document.addEventListener("pointerdown", onSideButton, true);
   document.addEventListener("pointerup", onSideButton, true);
+  // 部分 WebView2 版本把 XBUTTON1/2 只投递为 auxclick。
+  document.addEventListener("auxclick", onSideButton, true);
   // 鼠标交互后清掉键盘焦点环（键盘遍历打的标记）——用冒泡段，不与侧键捕获冲突
   document.addEventListener("pointerdown", clearFocusRing);
   window.addEventListener("popstate", onPopState);
   ensureListen();
-  // 崩溃/重启恢复：拉取上次未完成的任务（DownloadDetail 横幅询问恢复）
-  void checkInterrupted();
-  // 持续监听系统内存（设置页/启动页共用）
-  startMemoryMonitor();
-  // 配置损坏恢复提示（启动期拉取 + 运行期订阅事件）
-  void ensureConfigRecoveryWatch();
-  // 自动任务事件（进度 + 阶段结束汇总）
-  ensureAutoTasksListen();
-  // 游戏目录变化事件（后端监听激活目录 versions/ → 版本列表自动刷新）
-  void ensureVersionsWatch();
-  // 版本目录事件（存档/Mod 变化）：全局注册一次，页面只切换后端聚焦
-  ensureVersionDirEvents();
+  // 非首屏任务延后到空闲期：配置恢复、自动任务事件、版本目录监听。
+  afterFirstPaint(() => {
+    void import("./store/config/configRecovery")
+      .then((m) => m.ensureConfigRecoveryWatch())
+      .catch(() => {});
+    ensureAutoTasksListen();
+    void import("./store/config/gameDirs")
+      .then((m) => m.ensureVersionsWatch())
+      .catch(() => {});
+    // 顶级 tab 页面在首帧后预取：保持启动包精简，点击设置/资源中心/任务中心时不再等 chunk。
+    prefetchTabPages();
+  });
+  // 崩溃恢复横幅与内存监控分别由 DownloadDetail / 设置页按需启动。
 });
 
 onUnmounted(() => {
@@ -192,6 +219,7 @@ onUnmounted(() => {
   document.removeEventListener("mouseup", onSideButton, true);
   document.removeEventListener("pointerdown", onSideButton, true);
   document.removeEventListener("pointerup", onSideButton, true);
+  document.removeEventListener("auxclick", onSideButton, true);
   document.removeEventListener("pointerdown", clearFocusRing);
   window.removeEventListener("popstate", onPopState);
 });
@@ -204,7 +232,10 @@ onUnmounted(() => {
     <TitleBar />
     <main class="main-content">
       <router-view v-slot="{ Component, route }">
-        <Transition :name="route.meta.transition ?? 'route'" mode="out-in">
+        <Transition
+          :name="route.meta.transition ?? 'route'"
+          :mode="route.meta.transition?.startsWith('slide-') ? undefined : 'out-in'"
+        >
           <component :is="Component" />
         </Transition>
       </router-view>
@@ -517,6 +548,27 @@ html.i18n-switching *::after {
   animation-duration: 0s !important;
 }
 
+/* 主题切换瞬间给全局颜色属性统一过渡，避免 CSS 变量整体跳变；只作用于切换窗口期。 */
+html.theme-switching:not(.i18n-switching) *,
+html.theme-switching:not(.i18n-switching) *::before,
+html.theme-switching:not(.i18n-switching) *::after {
+  transition:
+    background-color 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    fill 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition: none !important;
+  }
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -536,6 +588,7 @@ html.i18n-switching *::after {
 }
 
 .main-content {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
