@@ -110,8 +110,14 @@ parking_lot = "0.12"
 # kcp = port_forward 数据面首选传输（DataPlaneTcpConnectOptions::gateway 为 PreferKcp）：
 #   缺 kcp feature 时 kcp_ready=false，回退 smoltcp 用户态 TCP 栈，
 #   MC 登录配置同步（registry 数百 KB~数 MB）传输会中断（实测"连接中断"）。
-easytier = { git = "https://github.com/EasyTier/EasyTier", default-features = false, features = ["management", "socks5", "smoltcp", "kcp", "quic", "websocket", "logging", "aes-gcm"] }
+# endpoint-discovery = 解析 https/http/txt/srv 协调节点（默认社区节点是 https，缺则永远
+#   "endpoint discovery is disabled"）；同时带入 dns-resolver（STUN TXT 记录依赖它）。
+easytier = { git = "https://github.com/EasyTier/EasyTier", default-features = false, features = ["management", "socks5", "smoltcp", "kcp", "quic", "websocket", "logging", "aes-gcm", "endpoint-discovery"] }
 easytier-core = { git = "https://github.com/EasyTier/EasyTier", default-features = false }
+# rustls 进程级 CryptoProvider：reqwest 启用 aws-lc-rs、easytier 启用 ring，二者并存时
+# rustls 无法自动选择（协调节点 HTTPS 发现会在握手前 panic）；显式装 ring（与 easytier 内部一致）。
+# 主版本须与 easytier 依赖的 rustls 一致，否则 install_default 装到另一份 rustls 上无效。
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

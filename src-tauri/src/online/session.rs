@@ -20,6 +20,17 @@ use super::scaffold::room::RoomCredential;
 /// easytier 全局日志初始化锁（其 LOGGER 是进程级 OnceLock，重复 init 报错）。
 static EASYTIER_LOG_INIT: std::sync::Once = std::sync::Once::new();
 
+/// rustls 进程级 provider 安装锁（`install_default` 只允许一次，重复返回 Err）。
+static RUSTLS_PROVIDER_INIT: std::sync::Once = std::sync::Once::new();
+
+/// 显式安装 ring provider：依赖树同时启用 aws-lc-rs（reqwest）与 ring（easytier）时
+/// rustls 无法自动选择，协调节点 HTTPS 发现会在握手前 panic。
+fn install_rustls_provider() {
+    RUSTLS_PROVIDER_INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 /// 初始化 easytier 文件日志（联机诊断）：记录数据面实际路由、peer/虚拟 IP、连接建立与断开原因，
 /// 输出到 exe 旁 `Elytra/online-easytier.log`（debug 级，10MB × 3 轮转）。幂等（Once）；失败仅打印 stderr。
 pub(crate) fn init_easytier_logging() {
@@ -116,6 +127,7 @@ pub struct EasyTierSession {
 impl EasyTierSession {
     pub async fn start(config: SessionConfig) -> Result<Self, String> {
         init_easytier_logging();
+        install_rustls_provider();
         let toml = build_config(&config)?;
         let instance = create_native_instance(toml).map_err(common_err_ctx_key!(
             "errors.online.failed",
