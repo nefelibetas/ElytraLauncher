@@ -15,7 +15,7 @@ import { setSelected } from "./store/app/selectedVersion";
 import { toasts, dismissToast, pauseToast, resumeToast, showToast } from "./utils/toast";
 import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/focusNav";
 import { errMsg, formatError } from "./utils/error";
-import { showNativeTextMenu } from "./utils/contextMenu";
+import { showTextMenu } from "./utils/contextMenu";
 import { currentLocale } from "./i18n";
 import { flashTaskbarAttention } from "./store/app/taskbar";
 import { notifyIfUnfocused } from "./utils/notify";
@@ -213,7 +213,7 @@ async function onContextMenu(e: MouseEvent) {
   if (!target) return;
   const selected = (window.getSelection()?.toString().length ?? 0) > 0;
   if (!isEditableTarget(target) && !selected) {
-    // 非文本区域保持无浏览器菜单（后续可接行级原生菜单）。
+    // 非文本区域不弹浏览器菜单；行级操作菜单由各组件自行处理。
     e.preventDefault();
     return;
   }
@@ -221,9 +221,9 @@ async function onContextMenu(e: MouseEvent) {
   const editable = target.closest("input, textarea, [contenteditable='true']") as HTMLElement | null;
   editable?.focus();
   try {
-    await showNativeTextMenu();
+    showTextMenu();
   } catch {
-    // 原生菜单不可用时静默降级，不弹 Chromium 网页菜单。
+    // 菜单构建失败时静默降级，不弹 Chromium 网页菜单。
   }
 }
 

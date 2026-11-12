@@ -9,7 +9,7 @@ import { openGameFolder } from "../../store/config/gameDirs";
 import { useSelectable } from "../../utils/useSelectable";
 import { useBatchDelete } from "../../utils/useBatchDelete";
 import { copyText } from "../../utils/clipboard";
-import { showNativeActionMenu } from "../../utils/contextMenu";
+import { showActionMenu } from "../../utils/contextMenu";
 import CommunityFileMeta from "../common/CommunityFileMeta.vue";
 import ConfirmDialog from "../common/ConfirmDialog.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
@@ -85,7 +85,7 @@ onMounted(async () => {
 
 /** 行级右键菜单：复制文件名 / 打开目录 / 删除。 */
 async function openRowMenu(f: { file_name: string }) {
-  await showNativeActionMenu(
+  showActionMenu(
     [
       { id: "copy", label: t("common.contextMenu.copyFileName") },
       { id: "folder", label: t("common.contextMenu.openFolder") },

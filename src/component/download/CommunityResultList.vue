@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { useI18n } from "vue-i18n";
-import type { CommunityDisplayItem } from "../../store/community/communitySearch";
-import { dlTranslateMode } from "../../store/config/downloaderConfig";
+import { communityTranslationEnabled, type CommunityDisplayItem } from "../../store/community/communitySearch";
 import { openResourceDetail } from "../../store/community/resourceDetail";
 import { fmtCount } from "../../utils/format";
 import IconImage from "../common/IconImage.vue";
@@ -65,12 +64,12 @@ const { t } = useI18n();
             <IconImage :src="m.icon_url" :size="32" />
             <span class="cs-info">
               <span class="cs-title-row">
-                <span class="cs-title">{{ m.title_zh ?? m.title }}</span>
-                <span v-if="dlTranslateMode === 'zh' && m.title_zh" class="cs-title-en"> | {{ m.title }}</span>
+                <span class="cs-title">{{ communityTranslationEnabled && m.title_zh ? m.title_zh : m.title }}</span>
+                <span v-if="communityTranslationEnabled && m.title_zh" class="cs-title-en"> | {{ m.title }}</span>
                 <span v-if="search.source === 'all'" class="cs-badge" :class="m.source">{{ m.source === "modrinth" ? "Modrinth" : "CurseForge" }}</span>
                 <span class="cs-sub">{{ t("download.search.downloads", { count: fmtCount(m.downloads) }) }}</span>
               </span>
-              <span v-if="dlTranslateMode !== 'en'" class="cs-desc">{{ m.translated ?? m.description }}</span>
+              <span class="cs-desc">{{ communityTranslationEnabled ? (m.translated ?? m.description) : m.description }}</span>
               <span v-if="m.loaders.length || m.game_version_range" class="cs-support">
                 <span v-for="ld in m.loaders" :key="ld" class="cs-ld" :class="ld">{{ ld }}</span>
                 <span v-if="m.game_version_range" class="cs-gv">{{ m.game_version_range }}</span>

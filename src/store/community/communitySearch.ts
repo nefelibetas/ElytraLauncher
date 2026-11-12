@@ -3,7 +3,7 @@ import { reactive, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { dlTranslateMode } from "../config/downloaderConfig";
 import { errMsg } from "../../utils/error";
-import { t } from "../../i18n";
+import { currentLocale, t } from "../../i18n";
 
 export interface CommunitySearchResult {
   id: string;
@@ -115,9 +115,14 @@ export function toDisplayItem(h: CommunitySearchResult, source: "modrinth" | "cu
   };
 }
 
-/** 翻译显示模式：仅英文（en）时后端跳过翻译请求 */
+/** 社区资源是否显示中文翻译：英文界面或“仅英文”模式下关闭。 */
+export const communityTranslationEnabled = computed(
+  () => currentLocale.value !== "en-US" && dlTranslateMode.value !== "en",
+);
+
+/** 翻译请求开关：英文界面/仅英文模式不再请求 MCIM 翻译。 */
 export function needsTranslation(): boolean {
-  return dlTranslateMode.value !== "en";
+  return communityTranslationEnabled.value;
 }
 
 /** 聚合搜索：两源并发，单源失败降级为空；按标题去重保留下载量高的一侧。`pageSize` 每源条数（聚合传 15）。

@@ -8,9 +8,9 @@ import { errMsg } from "../utils/error";
 import { resourceDetail, openResourceDetail } from "../store/community/resourceDetail";
 import { goBack } from "../store/app/nav";
 import { selectedVersion } from "../store/app/selectedVersion";
-import { dlTranslateMode, dlShowReleaseOnly } from "../store/config/downloaderConfig";
+import { dlShowReleaseOnly } from "../store/config/downloaderConfig";
 import {
-  fetchVersions, fetchCommunityDetails,
+  communityTranslationEnabled, fetchVersions, fetchCommunityDetails,
   type CommunityVersion, type CommunityDependencyItem, type CommunityDisplayItem,
 } from "../store/community/communitySearch";
 import {
@@ -643,16 +643,17 @@ function gotoSource() {
 function gotoMcmod() {
   const it = item.value;
   if (!it) return;
+  const searchTitle = communityTranslationEnabled.value ? (it.title_zh ?? it.title) : it.title;
   const url = it.mcmod_id
     ? `https://www.mcmod.cn/class/${it.mcmod_id}.html`
-    : `https://search.mcmod.cn/s?key=${encodeURIComponent(it.title_zh ?? it.title)}&mold=0`;
+    : `https://search.mcmod.cn/s?key=${encodeURIComponent(searchTitle)}&mold=0`;
   openUrl(url).catch(() => showToast(t("download.detail.openLinkFailed")));
 }
 
 async function copyName() {
   const it = item.value;
   if (!it) return;
-  const text = it.title_zh ? `${it.title_zh} | ${it.title}` : it.title;
+  const text = communityTranslationEnabled.value && it.title_zh ? `${it.title_zh} | ${it.title}` : it.title;
   try {
     await navigator.clipboard.writeText(text);
     showToast(t("download.detail.copiedName"));
@@ -674,14 +675,14 @@ async function copyName() {
             <IconImage :src="item.icon_url" :size="40" />
             <span class="md-info">
               <span class="md-title-row">
-                <span class="md-title">{{ item.title_zh ?? item.title }}</span>
-                <span v-if="dlTranslateMode === 'zh' && item.title_zh" class="md-title-en"> | {{ item.title }}</span>
+                <span class="md-title">{{ communityTranslationEnabled && item.title_zh ? item.title_zh : item.title }}</span>
+                <span v-if="communityTranslationEnabled && item.title_zh" class="md-title-en"> | {{ item.title }}</span>
                 <span class="md-badge" :class="item.source">{{ sourceLabel }}</span>
                 <span class="md-sub">{{ t("download.detail.downloads", { count: fmtCount(item.downloads) }) }}</span>
               </span>
             </span>
           </div>
-          <div class="md-desc">{{ item.translated ?? item.description }}</div>
+          <div class="md-desc">{{ communityTranslationEnabled ? (item.translated ?? item.description) : item.description }}</div>
 
           <div class="md-actions">
             <button class="md-btn" @click="gotoSource">{{ t("download.detail.gotoSource", { source: sourceLabel }) }}</button>
@@ -793,7 +794,7 @@ async function copyName() {
                   <IconImage :src="d.icon_url" :size="28" />
                   <span class="md-dep-info">
                     <span class="md-dep-title">{{ d.title }}</span>
-                    <span class="md-dep-desc">{{ d.translated ?? d.description }}</span>
+                    <span class="md-dep-desc">{{ communityTranslationEnabled ? (d.translated ?? d.description) : d.description }}</span>
                   </span>
                 </div>
               </div>

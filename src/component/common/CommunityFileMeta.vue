@@ -5,7 +5,7 @@ import type { Component } from "vue";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { fmtCount, fmtSize } from "../../utils/format";
-import { dlTranslateMode } from "../../store/config/downloaderConfig";
+import { communityTranslationEnabled } from "../../store/community/communitySearch";
 import IconImage from "./IconImage.vue";
 
 /** 与 Rust `ModFileDetail` 结构兼容；页面可直接传 store 类型。 */
@@ -31,9 +31,9 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const description = computed(() =>
-  dlTranslateMode.value === "en"
-    ? props.item.description
-    : (props.item.description_zh ?? props.item.description),
+  communityTranslationEnabled.value
+    ? (props.item.description_zh ?? props.item.description)
+    : props.item.description,
 );
 </script>
 
@@ -42,8 +42,8 @@ const description = computed(() =>
     <IconImage :src="item.icon_url" :size="32" />
     <span class="cfm-info">
       <span class="cfm-title-row">
-        <span class="cfm-title">{{ item.title_zh ?? item.title ?? item.file_name }}</span>
-        <span v-if="item.title_zh" class="cfm-file">{{ item.file_name }}</span>
+        <span class="cfm-title">{{ communityTranslationEnabled && item.title_zh ? item.title_zh : (item.title ?? item.file_name) }}</span>
+        <span v-if="communityTranslationEnabled && item.title_zh" class="cfm-file">{{ item.file_name }}</span>
         <span v-if="item.downloads" class="cfm-sub">
           {{ t("common.status.downloads", { count: fmtCount(item.downloads) }, item.downloads) }}
         </span>

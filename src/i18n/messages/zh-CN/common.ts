@@ -29,6 +29,12 @@ export default {
     copyUrl: "复制下载地址",
     openFolder: "打开文件夹",
     remove: "移除任务",
+    undo: "撤销",
+    redo: "重做",
+    cut: "剪切",
+    copy: "复制",
+    paste: "粘贴",
+    selectAll: "全选",
   },
   notify: {
     downloadDone: "下载完成",

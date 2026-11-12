@@ -29,6 +29,12 @@ export default {
     copyUrl: "Copy download URL",
     openFolder: "Open folder",
     remove: "Remove task",
+    undo: "Undo",
+    redo: "Redo",
+    cut: "Cut",
+    copy: "Copy",
+    paste: "Paste",
+    selectAll: "Select all",
   },
   notify: {
     downloadDone: "Download complete",

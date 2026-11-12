@@ -10,7 +10,7 @@ import { fmtUnix } from "../../utils/format";
 import { useSelectable } from "../../utils/useSelectable";
 import { useBatchDelete } from "../../utils/useBatchDelete";
 import { copyText } from "../../utils/clipboard";
-import { showNativeActionMenu } from "../../utils/contextMenu";
+import { showActionMenu } from "../../utils/contextMenu";
 import IconImage from "../common/IconImage.vue";
 import ConfirmDialog from "../common/ConfirmDialog.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
@@ -57,7 +57,7 @@ const {
 
 /** 行级右键菜单：复制存档名 / 预览 / 打开目录 / 删除。 */
 async function openRowMenu(w: { name: string }) {
-  await showNativeActionMenu(
+  showActionMenu(
     [
       { id: "copy", label: t("common.contextMenu.copyFileName") },
       { id: "preview", label: t("worldPreview.open") },

@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Search, RefreshCw, Upload, Puzzle, Folder, Trash2, Ban, Power } from "@lucide/vue";
 import { openGameFolder } from "../../store/config/gameDirs";
+import { communityTranslationEnabled } from "../../store/community/communitySearch";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
 import CommunityFileMeta from "../common/CommunityFileMeta.vue";
@@ -16,7 +17,7 @@ import BatchActionBar from "./BatchActionBar.vue";
 import { useSelectable } from "../../utils/useSelectable";
 import { useBatchDelete } from "../../utils/useBatchDelete";
 import { copyText } from "../../utils/clipboard";
-import { showNativeActionMenu } from "../../utils/contextMenu";
+import { showActionMenu } from "../../utils/contextMenu";
 import {
   mods, modsLoading, modsError, modsNetworkError, disabledMods,
   updates, updatesChecked, checkingUpdates, updatesError, updatingFiles,
@@ -39,10 +40,12 @@ const updMap = computed<Record<string, (typeof updates.value)[number]>>(() =>
 const filteredMods = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return mods.value;
-  return mods.value.filter(m =>
-    (m.title_zh ?? m.title ?? m.file_name).toLowerCase().includes(q) ||
-    m.file_name.toLowerCase().includes(q),
-  );
+  return mods.value.filter((m) => {
+    const title = communityTranslationEnabled.value
+      ? (m.title_zh ?? m.title ?? m.file_name)
+      : (m.title ?? m.file_name);
+    return title.toLowerCase().includes(q) || m.file_name.toLowerCase().includes(q);
+  });
 });
 
 const items = computed(() =>
@@ -138,7 +141,7 @@ async function doCheckUpdates() {
 
 /** 行级右键菜单：复制文件名 / 打开目录 / 删除。 */
 async function openRowMenu(m: { file_name: string }) {
-  await showNativeActionMenu(
+  showActionMenu(
     [
       { id: "copy", label: t("common.contextMenu.copyFileName") },
       { id: "folder", label: t("common.contextMenu.openFolder") },

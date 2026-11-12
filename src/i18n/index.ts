@@ -40,7 +40,8 @@ export const i18n = createI18n({
   fallbackLocale: "zh-CN",
   messages: {
     "zh-CN": zhCN,
-    "en-US": englishMessages ?? zhCN, // 切到英文前由 setLanguage 先补载
+    // 不能复用 zhCN 对象：mergeLocaleMessage 会原地修改，导致切回中文时仍是英文。
+    "en-US": englishMessages ?? {},
   },
   missingWarn: import.meta.env.DEV,
   fallbackWarn: import.meta.env.DEV,

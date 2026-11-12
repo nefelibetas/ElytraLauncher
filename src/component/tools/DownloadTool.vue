@@ -23,7 +23,7 @@ import {
 import type { ToolDlSnapshot } from "../../store/config/toolDownload";
 import { showToast } from "../../utils/toast";
 import { copyText } from "../../utils/clipboard";
-import { showNativeActionMenu } from "../../utils/contextMenu";
+import { showActionMenu } from "../../utils/contextMenu";
 import { errMsg } from "../../utils/error";
 import { fmtEta, fmtSize, fmtSpeed } from "../../utils/format";
 import DropSelect from "../common/DropSelect.vue";
@@ -174,7 +174,7 @@ async function openTaskMenu(task: ToolDlSnapshot) {
   if (isFinished(task)) {
     items.push({ id: "remove", label: t("common.contextMenu.remove") });
   }
-  await showNativeActionMenu(items, (id) => {
+  showActionMenu(items, (id) => {
     if (id === "copy") void copyText(task.url);
     else if (id === "folder") void handleOpenFolder(task);
     else if (id === "cancel") void handleCancel(task);

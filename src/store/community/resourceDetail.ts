@@ -1,6 +1,7 @@
 // 资源详情 store（Mod/光影包/资源包/数据包/整合包共用）：选中 item + 跳转详情页，标题栏与详情页从此读数据（路由只带 source/id 兜底）。依赖链跳转压栈/弹栈恢复筛选与已加载快照（返回不重新请求）。
 import { reactive } from "vue";
 import router, { ROUTE_DOWNLOAD, ROUTE_RESOURCE_DETAIL } from "../../router";
+import { communityTranslationEnabled } from "./communitySearch";
 import type { CommunityDisplayItem, CommunityVersion, CommunityDependencyItem } from "../community/communitySearch";
 import { downloadTabState, type DownloadTab } from "../task/downloadTab";
 
@@ -102,5 +103,5 @@ export function goBackDetail() {
 export function detailTitle(): string {
   const it = resourceDetail.item;
   if (!it) return "";
-  return it.title_zh ? `${it.title_zh}（${it.title}）` : it.title;
+  return communityTranslationEnabled.value && it.title_zh ? `${it.title_zh}（${it.title}）` : it.title;
 }

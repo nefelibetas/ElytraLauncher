@@ -6,6 +6,7 @@ import { applyTheme } from "./store/app/theme";
 import tooltip from "./utils/tooltip";
 import "./styles/tokens.css";
 import "./styles/transitions.css";
+import "./styles/context-menu.css";
 
 // 挂载前应用主题与语言，避免首帧闪白/闪中文
 applyTheme();

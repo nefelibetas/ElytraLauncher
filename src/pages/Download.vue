@@ -97,7 +97,7 @@ onMounted(async () => {
     return true;
   });
   vdState.fetchManifest();
-  // 翻译开关依赖 dlTranslateMode：必须等配置读入后再搜索，否则 en 模式首帧仍请求翻译
+  // 翻译开关依赖 dlTranslateMode 与当前界面语言：等配置读入后再搜索，避免首帧误请求翻译
   await loadDownloadConfig();
   // 预加载各社区 tab 热门（切 tab 秒开）；ensureAutoSearch 幂等，watch 切 tab 不重复请求
   communitySearch.ensureAutoSearch();
