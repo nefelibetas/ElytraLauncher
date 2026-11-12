@@ -206,6 +206,7 @@ mod tests {
     }
 
     /// MCIM 翻译 API 真实请求（需网络）：sodium 的 Modrinth 内部 ID 应有中文简介。
+    #[ignore = "network: MCIM translation API"]
     #[tokio::test]
     async fn mcim_translation_api_works() {
         let tr = fetch_translations("modrinth", &["AANobbMI".to_string()]).await;
@@ -216,6 +217,7 @@ mod tests {
         );
     }
 
+    #[ignore = "network: MCIM translation API"]
     #[tokio::test]
     async fn mcim_translation_curseforge_works() {
         let tr = fetch_translations("curseforge", &["238222".to_string()]).await;
