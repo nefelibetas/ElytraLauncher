@@ -66,6 +66,14 @@ fn process_prefix() -> &'static str {
     PREFIX.as_str()
 }
 
+/// 快照 id 是否由本进程创建：本进程的 running/paused 属于当前会话（任务列表已在展示），
+/// 不是「上次未完成」；跨进程残留才是恢复横幅的对象。
+pub fn is_own_task(id: &str) -> bool {
+    // 任务 id 形如 `t{进程前缀}-{counter}`，前缀须与 `create` 的拼法一致。
+    id.strip_prefix('t')
+        .is_some_and(|rest| rest.starts_with(process_prefix()))
+}
+
 impl TaskManager {
     /// 新建任务，返回 (task_id, 取消标志, 进度锁)。
     pub fn create(

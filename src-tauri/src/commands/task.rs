@@ -77,9 +77,13 @@ pub async fn submit_install_jdk(app: AppHandle, major: u32) -> Result<String, St
     task::spawn_install_jdk(app, major)
 }
 
+/// 上次进程残留的未完成任务（供恢复横幅）；本进程创建的 running/paused 快照属于当前会话，
+/// 任务列表已在展示，不能当作「上次未完成」返回（否则提交下载后立即误报）。
 #[tauri::command]
 pub async fn list_interrupted_tasks() -> Vec<store::InterruptedJob> {
-    store::list_interrupted_async().await
+    let mut jobs = store::list_interrupted_async().await;
+    jobs.retain(|j| !task::is_own_task(&j.id));
+    jobs
 }
 
 /// 恢复中断任务：读快照 → 以恢复凭证重新提交（幂等重跑，已下载文件 sha1 命中自动跳过），返回新任务 id。
@@ -205,4 +209,51 @@ pub async fn install_modpack(app: AppHandle, request: ModpackRequest) -> Result<
             });
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repair_spec() -> store::JobSpec {
+        store::JobSpec::Repair {
+            version_dir_name: "26.2".into(),
+        }
+    }
+
+    /// 本进程创建的 running 快照属于当前会话，不得作为「上次未完成」返回；跨进程残留仍须返回。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn interrupted_list_excludes_current_session_snapshots() {
+        let (own_id, _cancel, _progress) =
+            task::global().create("本会话任务", &model::TaskText::default(), &[]);
+        store::save_snapshot(
+            &own_id,
+            "本会话任务",
+            &repair_spec(),
+            model::TaskStatus::Running,
+        );
+
+        let foreign_id = format!("test_foreign_list_{}", std::process::id());
+        store::remove_snapshot(&foreign_id);
+        store::save_snapshot(
+            &foreign_id,
+            "上次任务",
+            &repair_spec(),
+            model::TaskStatus::Running,
+        );
+
+        let jobs = list_interrupted_tasks().await;
+        assert!(
+            !jobs.iter().any(|j| j.id == own_id),
+            "本进程 running 快照不应出现在恢复横幅"
+        );
+        assert!(
+            jobs.iter().any(|j| j.id == foreign_id),
+            "跨进程残留快照应可恢复"
+        );
+
+        task::global().remove(&own_id);
+        store::remove_snapshot(&own_id);
+        store::remove_snapshot(&foreign_id);
+    }
 }

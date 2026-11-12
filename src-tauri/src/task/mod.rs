@@ -20,7 +20,7 @@ mod manager;
 mod spawn;
 
 pub use crate::game::loader::{LoaderChoice, LoaderKind};
-pub use manager::{global, TaskManager, WaitingDecision};
+pub use manager::{global, is_own_task, TaskManager, WaitingDecision};
 pub use model::{
     DownloadFileItem, DownloadFileKind, DownloadFileTask, DownloadFilesTask, DownloadTask,
     FabricApi, ModpackInstallSpec, StepInfo, StepKind, StepStatus, TaskProgress, TaskStatus,
