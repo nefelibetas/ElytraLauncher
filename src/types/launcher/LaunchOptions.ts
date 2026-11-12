@@ -31,7 +31,7 @@ pre_launch_memory_optimize: boolean,
  */
 use_high_performance_gpu: boolean, 
 /**
- * 游戏语言策略："auto_zh_CN" = 启动时自动设置中文（唯一选项），空 = 不干预。
+ * 游戏语言代码（如 zh_cn / en_us）；空 = 不干预，旧值 auto_zh_CN 等价 zh_cn。
  */
 game_language: string, 
 /**

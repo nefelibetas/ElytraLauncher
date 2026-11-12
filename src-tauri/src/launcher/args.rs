@@ -7,6 +7,7 @@ use crate::game::resource::extract::{
     modern_natives_key, NativesKind, TARGET_OS,
 };
 use crate::game::version::model::VersionJson;
+use crate::launcher::env::game_language_props;
 use crate::launcher::memory;
 use crate::launcher::model::{AuthMode, LaunchOptions, MemoryMode, WindowSize};
 
@@ -36,8 +37,6 @@ const SYS_WINDOW_TITLE: &str = "-Dminecraft.window.title=";
 const SYS_STDOUT_ENCODING: &str = "-Dstdout.encoding=UTF-8";
 const SYS_STDERR_ENCODING: &str = "-Dstderr.encoding=UTF-8";
 const SYS_USE_SYSTEM_PROXIES: &str = "-Djava.net.useSystemProxies=true";
-const SYS_USER_LANGUAGE_ZH: &str = "-Duser.language=zh_CN";
-const SYS_USER_COUNTRY_ZH: &str = "-Duser.country=CN";
 
 const JVM_FLAG_SUN_MISC_UNSAFE: &str = "--sun-misc-unsafe-memory-access=allow";
 const JVM_FLAG_NATIVE_ACCESS: &str = "--enable-native-access=ALL-UNNAMED";
@@ -88,8 +87,6 @@ const USER_TYPE_MSA: &str = "msa";
 const EMPTY_JSON_OBJECT: &str = "{}";
 const DEFAULT_RESOLUTION_WIDTH: u32 = 854;
 const DEFAULT_RESOLUTION_HEIGHT: u32 = 480;
-
-const LANG_AUTO_ZH_CN: &str = "auto_zh_CN";
 
 pub struct LaunchCommand {
     pub java_path: PathBuf,
@@ -900,11 +897,8 @@ fn collect_jvm_args(req: &JvmArgs<'_>) -> (Vec<String>, Vec<String>, Vec<String>
         system_props.push(format!("{}{}", SYS_WINDOW_TITLE, config.window_title));
     }
 
-    // 游戏语言自动设为中文（-Duser.language 影响游戏/资源本地化）
-    if config.game_language == LANG_AUTO_ZH_CN {
-        system_props.push(SYS_USER_LANGUAGE_ZH.into());
-        system_props.push(SYS_USER_COUNTRY_ZH.into());
-    }
+    // 游戏语言（-Duser.language 影响旧版 Locale；options.txt 由 apply_game_language 写入）
+    system_props.extend(game_language_props(&config.game_language));
 
     let mem_mb = match config.memory {
         MemoryMode::Auto => memory::guess_auto_memory(version_dir),

@@ -8,6 +8,7 @@ import {
 } from "../../utils/memory";
 import type { LaunchOptions } from "../../types/launcher/LaunchOptions";
 import type { GcType } from "../../types/launcher/GcType";
+import { detectSystemLanguage, normalizeGameLanguage } from "../../utils/minecraftLanguages";
 
 const section = useConfigSection();
 export const launchError = section.error;
@@ -17,7 +18,7 @@ export const loPriority = ref<"Low" | "Normal" | "High" | "RealTime">("Normal");
 export const loWinMode = ref<"Default" | "Custom">("Default");
 export const loWinW = ref(1280);
 export const loWinH = ref(720);
-export const loGameLang = ref("auto_zh_CN");
+export const loGameLang = ref(detectSystemLanguage());
 
 export const loServer = ref("");
 export const loPort = ref("");
@@ -70,8 +71,8 @@ watch(
   },
 );
 
-export const loJvmArgs = ref("");
-export const loGameArgs = ref("");
+export const loJvmArgs = ref<string[]>([]);
+export const loGameArgs = ref<string[]>([]);
 export const loGc = ref("TunedG1Gc");
 export const loDisableWrapper = ref(false);
 export const loDisableAgent = ref(false);
@@ -86,7 +87,26 @@ export const gcOptions: { value: string; labelKey: string }[] = [
   { value: "Custom", labelKey: "settings.jdk.gc.custom" },
 ];
 
+/** 旧默认 auto_zh_CN 迁移到系统语言并写回；启动时调用一次，设置页加载前等待同一 Promise。 */
+let languageMigration: Promise<void> | null = null;
+export function ensureGameLanguageDetected(): Promise<void> {
+  languageMigration ??= (async () => {
+    try {
+      const cfg = await invoke<LaunchOptions>("get_launch_options");
+      const next = normalizeGameLanguage(cfg.game_language);
+      if (next === cfg.game_language) return;
+      cfg.game_language = next;
+      await invoke("save_launch_options", { config: cfg });
+    } catch {
+      // 配置尚未就绪：清掉缓存，设置页加载时会再次尝试
+      languageMigration = null;
+    }
+  })();
+  return languageMigration;
+}
+
 export async function loadLaunchOptions() {
+  await ensureGameLanguageDetected();
   try {
     const cfg = await invoke<LaunchOptions>("get_launch_options");
     loWindowTitle.value = cfg.window_title ?? "";
@@ -98,15 +118,20 @@ export async function loadLaunchOptions() {
       loWinW.value = cfg.window_size.Custom[0];
       loWinH.value = cfg.window_size.Custom[1];
     }
-    loJvmArgs.value = (cfg.jvm_args ?? []).join("\n");
-    loGameArgs.value = (cfg.game_args ?? []).join("\n");
+    loJvmArgs.value = [...(cfg.jvm_args ?? [])];
+    loGameArgs.value = [...(cfg.game_args ?? [])];
     loGc.value = cfg.gc_type ?? "TunedG1Gc";
     loDisableWrapper.value = !!cfg.disable_launch_wrapper;
     loDisableAgent.value = !!cfg.disable_lwjgl_unsafe_agent;
     loVerifySsl.value = !!cfg.verify_ssl;
     // 高性能显卡默认开启：旧配置/旧后端缺字段时按 true 处理
     loHighGpu.value = cfg.use_high_performance_gpu ?? true;
-    loGameLang.value = cfg.game_language ?? "auto_zh_CN";
+    loGameLang.value = normalizeGameLanguage(cfg.game_language);
+    if (loGameLang.value !== cfg.game_language) {
+      // 迁移被并发保存覆盖时补写一次，保证后续启动使用检测到的语言
+      cfg.game_language = loGameLang.value;
+      await invoke("save_launch_options", { config: cfg });
+    }
     loServer.value = cfg.server ?? "";
     loPort.value = cfg.port != null ? String(cfg.port) : "";
     loMemAuto.value = cfg.memory === "Auto";
@@ -136,8 +161,8 @@ export async function saveLaunchOptions() {
       loWinMode.value === "Custom"
         ? { Custom: [loWinW.value, loWinH.value] }
         : "Default";
-    cfg.jvm_args = loJvmArgs.value.split(/\n/).map(s => s.trim()).filter(Boolean);
-    cfg.game_args = loGameArgs.value.split(/\n/).map(s => s.trim()).filter(Boolean);
+    cfg.jvm_args = loJvmArgs.value.map(s => s.trim()).filter(Boolean);
+    cfg.game_args = loGameArgs.value.map(s => s.trim()).filter(Boolean);
     cfg.memory = loMemAuto.value ? "Auto" : { Custom: memUpperMb.value };
     cfg.min_memory = loMemAuto.value ? null : memLowerMb.value;
     cfg.pre_launch_memory_optimize = loMemOptimize.value;

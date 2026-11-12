@@ -141,31 +141,6 @@ input[type="number"] {
   padding-top: 6px;
 }
 
-.lo-textarea {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  font-size: var(--fs-base);
-  line-height: 1.6;
-  font-family: inherit;
-  color: var(--text-primary);
-  background-color: var(--surface-input, var(--surface-card));
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  outline: none;
-  resize: none;
-  /* 参数文本不折行：超宽时横向滚动 */
-  white-space: nowrap;
-  overflow-x: auto;
-  overflow-y: auto;
-  transition: border-color var(--dur-fast);
-}
-
-.lo-textarea:hover,
-.lo-textarea:focus {
-  border-color: var(--color-brand);
-}
-
 .lo-checks {
   display: flex;
   flex-direction: column;

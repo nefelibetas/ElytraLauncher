@@ -20,7 +20,8 @@ const isDetail = computed(
     route.path === "/version-setup" ||
     route.path === "/custom-theme" ||
     route.path === "/skin-studio" ||
-    route.path === "/world-preview",
+    route.path === "/world-preview" ||
+    route.path === "/tools",
 );
 
 /** 详情 ↔ 主导航的方向：进入详情时主栏左退、详情右进；返回时反向。 */
@@ -47,6 +48,7 @@ const barTitle = computed(() => {
   if (route.path === "/world-preview") {
     return t("nav.title.worldPreview", { name: String(route.query.world ?? "") });
   }
+  if (route.path === "/tools") return t("nav.title.tools");
   if (route.path === "/resource-detail") {
     // 资源详情：有译名时 "翻译名（原名）"，否则原名
     return detailTitle() || t("nav.title.resourceDetail");

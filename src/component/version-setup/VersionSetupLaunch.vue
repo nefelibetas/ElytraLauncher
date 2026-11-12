@@ -9,6 +9,7 @@ import MemoryUsageBar from "../launch/MemoryUsageBar.vue";
 import CheckToggle from "../common/CheckToggle.vue";
 import RangeSlider from "../common/RangeSlider.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
+import ArgsListInput from "../settings/ArgsListInput.vue";
 import { memState, startMemoryMonitor } from "../../store/app/memory";
 import { fmtGb } from "../../utils/format";
 import {
@@ -22,6 +23,9 @@ import {
 } from "../../store/task/versionSetup";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
+import {
+  MINECRAFT_LANGUAGES, minecraftLanguageLabel, normalizeGameLanguage,
+} from "../../utils/minecraftLanguages";
 import type { InstanceLaunchOptions } from "../../types/launcher/InstanceLaunchOptions";
 import type { InstanceLaunchState } from "../../types/launcher/InstanceLaunchState";
 import type { GcType } from "../../types/launcher/GcType";
@@ -38,8 +42,8 @@ const loading = ref(true);
 const error = ref("");
 const state = ref<InstanceLaunchState | null>(null);
 const draft = ref<InstanceLaunchOptions | null>(null);
-const jvmText = ref("");
-const gameText = ref("");
+const jvmArgs = ref<string[]>([]);
+const gameArgs = ref<string[]>([]);
 const saving = ref(false);
 const saved = ref(false);
 const refreshing = ref(false);
@@ -53,14 +57,18 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function splitLines(text: string): string[] {
-  return text.split(/\n/).map(line => line.trim()).filter(Boolean);
-}
-
 function setDraft(instance: InstanceLaunchOptions | null) {
   draft.value = instance ? clone(instance) : null;
-  jvmText.value = instance?.jvm_args.join("\n") ?? "";
-  gameText.value = instance?.game_args.join("\n") ?? "";
+  let languageChanged = false;
+  if (draft.value) {
+    const normalized = normalizeGameLanguage(draft.value.game_language);
+    languageChanged = normalized !== draft.value.game_language;
+    draft.value.game_language = normalized;
+  }
+  jvmArgs.value = [...(instance?.jvm_args ?? [])];
+  gameArgs.value = [...(instance?.game_args ?? [])];
+  // 旧默认 auto_zh_CN 已迁移为系统语言：落盘保证启动时与界面一致
+  if (languageChanged) scheduleSave();
 }
 
 async function load() {
@@ -109,11 +117,21 @@ function scheduleSave() {
   saveTimer = window.setTimeout(() => void saveNow(), 150);
 }
 
+function updateJvmArgs(next: string[]) {
+  jvmArgs.value = next;
+  scheduleSave();
+}
+
+function updateGameArgs(next: string[]) {
+  gameArgs.value = next;
+  scheduleSave();
+}
+
 async function saveNow() {
   if (!draft.value) return;
   pending = false;
-  draft.value.jvm_args = splitLines(jvmText.value);
-  draft.value.game_args = splitLines(gameText.value);
+  draft.value.jvm_args = [...jvmArgs.value];
+  draft.value.game_args = [...gameArgs.value];
   const snapshot = clone(draft.value);
   saving.value = true;
   try {
@@ -245,9 +263,17 @@ const winsizeOptions = computed<SelOption[]>(() => [
   { value: "Custom", label: t("settings.launch.windowCustom") },
 ]);
 
-const gameLangOptions = computed<SelOption[]>(() => [
-  { value: "auto_zh_CN", label: t("settings.launch.gameLanguageAuto") },
-]);
+const gameLangOptions = computed<SelOption[]>(() => {
+  const options = MINECRAFT_LANGUAGES.map(l => ({
+    value: l.code,
+    label: minecraftLanguageLabel(l.code),
+  }));
+  const current = draft.value?.game_language;
+  if (current && !options.some(o => o.value === current)) {
+    options.unshift({ value: current, label: current });
+  }
+  return options;
+});
 
 const gcSelectOptions = computed<SelOption[]>(() =>
   gcOptions.map(option => ({ value: option.value, label: t(option.labelKey) })),
@@ -421,7 +447,7 @@ function setWindowMode(value: string) {
                 id="inst-lang"
                 :model-value="draft.game_language"
                 :options="gameLangOptions"
-                width="150px"
+                width="200px"
                 @update:model-value="draft.game_language = $event; scheduleSave()"
               />
             </div>
@@ -477,31 +503,21 @@ function setWindowMode(value: string) {
           <div class="launch-opts">
             <div class="lo-row lo-top">
               <label class="lo-label" for="inst-jvm">{{ t("settings.jdk.jvmArgs") }}</label>
-              <textarea
-                id="inst-jvm"
-                v-model="jvmText"
-                class="lo-textarea"
-                rows="4"
-                wrap="off"
+              <ArgsListInput
+                input-id="inst-jvm"
+                :model-value="jvmArgs"
                 :placeholder="t('settings.jdk.jvmArgsPlaceholder')"
-                spellcheck="false"
-                autocomplete="off"
-                @change="scheduleSave"
-              ></textarea>
+                @update:model-value="updateJvmArgs"
+              />
             </div>
             <div class="lo-row lo-top">
               <label class="lo-label" for="inst-game">{{ t("settings.jdk.gameArgs") }}</label>
-              <textarea
-                id="inst-game"
-                v-model="gameText"
-                class="lo-textarea"
-                rows="2"
-                wrap="off"
+              <ArgsListInput
+                input-id="inst-game"
+                :model-value="gameArgs"
                 :placeholder="t('settings.jdk.gameArgsPlaceholder')"
-                spellcheck="false"
-                autocomplete="off"
-                @change="scheduleSave"
-              ></textarea>
+                @update:model-value="updateGameArgs"
+              />
             </div>
             <div class="lo-row">
               <label class="lo-label" for="inst-gc">{{ t("settings.jdk.memoryManagement") }}</label>

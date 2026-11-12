@@ -22,6 +22,7 @@ import { notifyIfUnfocused } from "./utils/notify";
 import {
   closeAction, setCloseAction, trayAvailable, initCloseBehavior, syncTrayLabels,
 } from "./store/app/closeBehavior";
+import { ensureGameLanguageDetected } from "./store/config/launchOptions";
 
 const router = useRouter();
 const { t } = useI18n();
@@ -254,6 +255,8 @@ function afterFirstPaint(task: () => void) {
 }
 
 onMounted(async () => {
+  // 旧默认中文语言迁移到系统语言（设置页加载前完成，游戏启动即用新值）
+  void ensureGameLanguageDetected();
   pinnedHash = location.hash || "#/";
   await initCloseBehavior();
   await syncTrayLabels();

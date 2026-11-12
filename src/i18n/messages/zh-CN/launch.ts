@@ -10,6 +10,7 @@ export default {
     launch: "启动游戏",
     launching: "启动中...",
     selectVersion: "实例管理",
+    tools: "工具箱",
     openMods: "打开 Mod",
     openResourcepacks: "打开资源包",
     openDatapacks: "打开数据包",

@@ -19,6 +19,7 @@ import {
 } from "../../store/config/launchOptions";
 import { fmtGb } from "../../utils/format";
 import MemoryUsageBar from "../launch/MemoryUsageBar.vue";
+import { MINECRAFT_LANGUAGES, minecraftLanguageLabel } from "../../utils/minecraftLanguages";
 
 const { t } = useI18n();
 
@@ -57,9 +58,17 @@ const winsizeOptions = computed<SelOption[]>(() => [
   { value: "Custom", label: t("settings.launch.windowCustom") },
 ]);
 
-const gameLangOptions = computed<SelOption[]>(() => [
-  { value: "auto_zh_CN", label: t("settings.launch.gameLanguageAuto") },
-]);
+const gameLangOptions = computed<SelOption[]>(() => {
+  const options = MINECRAFT_LANGUAGES.map(l => ({
+    value: l.code,
+    label: minecraftLanguageLabel(l.code),
+  }));
+  // 配置里保留了列表外的合法代码时，补一条以免下拉显示为空
+  if (loGameLang.value && !options.some(o => o.value === loGameLang.value)) {
+    options.unshift({ value: loGameLang.value, label: loGameLang.value });
+  }
+  return options;
+});
 
 /** 关闭窗口行为：托盘不可用时只保留「询问 / 直接退出」。 */
 const closeOptions = computed<SelOption[]>(() => [
@@ -147,7 +156,7 @@ const closeOptions = computed<SelOption[]>(() => [
           id="lo-lang"
           :model-value="loGameLang"
           :options="gameLangOptions"
-          width="150px"
+          width="200px"
           @update:model-value="loGameLang = $event; saveLaunchOptions()"
         />
       </div>

@@ -17,6 +17,7 @@ import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import CheckToggle from "../common/CheckToggle.vue";
+import ArgsListInput from "./ArgsListInput.vue";
 
 onMounted(loadConfig);
 
@@ -68,6 +69,16 @@ function onJdkPick(value: string) {
   }
   const hit = jdkList.value.find(j => j.path === value);
   if (hit) selectJdk(hit);
+}
+
+function updateJvmArgs(next: string[]) {
+  loJvmArgs.value = next;
+  void saveLaunchOptions();
+}
+
+function updateGameArgs(next: string[]) {
+  loGameArgs.value = next;
+  void saveLaunchOptions();
 }
 </script>
 
@@ -125,32 +136,22 @@ function onJdkPick(value: string) {
     <div class="launch-opts jdk-opts">
       <div class="lo-row lo-top">
         <label class="lo-label" for="lo-jvm">{{ t("settings.jdk.jvmArgs") }}</label>
-        <textarea
-          id="lo-jvm"
-          v-model="loJvmArgs"
-          class="lo-textarea"
-          rows="4"
-          wrap="off"
+        <ArgsListInput
+          input-id="lo-jvm"
+          :model-value="loJvmArgs"
           :placeholder="t('settings.jdk.jvmArgsPlaceholder')"
-          spellcheck="false"
-          @change="saveLaunchOptions"
-          autocomplete="off"
-        ></textarea>
+          @update:model-value="updateJvmArgs"
+        />
       </div>
 
       <div class="lo-row lo-top">
         <label class="lo-label" for="lo-game">{{ t("settings.jdk.gameArgs") }}</label>
-        <textarea
-          id="lo-game"
-          v-model="loGameArgs"
-          class="lo-textarea"
-          rows="2"
-          wrap="off"
+        <ArgsListInput
+          input-id="lo-game"
+          :model-value="loGameArgs"
           :placeholder="t('settings.jdk.gameArgsPlaceholder')"
-          spellcheck="false"
-          @change="saveLaunchOptions"
-          autocomplete="off"
-        ></textarea>
+          @update:model-value="updateGameArgs"
+        />
       </div>
 
       <div class="lo-row">

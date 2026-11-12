@@ -6,7 +6,6 @@ export default {
     appearance: "Appearance & Language",
     online: "Multiplayer",
     log: "Launcher Log",
-    tools: "Tools",
     about: "About",
   },
   about: {
@@ -80,9 +79,6 @@ export default {
         "Elytra is a third-party open-source project, not affiliated with, endorsed by, or associated with Mojang Studios or Microsoft. It does not contain any game files.",
     },
   },
-  tools: {
-    back: "Back to tools",
-  },
   appearance: {
     title: "Appearance",
     subtitle: "Choose a theme (light, dark, or follow system; accents follow the Minecraft palette; custom themes are supported)",
@@ -138,7 +134,6 @@ export default {
     width: "Width",
     height: "Height",
     gameLanguage: "Game language",
-    gameLanguageAuto: "Automatically set to Chinese",
     verifySsl: "Verify SSL certificates when logging in with a Microsoft account",
     memoryTitle: "Memory allocation",
     memorySubtitle: "Game memory allocation and system memory status",
@@ -166,9 +161,9 @@ export default {
     autoDesc: "Match automatically based on the game version requirements",
     optionDesc: "{vendor} · {bits}-bit · {path}",
     jvmArgs: "Java VM arguments",
-    jvmArgsPlaceholder: "One JVM argument per line",
+    jvmArgsPlaceholder: "-XX:+UseG1GC",
     gameArgs: "Game arguments",
-    gameArgsPlaceholder: "One game argument per line",
+    gameArgsPlaceholder: "--fullscreen",
     memoryManagement: "Memory management",
     disableWrapper: "Disable Java Launch Wrapper",
     disableAgent: "Disable LWJGL Unsafe Agent",

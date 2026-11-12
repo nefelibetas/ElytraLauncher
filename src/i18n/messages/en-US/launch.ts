@@ -10,6 +10,7 @@ export default {
     launch: "Launch Game",
     launching: "Launching...",
     selectVersion: "Manage Instances",
+    tools: "Toolbox",
     openMods: "Open Mods",
     openResourcepacks: "Open Resource Packs",
     openDatapacks: "Open Data Packs",

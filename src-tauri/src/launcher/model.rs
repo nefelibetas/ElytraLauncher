@@ -99,8 +99,8 @@ pub struct LaunchOptions {
     #[serde(default = "default_true")]
     pub use_high_performance_gpu: bool,
 
-    /// 游戏语言策略："auto_zh_CN" = 启动时自动设置中文（唯一选项），空 = 不干预。
-    #[serde(default = "default_zh")]
+    /// 游戏语言代码（如 zh_cn / en_us）；空 = 不干预，旧值 auto_zh_CN 等价 zh_cn。
+    #[serde(default = "default_game_language")]
     pub game_language: String,
 
     /// 服务器直连：快速进服（--server/--port 追加到游戏参数末尾）。None = 不指定。
@@ -130,7 +130,7 @@ fn default_true() -> bool {
     true
 }
 
-fn default_zh() -> String {
+fn default_game_language() -> String {
     "auto_zh_CN".into()
 }
 
@@ -188,7 +188,7 @@ pub struct InstanceLaunchOptions {
     pub pre_launch_memory_optimize: bool,
     #[serde(default = "default_true")]
     pub use_high_performance_gpu: bool,
-    #[serde(default = "default_zh")]
+    #[serde(default = "default_game_language")]
     pub game_language: String,
     #[serde(default = "default_true")]
     pub verify_ssl: bool,

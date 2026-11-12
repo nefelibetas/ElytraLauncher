@@ -338,9 +338,37 @@ pub fn upsert_option(options_path: &std::path::Path, key: &str, value: &str) {
     let _ = std::fs::write(options_path, out);
 }
 
-/// 游戏语言：自动中文；1.13+ 启动时读 gameDir/options.txt 的 `lang` 字段，存在则替换否则追加。
-pub fn apply_game_language(game_dir: &std::path::Path) {
-    upsert_option(&game_dir.join("options.txt"), "lang", "zh_cn");
+/// 游戏语言代码规范化：旧值 `auto_zh_CN` 映射为 `zh_cn`，其余统一小写/下划线并拒绝非法字符。
+pub fn normalize_game_language(language: &str) -> Option<String> {
+    if language.trim().eq_ignore_ascii_case("auto_zh_CN") {
+        return Some("zh_cn".into());
+    }
+    let code = language.trim().replace('-', "_").to_ascii_lowercase();
+    if code.is_empty() || !code.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    Some(code)
+}
+
+/// Java Locale 系统属性：`-Duser.language=<lang>`，有地区段时补 `-Duser.country=<REGION>`。
+pub(crate) fn game_language_props(language: &str) -> Vec<String> {
+    let Some(code) = normalize_game_language(language) else {
+        return Vec::new();
+    };
+    let mut parts = code.splitn(2, '_');
+    let mut props = vec![format!("-Duser.language={}", parts.next().unwrap_or(""))];
+    if let Some(region) = parts.next() {
+        props.push(format!("-Duser.country={}", region.to_ascii_uppercase()));
+    }
+    props
+}
+
+/// 游戏语言：写入 gameDir/options.txt 的 `lang` 字段（存在则替换否则追加）。
+/// 1.13+ 以 options.txt 为准；`-Duser.language` 仅旧版 Locale 生效。
+pub fn apply_game_language(game_dir: &std::path::Path, language: &str) {
+    if let Some(code) = normalize_game_language(language) {
+        upsert_option(&game_dir.join("options.txt"), "lang", &code);
+    }
 }
 
 /// 从已扫描 JDK 列表选最合适者：优先精确匹配，否则最低但满足需求，再不行取最高（列表可空 → None）；pub(crate) 与 ModLoader 安装器 processors 共用。
@@ -606,5 +634,37 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn game_language_normalization_and_props() {
+        assert_eq!(
+            normalize_game_language("auto_zh_CN").as_deref(),
+            Some("zh_cn")
+        );
+        assert_eq!(normalize_game_language("zh-TW").as_deref(), Some("zh_tw"));
+        assert_eq!(normalize_game_language(" en_us ").as_deref(), Some("en_us"));
+        assert_eq!(normalize_game_language("lzh").as_deref(), Some("lzh"));
+        assert_eq!(normalize_game_language(""), None);
+        assert_eq!(normalize_game_language("zh cn"), None);
+
+        assert_eq!(
+            game_language_props("zh_cn"),
+            vec!["-Duser.language=zh", "-Duser.country=CN"]
+        );
+        assert_eq!(game_language_props("lzh"), vec!["-Duser.language=lzh"]);
+        assert!(game_language_props("").is_empty());
+    }
+
+    #[test]
+    fn apply_game_language_replaces_options_lang() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = dir.path().join("options.txt");
+        std::fs::write(&options, "lang:en_us\nfov:70\n").unwrap();
+        apply_game_language(dir.path(), "ja-JP");
+        let content = std::fs::read_to_string(&options).unwrap();
+        assert!(content.contains("lang:ja_jp"), "{content}");
+        assert!(!content.contains("lang:en_us"), "{content}");
+        assert!(content.contains("fov:70"), "{content}");
     }
 }

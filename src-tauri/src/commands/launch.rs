@@ -118,10 +118,11 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
     // 构造 --user-properties（仅 1.19.2 以下生效；Alex 注入 slim 纹理，Steve 默认）
     let user_properties = skin::build_user_properties(&auth);
 
-    // 语言自动设中文（1.13+ 由 options.txt 的 lang 控制；-Duser.language 仅旧版 Locale 生效）
-    if launcher_config.game_language == "auto_zh_CN" {
-        env::apply_game_language(&mc_dir.join("versions").join(&version_dir_name));
-    }
+    // 游戏语言（1.13+ 由 options.txt 的 lang 控制；空值/非法值不干预）
+    env::apply_game_language(
+        &mc_dir.join("versions").join(&version_dir_name),
+        &launcher_config.game_language,
+    );
 
     let cmd = build_launch_command(
         &java_path,

@@ -6,7 +6,6 @@ export default {
     appearance: "外观与语言",
     online: "联机设置",
     log: "启动器日志",
-    tools: "工具",
     about: "关于",
   },
   about: {
@@ -77,9 +76,6 @@ export default {
         "Elytra 是第三方开源项目，与 Mojang Studios / Microsoft 无任何关联，亦未获其授权或认可。本项目不包含任何游戏本体文件。",
     },
   },
-  tools: {
-    back: "返回工具列表",
-  },
   appearance: {
     title: "外观",
     subtitle: "选择主题（支持浅色/深色/跟随系统，accent 取自 Minecraft 生态；可添加自定义外观）",
@@ -135,7 +131,6 @@ export default {
     width: "宽",
     height: "高",
     gameLanguage: "游戏语言",
-    gameLanguageAuto: "自动设置为中文",
     verifySsl: "登录微软账号时验证 SSL 证书",
     memoryTitle: "内存分配",
     memorySubtitle: "游戏内存分配与系统内存状态",
@@ -163,9 +158,9 @@ export default {
     autoDesc: "根据游戏版本需求自动匹配",
     optionDesc: "{vendor} · {bits} 位 · {path}",
     jvmArgs: "Java 虚拟机参数",
-    jvmArgsPlaceholder: "每行一个 JVM 参数",
+    jvmArgsPlaceholder: "-XX:+UseG1GC",
     gameArgs: "游戏参数",
-    gameArgsPlaceholder: "每行一个游戏参数",
+    gameArgsPlaceholder: "--fullscreen",
     memoryManagement: "内存管理",
     disableWrapper: "禁用 Java Launch Wrapper",
     disableAgent: "禁用 LWJGL Unsafe Agent",

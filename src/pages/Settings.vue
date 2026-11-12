@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 页面容器：SideNav + 各 tab 编排；工具 tab 的内容是工具 Grid（SettingsTools）。
-import { SlidersHorizontal, Download, Palette, Link2, FileText, KeyRound, Wrench, Info } from "@lucide/vue";
+// 页面容器：SideNav + 各 tab 编排。
+import { SlidersHorizontal, Download, Palette, Link2, FileText, KeyRound, Info } from "@lucide/vue";
 import SettingsLaunchOptions from "../component/settings/SettingsLaunchOptions.vue";
 import SettingsJdk from "../component/settings/SettingsJdk.vue";
 import SettingsExternal from "../component/settings/SettingsExternal.vue";
@@ -8,7 +8,6 @@ import SettingsDownload from "../component/settings/SettingsDownload.vue";
 import SettingsAppearance from "../component/settings/SettingsAppearance.vue";
 import SettingsOnline from "../component/settings/SettingsOnline.vue";
 import SettingsLog from "../component/settings/SettingsLog.vue";
-import SettingsTools from "../component/settings/SettingsTools.vue";
 import SettingsAbout from "../component/settings/SettingsAbout.vue";
 import ScrollTopFab from "../component/common/ScrollTopFab.vue";
 import SideNav from "../component/common/SideNav.vue";
@@ -30,7 +29,6 @@ const { t } = useI18n();
         { key: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
         { key: 'online', label: t('settings.tabs.online'), icon: Link2 },
         { key: 'log', label: t('settings.tabs.log'), icon: FileText },
-        { key: 'tools', label: t('settings.tabs.tools'), icon: Wrench },
         { key: 'about', label: t('settings.tabs.about'), icon: Info },
       ]"
     >
@@ -55,10 +53,6 @@ const { t } = useI18n();
         <SettingsOnline />
       </div>
 
-      <div v-else-if="settingsTab === 'tools'" key="tools" class="stg-page stg-page-fill">
-        <SettingsTools />
-      </div>
-
       <div v-else-if="settingsTab === 'about'" key="about" class="stg-page">
         <SettingsAbout />
       </div>
@@ -81,11 +75,5 @@ const { t } = useI18n();
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-/* 工具详情需要确定高度：SkinPainter 的 canvas 依赖父级 flex 高度 */
-.stg-page-fill {
-  height: 100%;
-  min-height: 0;
 }
 </style>

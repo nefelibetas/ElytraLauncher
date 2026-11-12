@@ -242,6 +242,7 @@ const excludedFiles = new Set([
   "src/utils/nbt.ts",
   "src/utils/motd.ts",
   "src/utils/blockNames.ts",
+  "src/utils/minecraftLanguages.ts",
   "src/store/skin/skinEditor.ts",
 ]);
 const hits = [];

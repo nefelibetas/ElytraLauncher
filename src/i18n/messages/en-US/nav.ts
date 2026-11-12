@@ -10,6 +10,7 @@ export default {
     customThemeEdit: "Edit Custom Theme",
     skinStudio: "Wardrobe",
     worldPreview: "World Preview - {name}",
+    tools: "Toolbox",
     resourceDetail: "Resource Details",
   },
 };

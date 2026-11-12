@@ -2,7 +2,7 @@
 // 启动区：启动按钮（下载游戏入口）+ 版本选择 / 版本设置
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { LayoutGrid } from "@lucide/vue";
+import { LayoutGrid, Wrench } from "@lucide/vue";
 import { isLaunching, doLaunch } from "../../store/app/launch";
 import { selectedVersion } from "../../store/app/selectedVersion";
 
@@ -41,6 +41,10 @@ function goDownload() {
         <button class="secondary-btn" @click="router.push('/version-select')">
           <LayoutGrid :size="14" />
           <span>{{ t("launch.action.selectVersion") }}</span>
+        </button>
+        <button class="secondary-btn" @click="router.push('/tools')">
+          <Wrench :size="14" />
+          <span>{{ t("launch.action.tools") }}</span>
         </button>
       </div>
 

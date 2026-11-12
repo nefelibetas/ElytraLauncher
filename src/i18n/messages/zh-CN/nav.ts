@@ -10,6 +10,7 @@ export default {
     customThemeEdit: "编辑自定义外观",
     skinStudio: "衣柜",
     worldPreview: "世界预览 - {name}",
+    tools: "工具箱",
     resourceDetail: "资源详情",
   },
 };
