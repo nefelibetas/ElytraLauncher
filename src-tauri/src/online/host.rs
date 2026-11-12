@@ -256,25 +256,38 @@ async fn sync_host_session(
     true
 }
 
-/// 后台心跳任务：剔除超时 guest + 玩家表变化推前端。
+/// 后台心跳任务：剔除超时 guest + 把信息服务器线程维护的表同步进会话快照并推前端。
 fn spawn_host_heartbeat(sink: Arc<dyn EventSink>, shared: Arc<HostShared>, gen: u64) {
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
-            let svc = SERVICE.lock().await;
+            let mut svc = SERVICE.lock().await;
             if svc.generation != gen {
                 return;
             }
             let changed = {
                 let mut profiles = shared.profiles.lock();
-                profiles.purge_expired()
+                sync_host_profiles(&mut svc.profiles, &mut profiles)
             };
             if changed {
                 let snap = snapshot_inner(&svc);
+                drop(svc);
                 emit_snapshot(sink.as_ref(), &snap);
             }
         }
     });
+}
+
+/// 信息服务器线程只改 `shared` 表；快照读 `svc.profiles`，故须在此桥接。
+/// 返回玩家列表是否有可见变化（增删/改名），时间戳刷新不算。
+fn sync_host_profiles(target: &mut Option<ProfileTable>, shared: &mut ProfileTable) -> bool {
+    shared.purge_expired();
+    let changed = target
+        .as_ref()
+        .map(|old| old.profiles() != shared.profiles())
+        .unwrap_or(true);
+    *target = Some(shared.clone());
+    changed
 }
 
 fn build_host_handlers(shared: Arc<HostShared>) -> Handlers {
@@ -451,6 +464,31 @@ mod tests {
         };
         let resp = handlers.dispatch(&req).unwrap();
         assert_eq!(resp.status, 255);
+    }
+
+    /// 抓的是「信息服务器写 shared、快照读 svc」两表不同步：guest 加入后房主面板必须出现该玩家。
+    #[test]
+    fn host_snapshot_profiles_follow_shared_table() {
+        let host = Profile::new("host".into(), "m0".into(), "test".into(), ProfileKind::Host);
+        let mut shared = ProfileTable::with_host(host);
+        let mut target = Some(shared.clone());
+        assert!(!sync_host_profiles(&mut target, &mut shared));
+
+        shared.upsert_guest(Profile::new(
+            "alice".into(),
+            "m1".into(),
+            "test".into(),
+            ProfileKind::Guest,
+        ));
+        assert!(sync_host_profiles(&mut target, &mut shared));
+        let names: Vec<String> = target
+            .as_ref()
+            .unwrap()
+            .profiles()
+            .into_iter()
+            .map(|p| p.name)
+            .collect();
+        assert_eq!(names, vec!["host", "alice"]);
     }
 
     /// Hosting 期间游戏端口变化必须触发重建（否则白名单/端口停在旧值，guest 加入失败）；
