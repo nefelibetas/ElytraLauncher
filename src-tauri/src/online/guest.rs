@@ -133,9 +133,7 @@ async fn connect_center(
     let center_addr = SocketAddr::from((center_ip, center_port));
     // 仅直连时打洞需要时间，给足等待窗口；允许中继时 15s 足够建立连接。
     let timeout = if online_config().allow_relay { 15 } else { 60 };
-    let stream = match session
-        .data_plane_tcp_connect(center_addr, Duration::from_secs(timeout))
-        .await
+    let stream = match connect_data_plane(session, center_addr, Duration::from_secs(timeout)).await
     {
         Ok(st) => st,
         Err(e) => {
@@ -150,6 +148,38 @@ async fn connect_center(
         }
     };
     Ok((stream, center_addr, center_ip))
+}
+
+/// 数据面连接重试：中心路由先于直连隧道进入路由表，首次连接常因打洞未完成而失败。
+/// 单次尝试上限 12s（网关无直连时约 11s 返回失败），剩余窗口内每 2s 重试。
+async fn connect_data_plane(
+    session: &EasyTierSession,
+    addr: SocketAddr,
+    total: Duration,
+) -> Result<DataPlaneTcpStream, String> {
+    const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(12);
+    const RETRY_INTERVAL: Duration = Duration::from_secs(2);
+
+    let deadline = tokio::time::Instant::now() + total;
+    let mut last_err = String::new();
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(last_err);
+        }
+        match session
+            .data_plane_tcp_connect(addr, remaining.min(ATTEMPT_TIMEOUT))
+            .await
+        {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last_err = e,
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(last_err);
+        }
+        tokio::time::sleep(remaining.min(RETRY_INTERVAL)).await;
+    }
 }
 
 /// 阶段三：信息协议握手（心跳 → 协议协商 → server_port），返回本地玩家资料、是否支持 easytier_id、游戏端口。
