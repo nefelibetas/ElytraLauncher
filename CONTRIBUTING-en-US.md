@@ -34,13 +34,13 @@ pnpm lint:css                            # CSS compatibility check
 pnpm i18n:check                          # locale validation (missing keys / placeholder mismatch / raw Chinese)
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same set of checks on pull requests and pushes to `main` / `develop`, including `cargo fmt --check`.
+CI (`.github/workflows/ci.yml`) runs the same set of checks on pull requests and pushes to `main`, including `cargo fmt --check`.
 
 Integration tests: `cargo test --test online_diag` (host/guest loopback with real EasyTier) and `cargo test --test tool_download` (local HTTP server, no internet required).
 
 ## Branches and commits
 
-- Branch names: `feature/xxx` or `fix/xxx`
+- `main` is the trunk (trunk-based); keep `feature/xxx` / `fix/xxx` branches short-lived and open PRs directly against `main`
 - Commit messages: follow [Conventional Commits](https://www.conventionalcommits.org/)
 - Keep changes small and focused; open an issue to discuss larger changes first
 

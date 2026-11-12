@@ -34,13 +34,13 @@ pnpm lint:css                            # CSS 兼容性检查
 pnpm i18n:check                          # 语言包校验（缺 key / 占位符不一致 / 裸中文）
 ```
 
-CI（`.github/workflows/ci.yml`）在 PR 与 `main` / `develop` 推送时跑同一组检查，包含 `cargo fmt --check`。
+CI（`.github/workflows/ci.yml`）在 PR 与 `main` 推送时跑同一组检查，包含 `cargo fmt --check`。
 
 集成测试：`cargo test --test online_diag`（host/guest 双实例回环，走真实 EasyTier）、`cargo test --test tool_download`（本地 HTTP 服务驱动，无需外网）。
 
 ## 分支与提交
 
-- 分支命名：`feature/xxx` 或 `fix/xxx`
+- 主干为 `main`（trunk-based）；`feature/xxx` / `fix/xxx` 分支保持短生命周期，完成后直接向 `main` 提 PR
 - 提交信息：遵循 [Conventional Commits](https://www.conventionalcommits.org/)
 - 改动尽量小而聚焦；较大的改动建议先开 Issue 讨论
 
