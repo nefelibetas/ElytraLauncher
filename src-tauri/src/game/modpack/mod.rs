@@ -17,8 +17,11 @@ mod plan;
 mod version_meta;
 
 pub use curseforge::{parse_curseforge_manifest, resolve_cf_files};
-pub(crate) use curseforge_export::pack_curseforge;
-pub(crate) use export::{pack_modpack, resolve_hosted_mods, resolve_version_meta};
+pub(crate) use curseforge_export::pack_curseforge_with;
+pub(crate) use export::{
+    export_pack_totals, mod_candidate_totals, pack_modpack_with, resolve_hosted_mods_with,
+    resolve_version_meta, ExportObserver, ExportPhase,
+};
 pub use model::{
     ModpackRequest, OverridesRef, PackFile, PackKind, PackMetaInfo, PackPlan, PackSource,
 };

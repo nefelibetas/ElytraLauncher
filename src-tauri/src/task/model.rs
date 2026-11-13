@@ -81,6 +81,10 @@ pub enum StepKind {
     ModpackLoaderFiles,
     /// 整合包安装：解压 overrides
     ModpackOverrides,
+    /// 整合包导出：扫描/匹配在线文件
+    ExportScan,
+    /// 整合包导出：写入 zip
+    ExportPack,
     /// 批量文件下载的单个文件步骤
     File,
 }
@@ -113,6 +117,8 @@ impl StepKind {
             StepKind::ModpackLoaderConfig => "modpack_loader_config",
             StepKind::ModpackLoaderFiles => "modpack_loader_files",
             StepKind::ModpackOverrides => "modpack_overrides",
+            StepKind::ExportScan => "export_scan",
+            StepKind::ExportPack => "export_pack",
             StepKind::File => "file",
         }
     }
@@ -186,6 +192,25 @@ pub struct StepInfo {
 pub struct FabricApi {
     pub url: String,
     pub version: String,
+}
+
+/// 整合包导出格式（命令参数与任务恢复凭证共用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModpackExportFormat {
+    Mrpack,
+    Curseforge,
+}
+
+impl ModpackExportFormat {
+    /// 前端命令参数 → 枚举；未知格式返回 None。
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "mrpack" => Some(Self::Mrpack),
+            "curseforge" => Some(Self::Curseforge),
+            _ => None,
+        }
+    }
 }
 
 /// 下载游戏本体任务（原版，或带 ModLoader/OptiFine/Fabric API）。

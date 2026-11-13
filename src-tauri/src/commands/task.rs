@@ -4,7 +4,10 @@ use std::path::Path;
 use tauri::AppHandle;
 
 use crate::game::modpack::{ModpackRequest, PackSource};
-use crate::task::{self, files, model, modpack, repair, store};
+use crate::task::export::spawn_modpack_export;
+use crate::task::{
+    self, files, model, modpack, repair, spawn_download, spawn_install_jdk, spawn_task, store,
+};
 
 /// 提交完整下载/安装任务（注册 TaskManager 并后台执行），返回任务 id；注册/spawn/快照走 task::spawn_download。
 #[tauri::command]
@@ -52,7 +55,7 @@ pub async fn submit_missing_download(
     let report = repair::scan_missing(&version_dir_name).await?;
 
     let steps = repair::repair_step_specs(&report);
-    crate::task::spawn_task(
+    spawn_task(
         app,
         format!("{} 版本修复", version_dir_name),
         model::TaskText::new(
@@ -94,7 +97,7 @@ pub async fn resume_task(app: AppHandle, task_id: String) -> Result<String, Stri
     // 恢复即重跑：旧快照删除，spawn 时写入新快照（新 task_id）
     task::store::remove_snapshot(&task_id);
     match spec {
-        store::JobSpec::Download(task) => crate::task::spawn_download(app, task),
+        store::JobSpec::Download(task) => spawn_download(app, task),
         store::JobSpec::Files(task) => {
             // 社区资源无校验数据，恢复 = 重新开始：先清掉上次中断残留的 .elytra-part
             // 半截临时文件（可能被占用/干扰校验）。
@@ -104,8 +107,13 @@ pub async fn resume_task(app: AppHandle, task_id: String) -> Result<String, Stri
         store::JobSpec::Repair { version_dir_name } => {
             submit_missing_download(app, version_dir_name).await
         }
-        store::JobSpec::InstallJdk { major } => crate::task::spawn_install_jdk(app, major),
+        store::JobSpec::InstallJdk { major } => spawn_install_jdk(app, major),
         store::JobSpec::ModpackInstall(spec) => install_modpack(app, spec.request).await,
+        store::JobSpec::ExportModpack {
+            version_name,
+            save_path,
+            format,
+        } => spawn_modpack_export(app, version_name, save_path, format),
     }
 }
 
@@ -192,7 +200,7 @@ pub async fn install_modpack(app: AppHandle, request: ModpackRequest) -> Result<
     }
 
     let steps = task::modpack::initial_step_specs(&request);
-    crate::task::spawn_task(
+    spawn_task(
         app,
         format!("整合包：{}", request.name),
         model::TaskText::new(

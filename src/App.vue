@@ -65,7 +65,10 @@ dlState.onTaskDone = (message: string, kind?: TaskKind, versionDir?: string) => 
   // 文案由 download.ts 统一格式化（资源名映射）
   showToast(message);
   void flashTaskbarAttention("info");
-  void notifyIfUnfocused(t("common.notify.downloadDone"), message);
+  void notifyIfUnfocused(
+    kind === "export" ? t("common.notify.exportDone") : t("common.notify.downloadDone"),
+    message,
+  );
   // 完成不自动退出任务中心
 };
 

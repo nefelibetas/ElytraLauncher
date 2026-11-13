@@ -10,7 +10,7 @@ import { errMsg } from "../../utils/error"
 import { t } from "../../i18n"
 import { setTaskbarSource } from "../app/taskbar"
 
-export type TaskKind = "jdk";
+export type TaskKind = "jdk" | "export";
 
 export interface TaskItem {
   taskId: string
@@ -205,12 +205,25 @@ export const dlState = reactive({
       steps: [],
       ...init,
     })
+    // 进度帧先到会先建卡（payload 无 kind）：预注册时补回前端侧任务类型。
+    if (init.kind) {
+      const idx = this.tasks.findIndex(t => t.taskId === taskId)
+      if (idx >= 0) this.tasks[idx].kind = init.kind
+    }
     const exists = await invoke<boolean>("task_exists", { taskId })
     if (!exists) {
+      // 终态事件可能先于卡片预注册到达：消费快照补发完成/失败通知（不含极快完成的正常任务）。
+      const terminal = terminalSnapshots.get(taskId)
+      terminalSnapshots.delete(taskId)
+      if (terminal && !terminalTaskIds.has(taskId)) {
+        if (terminal.status === "done") finishDone(terminal, init.kind)
+        else if (terminal.status === "error") finishError(terminal)
+        else finishCancelled(terminal)
+      }
       const alreadyHandled = terminalTaskIds.has(taskId)
       terminalTaskIds.add(taskId)
       this.removeTask(taskId)
-      if (!alreadyHandled && !silentFastExit) {
+      if (!terminal && !alreadyHandled && !silentFastExit) {
         showToast(t("task.finishedFast"))
       }
     }
@@ -272,6 +285,45 @@ let listening = false
 // 已收到终态/已移除的任务 id：防迟到 running 事件让卡片复活
 const terminalTaskIds = new Set<string>()
 
+/** 卡片尚未预注册时先到的终态帧：adoptTask 消费并补发对应提示。 */
+const terminalSnapshots = new Map<string, ProgressPayload>()
+
+function finishDone(p: ProgressPayload, kind?: TaskKind) {
+  terminalTaskIds.add(p.task_id)
+  const mapped = taskNames.get(p.task_id)
+  taskNames.delete(p.task_id)
+  const message = mapped
+    ? t("task.doneNamed", { name: mapped })
+    : t("task.done", { name: progressLabel(p) || t("task.defaultName") })
+  // 版本下载完成：携带安装目录名（App.vue 据此自动选中版本）
+  const vdir = versionTargets.get(p.task_id)
+  versionTargets.delete(p.task_id)
+  dlState.onTaskDone?.(message, kind, vdir)
+  dlState.removeTask(p.task_id)
+  // 特殊任务（JDK 等）完成接续：此处分发，消费后即删
+  const doneHook = taskDoneHooks.get(p.task_id)
+  taskDoneHooks.delete(p.task_id)
+  doneHook?.()
+}
+
+function finishError(p: ProgressPayload) {
+  terminalTaskIds.add(p.task_id)
+  // 终态即清理资源名/版本目标映射，防条目泄漏
+  taskNames.delete(p.task_id)
+  versionTargets.delete(p.task_id)
+  dlState.onTaskError?.(progressLabel(p) || t("task.defaultName"), p.error || t("task.unknownError"))
+  dlState.removeTask(p.task_id)
+  taskDoneHooks.delete(p.task_id)
+}
+
+function finishCancelled(p: ProgressPayload) {
+  terminalTaskIds.add(p.task_id)
+  taskNames.delete(p.task_id)
+  versionTargets.delete(p.task_id)
+  taskDoneHooks.delete(p.task_id)
+  dlState.removeTask(p.task_id)
+}
+
 export function ensureListen() {
   if (listening) return
   listening = true
@@ -290,44 +342,19 @@ export function ensureListen() {
     const idx = dlState.tasks.findIndex(t => t.taskId === p.task_id)
     if (idx >= 0) {
       if (p.status === "done") {
-        terminalTaskIds.add(p.task_id)
-        const kind = dlState.tasks[idx]?.kind;
-        const mapped = taskNames.get(p.task_id);
-        taskNames.delete(p.task_id);
-        const message = mapped
-          ? t("task.doneNamed", { name: mapped })
-          : t("task.done", { name: progressLabel(p) || t("task.defaultName") });
-        // 版本下载完成：携带安装目录名（App.vue 据此自动选中版本）
-        const vdir = versionTargets.get(p.task_id);
-        versionTargets.delete(p.task_id);
-        dlState.onTaskDone?.(message, kind, vdir);
-        dlState.removeTask(p.task_id);
-        // 特殊任务（JDK 等）完成接续：此处分发，消费后即删
-        const doneHook = taskDoneHooks.get(p.task_id);
-        taskDoneHooks.delete(p.task_id);
-        doneHook?.();
+        finishDone(p, dlState.tasks[idx]?.kind)
         return
       }
       if (p.status === "error") {
         // 任务失败：弹 dialog + 清理卡片
-        terminalTaskIds.add(p.task_id)
-        // 终态即清理资源名/版本目标映射，防条目泄漏
-        taskNames.delete(p.task_id)
-        versionTargets.delete(p.task_id)
-        dlState.onTaskError?.(progressLabel(p) || t("task.defaultName"), p.error || t("task.unknownError"));
-        dlState.removeTask(p.task_id);
-        taskDoneHooks.delete(p.task_id);
+        finishError(p)
         return
       }
       // 暂停后端的收尾 cancelled 事件须忽略，保留 paused 卡片（见 pauseTask）
       if (p.status === "cancelled" && dlState.tasks[idx].status === "paused") return
       if (p.status === "cancelled") {
         // 用户取消：与 done/error 一致走终态清理，防卡片停留 cancelled 无入口。
-        terminalTaskIds.add(p.task_id)
-        taskNames.delete(p.task_id)
-        versionTargets.delete(p.task_id)
-        taskDoneHooks.delete(p.task_id)
-        dlState.removeTask(p.task_id)
+        finishCancelled(p)
         return
       }
       dlState.tasks[idx].name = p.name
@@ -346,10 +373,10 @@ export function ensureListen() {
       dlState.tasks[idx].currentPhaseParams = p.current_phase_params ?? undefined
       dlState.tasks[idx].steps = p.steps
       dlState.tasks[idx].error = p.error ?? undefined
-    } else if (
-      p.status !== "done" && p.status !== "cancelled" && p.status !== "error"
-      && !terminalTaskIds.has(p.task_id)
-    ) {
+    } else if (p.status === "done" || p.status === "cancelled" || p.status === "error") {
+      // 卡片未注册：留给 adoptTask 消费，避免极快任务漏掉完成/失败提示。
+      if (!terminalTaskIds.has(p.task_id)) terminalSnapshots.set(p.task_id, p)
+    } else if (!terminalTaskIds.has(p.task_id)) {
       dlState.addTask({
         taskId: p.task_id,
         name: p.name,

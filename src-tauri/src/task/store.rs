@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 
-use crate::task::model::{DownloadFilesTask, DownloadTask, ModpackInstallSpec};
+use crate::task::model::{
+    DownloadFilesTask, DownloadTask, ModpackExportFormat, ModpackInstallSpec,
+};
 use crate::task::TaskStatus;
 use crate::util::{block_on, config_dir};
 
@@ -26,6 +28,12 @@ pub enum JobSpec {
     },
     /// 整合包安装（单卡片全流程；恢复 = 重跑整卡，各环节幂等）
     ModpackInstall(ModpackInstallSpec),
+    /// 整合包导出（恢复 = 重新生成临时文件并替换目标）
+    ExportModpack {
+        version_name: String,
+        save_path: String,
+        format: ModpackExportFormat,
+    },
 }
 
 impl JobSpec {
@@ -37,6 +45,7 @@ impl JobSpec {
             JobSpec::Repair { .. } => "版本补全",
             JobSpec::InstallJdk { .. } => "JDK 安装",
             JobSpec::ModpackInstall(_) => "整合包安装",
+            JobSpec::ExportModpack { .. } => "整合包导出",
         }
     }
 }

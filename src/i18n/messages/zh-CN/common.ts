@@ -38,6 +38,7 @@ export default {
   },
   notify: {
     downloadDone: "下载完成",
+    exportDone: "导出完成",
     downloadFailed: "下载失败",
     loginDone: "登录成功",
     loginFailed: "登录失败",

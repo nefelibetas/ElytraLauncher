@@ -474,6 +474,8 @@ export default {
           "Package this instance's mods / config / shaderpacks / resourcepacks / datapacks as a modpack (does not include the game itself or saves). MRPACK is the Modrinth standard; CurseForge requires online fingerprint matching.",
         curseforgeHint:
           "CurseForge export matches mod fingerprints online: matched mods are referenced, unmatched files are bundled into overrides. A CurseForge Key is required.",
+        modpackTaskHint:
+          "Exports appear in the task center with progress; the target file is not updated until the export finishes, so do not copy it early.",
         modpackButton: "Export MRPACK",
         modpackCurseforgeButton: "Export CurseForge",
         scriptFilter: "Launch script",
@@ -482,9 +484,7 @@ export default {
         scriptFileName: "Launch {version}.{ext}",
         notLoggedIn: "You are not logged in with a Microsoft account; log in on the Launch page first",
         scriptExported: "Launch script exported",
-        modpackExported: "Modpack exported (MRPACK)",
-        modpackCurseforgeExported:
-          "CurseForge modpack exported (matched {matched}, bundled {bundled})",
+        modpackSubmitted: "Export started; check the task center for progress",
       },
       logs: {
         title: "Game Logs",

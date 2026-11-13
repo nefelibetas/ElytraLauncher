@@ -1,6 +1,7 @@
 //! 整合包导出（标准 MRPACK）与在线分发文件识别。
 
-use std::io::Write;
+use std::collections::HashSet;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::downloader::hash::{sha1_hex, sha512_hex};
@@ -8,7 +9,43 @@ use crate::game::community::modrinth_version_files;
 use crate::game::version::dir::find_version_json;
 use crate::util::{infer_loader_from_json, loader_from_dir, mc_version_from_dir};
 
-// ── 导出侧（与上方导入解析对称；命令层 export_modpack 只做壳）──
+// ── 导出侧（与上方导入解析对称）──
+
+/// 导出阶段：扫描/哈希已存在文件 → 写入 zip。任务层据此切换分步进度。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExportPhase {
+    Scan,
+    Pack,
+}
+
+/// 导出进度观察者（`game` 层不依赖 task；任务层用原子计数实现并转成进度帧）。
+pub(crate) trait ExportObserver: Sync {
+    /// 已处理 `bytes` 字节；返回 false = 取消，调用方应尽快退出。
+    fn on_bytes(&self, _bytes: u64) -> bool {
+        true
+    }
+
+    /// 一个文件处理完毕（含跳过在线分发文件的引用计数）。
+    fn on_file(&self) -> bool {
+        true
+    }
+
+    /// 进入新阶段；返回 false = 取消。
+    fn on_phase(&self, _phase: ExportPhase) -> bool {
+        true
+    }
+}
+
+/// 导出物理打包的内容目录（MRPACK / CurseForge 共用同一集合）。
+pub(crate) const PACK_SUBDIRS: [&str; 5] = [
+    "mods",
+    "config",
+    "shaderpacks",
+    "resourcepacks",
+    "datapacks",
+];
+
+const COPY_CHUNK: usize = 64 * 1024;
 
 #[derive(serde::Serialize)]
 pub(crate) struct HostedPackFile {
@@ -19,49 +56,46 @@ pub(crate) struct HostedPackFile {
     file_size: u64,
 }
 
-/// 扫描 mods/ 下压缩类文件 → sha1 → Modrinth version_files 匹配，返回 (files[] 条目, 需排除的文件名)；网络失败/无匹配则留在 overrides 物理打包（静默降级）。
-pub(crate) async fn resolve_hosted_mods(
+/// 扫描 mods/ 下压缩类文件 → sha1 → Modrinth version_files 匹配，返回 (files[] 条目, 需排除的文件名)；网络失败/无匹配则留在 overrides 物理打包（静默降级）。取消时返回空结果，任务层据取消令牌收口。
+pub(crate) async fn resolve_hosted_mods_with(
     vdir: &Path,
-) -> (Vec<HostedPackFile>, std::collections::HashSet<String>) {
+    observer: &dyn ExportObserver,
+) -> (Vec<HostedPackFile>, HashSet<String>) {
+    let empty = || (Vec::new(), HashSet::new());
+    if !observer.on_phase(ExportPhase::Scan) {
+        return empty();
+    }
     let mods_dir = vdir.join("mods");
-    let Ok(rd) = std::fs::read_dir(&mods_dir) else {
-        return (Vec::new(), std::collections::HashSet::new());
-    };
-    // 压缩/资源类文件（与 PCL2 导出集合一致）
-    let mut candidates: Vec<PathBuf> = rd
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_file()
-                && matches!(
-                    p.extension().and_then(|x| x.to_str()),
-                    Some("jar" | "zip" | "rar" | "disabled" | "old")
-                )
-        })
-        .collect();
+    let mut candidates = mod_candidates(&mods_dir);
     if candidates.is_empty() {
-        return (Vec::new(), std::collections::HashSet::new());
+        return empty();
     }
     let mut sha1s: Vec<String> = Vec::with_capacity(candidates.len());
-    let mut kept: Vec<(PathBuf, Vec<u8>, String)> = Vec::with_capacity(candidates.len());
+    // 只保留哈希与大小：整个 mods 目录全部驻留内存会在大型整合包上撑爆内存。
+    let mut kept: Vec<(PathBuf, String, String, u64)> = Vec::with_capacity(candidates.len());
     for path in candidates.drain(..) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let size = data.len() as u64;
+        if !observer.on_bytes(size) || !observer.on_file() {
+            return empty();
+        }
         let sha1 = sha1_hex(&data);
-        kept.push((path, data, sha1.clone()));
+        let sha512 = sha512_hex(&data);
+        kept.push((path, sha1.clone(), sha512, size));
         sha1s.push(sha1);
     }
     if kept.is_empty() {
-        return (Vec::new(), std::collections::HashSet::new());
+        return empty();
     }
     let raw = match modrinth_version_files(&sha1s).await {
         Ok(v) => v,
-        Err(_) => return (Vec::new(), std::collections::HashSet::new()), // 离线降级
+        Err(_) => return empty(), // 离线降级
     };
     let mut hosted = Vec::new();
-    let mut names = std::collections::HashSet::new();
-    for (path, data, sha1) in kept {
+    let mut names = HashSet::new();
+    for (path, sha1, sha512, size) in kept {
         let Some(hit) = raw.get(&sha1) else { continue };
         let Some(files) = hit.get("files").and_then(|f| f.as_array()) else {
             continue;
@@ -78,14 +112,84 @@ pub(crate) async fn resolve_hosted_mods(
             path: format!("mods/{fname}"),
             hashes: serde_json::json!({
                 "sha1": sha1,
-                "sha512": sha512_hex(&data),
+                "sha512": sha512,
             }),
             downloads: vec![url.to_string()],
-            file_size: data.len() as u64,
+            file_size: size,
         });
         names.insert(fname);
     }
     (hosted, names)
+}
+
+/// mods/ 下参与在线匹配的压缩/资源类文件（与 PCL2 导出集合一致）。
+pub(super) fn mod_candidates(mods_dir: &Path) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(mods_dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && matches!(
+                    p.extension().and_then(|x| x.to_str()),
+                    Some("jar" | "zip" | "rar" | "disabled" | "old")
+                )
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+/// 在线匹配阶段的分母：候选文件数与字节数。
+pub(crate) fn mod_candidate_totals(vdir: &Path) -> (u32, u64) {
+    let mut files = 0u32;
+    let mut bytes = 0u64;
+    for path in mod_candidates(&vdir.join("mods")) {
+        let Ok(meta) = path.metadata() else {
+            continue;
+        };
+        files += 1;
+        bytes = bytes.saturating_add(meta.len());
+    }
+    (files, bytes)
+}
+
+/// 递归统计目录内文件数与字节数（导出进度分母）。
+fn dir_totals(dir: &Path) -> (u32, u64) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    let (mut files, mut bytes) = (0u32, 0u64);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let (f, b) = dir_totals(&path);
+            files = files.saturating_add(f);
+            bytes = bytes.saturating_add(b);
+        } else if path.is_file() {
+            files += 1;
+            if let Ok(meta) = entry.metadata() {
+                bytes = bytes.saturating_add(meta.len());
+            }
+        }
+    }
+    (files, bytes)
+}
+
+/// 物理打包阶段的分母：所有内容目录的文件数与字节数（含会被在线引用跳过的文件，打包阶段照常计数）。
+pub(crate) fn export_pack_totals(vdir: &Path) -> (u32, u64) {
+    let (mut files, mut bytes) = (0u32, 0u64);
+    for sub in PACK_SUBDIRS {
+        let dir = vdir.join(sub);
+        if dir.is_dir() {
+            let (f, b) = dir_totals(&dir);
+            files = files.saturating_add(f);
+            bytes = bytes.saturating_add(b);
+        }
+    }
+    (files, bytes)
 }
 
 /// 读取整合包安装标记里的真实 MC；旧标记无该字段时回查计划缓存。
@@ -153,27 +257,18 @@ pub(crate) fn resolve_version_meta(
     (mc, kind, ver)
 }
 
-/// 导出标准 MRPACK（v1）：内容物理打包进 `overrides/`，`modrinth.index.json` 声明版本、loader 依赖与 hosted files[]；存档（saves）不打包。
-pub(crate) fn pack_modpack(
+/// 导出标准 MRPACK（v1）：内容物理打包进 `overrides/`，`modrinth.index.json` 声明版本、loader 依赖与 hosted files[]；存档（saves）不打包。取消时提前返回 Ok（任务层据取消令牌清理临时文件）。
+pub(crate) fn pack_modpack_with(
     vdir: &Path,
     version_name: &str,
     save_path: &str,
     hosted: &[HostedPackFile],
-    hosted_names: &std::collections::HashSet<String>,
+    hosted_names: &HashSet<String>,
+    observer: &dyn ExportObserver,
 ) -> Result<(), String> {
-    // 收集存在的顶层目录（datapacks 为 1.13+ 数据包目录，一并导出）
-    let subdirs: Vec<&str> = [
-        "mods",
-        "config",
-        "shaderpacks",
-        "resourcepacks",
-        "datapacks",
-    ]
-    .iter()
-    .copied()
-    .filter(|d| vdir.join(d).is_dir())
-    .collect();
-
+    if !observer.on_phase(ExportPhase::Pack) {
+        return Ok(());
+    }
     let file = std::fs::File::create(save_path)
         .map_err(common_err_ctx_key!("errors.file.write", "创建文件失败"))?;
     let mut writer = zip::ZipWriter::new(file);
@@ -217,19 +312,22 @@ pub(crate) fn pack_modpack(
         .write_all(&content)
         .map_err(common_err_ctx_key!("errors.file.write", "写入清单失败"))?;
 
-    for sub in subdirs {
+    let mut buf = vec![0u8; COPY_CHUNK];
+    for sub in PACK_SUBDIRS {
+        let dir = vdir.join(sub);
+        if !dir.is_dir() {
+            continue;
+        }
         // 在线分发 mod 不物理打包进 overrides
-        let skip = if sub == "mods" {
-            Some(hosted_names)
-        } else {
-            None
-        };
+        let skip = (sub == "mods").then_some(hosted_names);
         add_dir_to_zip(
             &mut writer,
-            &vdir.join(sub),
+            &dir,
             &format!("overrides/{sub}"),
             opts,
             skip,
+            observer,
+            &mut buf,
         )?;
     }
     writer
@@ -238,14 +336,20 @@ pub(crate) fn pack_modpack(
     Ok(())
 }
 
-/// 递归写目录到 zip（保留相对路径；目录条目本身也记录，空目录才可保留）。
+/// 递归写目录到 zip（保留相对路径；目录条目本身也记录，空目录才可保留）。跳过/写入的文件都计入进度。
 pub(super) fn add_dir_to_zip(
     writer: &mut zip::ZipWriter<std::fs::File>,
     dir: &Path,
     prefix: &str,
     opts: zip::write::SimpleFileOptions,
-    skip_files: Option<&std::collections::HashSet<String>>,
+    skip_files: Option<&HashSet<String>>,
+    observer: &dyn ExportObserver,
+    buf: &mut [u8],
 ) -> Result<(), String> {
+    // 空目录不会触发 on_file，进入目录时先探一次取消。
+    if !observer.on_bytes(0) {
+        return Ok(());
+    }
     writer
         .add_directory(format!("{prefix}/"), opts)
         .map_err(common_err_ctx_key!("errors.file.write", "写入目录失败"))?;
@@ -255,23 +359,42 @@ pub(super) fn add_dir_to_zip(
     for e in entries.flatten() {
         let path = e.path();
         let name = format!("{}/{}", prefix, e.file_name().to_string_lossy());
-        // 顶层 hosted 文件跳过（在线分发，不物理打包）
+        // 顶层 hosted 文件跳过（在线分发，不物理打包），但按已处理计进度
         if path.is_file()
             && skip_files
                 .is_some_and(|set| set.contains(&e.file_name().to_string_lossy().to_string()))
         {
+            let size = e.metadata().map(|m| m.len()).unwrap_or(0);
+            if !observer.on_bytes(size) || !observer.on_file() {
+                return Ok(());
+            }
             continue;
         }
         if path.is_dir() {
-            add_dir_to_zip(writer, &path, &name, opts, None)?;
+            add_dir_to_zip(writer, &path, &name, opts, None, observer, buf)?;
         } else if path.is_file() {
             let mut f = std::fs::File::open(&path)
                 .map_err(common_err_ctx_key!("errors.file.read", "打开文件失败"))?;
             writer
                 .start_file(name, opts)
                 .map_err(common_err_ctx_key!("errors.file.write", "写入文件失败"))?;
-            std::io::copy(&mut f, writer)
-                .map_err(common_err_ctx_key!("errors.file.write", "写入文件失败"))?;
+            loop {
+                let n = f
+                    .read(buf)
+                    .map_err(common_err_ctx_key!("errors.file.read", "读取文件失败"))?;
+                if n == 0 {
+                    break;
+                }
+                writer
+                    .write_all(&buf[..n])
+                    .map_err(common_err_ctx_key!("errors.file.write", "写入文件失败"))?;
+                if !observer.on_bytes(n as u64) {
+                    return Ok(());
+                }
+            }
+            if !observer.on_file() {
+                return Ok(());
+            }
         }
     }
     Ok(())

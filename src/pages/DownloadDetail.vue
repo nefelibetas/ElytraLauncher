@@ -32,11 +32,18 @@ function toggleSteps(taskId: string) {
   expandedSteps.value = s
 }
 
+/** 导出任务没有断点，不提供暂停（继续会从零重跑）。 */
+function isExportTask(task: TaskItem) {
+  return task.nameKey === "task.backend.name.exportMrpack"
+    || task.nameKey === "task.backend.name.exportCurseforge";
+}
+
 /** 状态徽标文案与色调。 */
 function statusChip(task: TaskItem): { text: string; cls: string } {
   if (task.status === "error") return { text: t("task.status.failed"), cls: "err" }
   if (task.status === "pending") return { text: t("task.status.pending"), cls: "pending" }
   if (task.status === "paused") return { text: t("task.status.paused"), cls: "pending" }
+  if (isExportTask(task)) return { text: t("task.status.exporting"), cls: "running" }
   return { text: t("task.status.downloading"), cls: "running" }
 }
 
@@ -131,7 +138,7 @@ async function handleDismissPaused(task: TaskItem) {
             <span class="tc-name" :title="taskLabel(task)">{{ taskLabel(task) || t("task.defaultName") }}</span>
             <span class="tc-chip" :class="statusChip(task).cls">{{ statusChip(task).text }}</span>
             <template v-if="task.status === 'running'">
-              <button class="tc-cancel" v-tooltip="t('task.pause')" @click="dlState.pauseTask(task.taskId)">
+              <button v-if="!isExportTask(task)" class="tc-cancel" v-tooltip="t('task.pause')" @click="dlState.pauseTask(task.taskId)">
                 <Pause :size="13" />
               </button>
               <button class="tc-cancel" v-tooltip="t('task.cancelCleanup')" @click="handleCancel(task)">

@@ -10,6 +10,7 @@ import {
   exportModpack as exportModpackCommand,
   type ModpackExportFormat,
 } from "../../store/task/versionSetup";
+import { dlState } from "../../store/task/download";
 import { save } from "@tauri-apps/plugin-dialog";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
@@ -85,17 +86,17 @@ async function exportModpack(format: ModpackExportFormat) {
         : [{ name: t("settings.version.setup.export.curseforgeFilter"), extensions: ["zip"] }],
     });
     if (!path) return; // 用户取消
-    const result = await exportModpackCommand(versionName.value, path, format);
-    if (format === "curseforge") {
-      showToast(
-        t("settings.version.setup.export.modpackCurseforgeExported", {
-          matched: result.matched,
-          bundled: result.bundled,
-        }),
-      );
-    } else {
-      showToast(t("settings.version.setup.export.modpackExported"));
-    }
+    const taskId = await exportModpackCommand(versionName.value, path, format);
+    showToast(t("settings.version.setup.export.modpackSubmitted"));
+    // 预注册任务卡片；极快终态由 adoptTask 的终态快照校正，避免漏掉完成/失败提示。
+    await dlState.adoptTask(taskId, {
+      name: versionName.value,
+      nameKey: mrpack
+        ? "task.backend.name.exportMrpack"
+        : "task.backend.name.exportCurseforge",
+      nameParams: { version: versionName.value },
+      kind: "export",
+    });
   } catch (e) {
     showToast(errMsg(e));
   }
@@ -123,6 +124,7 @@ async function exportModpack(format: ModpackExportFormat) {
       :desc="t('settings.version.setup.export.modpackDesc')"
     >
       <div class="setup-desc">{{ t("settings.version.setup.export.curseforgeHint") }}</div>
+      <div class="setup-desc">{{ t("settings.version.setup.export.modpackTaskHint") }}</div>
       <div class="setup-btn-row">
         <button class="setup-btn" @click="exportModpack('mrpack')">
           <Package :size="15" />

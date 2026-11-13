@@ -18,18 +18,13 @@ export async function exportLaunchScript(payload: {
 
 export type ModpackExportFormat = "mrpack" | "curseforge";
 
-export interface ModpackExportResult {
-  format: ModpackExportFormat;
-  matched: number;
-  bundled: number;
-}
-
+/** 提交导出任务，返回任务 id（进度在任务中心展示，完成前不会替换目标文件）。 */
 export async function exportModpack(
   versionName: string,
   savePath: string,
   format: ModpackExportFormat,
-): Promise<ModpackExportResult> {
-  return await invoke<ModpackExportResult>("export_modpack", { versionName, savePath, format });
+): Promise<string> {
+  return await invoke<string>("export_modpack", { versionName, savePath, format });
 }
 
 /** 版本级服务器直连配置（快速进服 --server/--port，per-version 存储）。 */

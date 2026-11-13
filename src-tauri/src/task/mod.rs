@@ -2,8 +2,9 @@
 //!
 //! 实现划分：[`manager`] 注册表/终态收口/挂起决策；[`emit`] 事件派发；[`spawn`] 注册与 spawn；
 //! [`model`] 配置与进度类型；[`steps`]/[`progress`]/[`repair`]/[`files`] 步骤/上报/修复/批量下载；
-//! [`runner`] 完整下载主体；[`jdk`] JDK 安装；[`modpack`] 整合包安装；[`store`] SQLite 快照与恢复。
+//! [`runner`] 完整下载主体；[`jdk`] JDK 安装；[`modpack`] 整合包安装；[`export`] 整合包导出；[`store`] SQLite 快照与恢复。
 
+pub mod export;
 pub mod files;
 pub mod jdk;
 pub mod model;
@@ -23,8 +24,8 @@ pub use crate::game::loader::{LoaderChoice, LoaderKind};
 pub use manager::{global, is_own_task, TaskManager, WaitingDecision};
 pub use model::{
     DownloadFileItem, DownloadFileKind, DownloadFileTask, DownloadFilesTask, DownloadTask,
-    FabricApi, ModpackInstallSpec, StepInfo, StepKind, StepStatus, TaskProgress, TaskStatus,
-    TaskText,
+    FabricApi, ModpackExportFormat, ModpackInstallSpec, StepInfo, StepKind, StepStatus,
+    TaskProgress, TaskStatus, TaskText,
 };
 pub use spawn::{spawn_download, spawn_install_jdk, spawn_task_with_sink};
 pub use steps::{StepSpec, TaskSpec};

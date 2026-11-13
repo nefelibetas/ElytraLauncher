@@ -38,6 +38,7 @@ export default {
   },
   notify: {
     downloadDone: "Download complete",
+    exportDone: "Export complete",
     downloadFailed: "Download failed",
     loginDone: "Signed in",
     loginFailed: "Sign-in failed",

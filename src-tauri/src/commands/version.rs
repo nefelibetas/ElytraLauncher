@@ -2,10 +2,13 @@
 
 use serde::Serialize;
 
-use crate::game::modpack::{pack_modpack, resolve_hosted_mods, resolve_version_meta};
+use crate::game::modpack::resolve_version_meta;
 use crate::game::updates::{self, ModFileDetail, ModListResult, ModUpdate, ResourceListResult};
 use crate::game::version::dir::{version_dir_path, version_server_section};
-use crate::util;
+use crate::persist;
+use crate::task::export::spawn_modpack_export;
+use crate::task::ModpackExportFormat;
+use crate::util::{self, is_simple_name};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldInfo {
@@ -171,7 +174,7 @@ pub async fn identify_mod_file(
     version_name: String,
     file_name: String,
 ) -> Result<Option<ModFileDetail>, String> {
-    if !crate::util::is_simple_name(&file_name) {
+    if !is_simple_name(&file_name) {
         bail_key!("errors.version.invalidFileName", "非法文件名");
     }
     let vdir = version_dir_path(&version_name)?;
@@ -215,7 +218,7 @@ pub async fn get_version_server(version_name: String) -> VersionServer {
         let Ok(section) = version_server_section(&version_name) else {
             return VersionServer::default();
         };
-        crate::persist::read(&section).unwrap_or_default()
+        persist::read(&section).unwrap_or_default()
     })
     .await
     .unwrap_or_default()
@@ -233,7 +236,7 @@ pub async fn save_version_server(
             server: server.filter(|s| !s.trim().is_empty()),
             port,
         };
-        crate::persist::save(&section, &cfg)
+        persist::save(&section, &cfg)
             .map_err(common_err_ctx_key!("errors.config.write", "保存失败"))
     })
     .await
@@ -261,57 +264,29 @@ pub async fn toggle_mod_file(version_name: String, file_name: String) -> Result<
     .map_err(common_err_ctx_key!("errors.unknown", "操作失败，请重试"))?
 }
 
-/// 导出结果（前端展示匹配/打包数量；MRPACK 的 bundled 暂为 0）。
-#[derive(serde::Serialize)]
-pub struct ModpackExportResult {
-    pub format: String,
-    pub matched: usize,
-    pub bundled: usize,
-}
-
-/// 导出整合包：支持标准 MRPACK 与 CurseForge zip。
+/// 导出整合包：提交到任务中心（进度/取消/失败清理），返回任务 id。
 /// MRPACK：Modrinth 命中的 mod 写 `files[]`，其余进 `overrides/`；CurseForge：指纹命中的写 `files[]`，未命中进 `overrides/`。
 #[tauri::command]
 pub async fn export_modpack(
+    app: tauri::AppHandle,
     version_name: String,
     save_path: String,
     format: Option<String>,
-) -> Result<ModpackExportResult, String> {
-    let vdir = version_dir_path(&version_name)?;
-    match format.as_deref().unwrap_or("mrpack") {
-        "mrpack" => {
-            let name = version_name.clone();
-            let (hosted, hosted_names) = resolve_hosted_mods(&vdir).await;
-            let matched = hosted.len();
-            tokio::task::spawn_blocking(move || {
-                pack_modpack(&vdir, &name, &save_path, &hosted, &hosted_names)
-            })
-            .await
-            .map_err(common_err_ctx_key!("errors.file.write", "打包任务失败"))??;
-            Ok(ModpackExportResult {
-                format: "mrpack".into(),
-                matched,
-                bundled: 0,
-            })
-        }
-        "curseforge" => {
-            let stats =
-                crate::game::modpack::pack_curseforge(&vdir, &version_name, &save_path).await?;
-            Ok(ModpackExportResult {
-                format: "curseforge".into(),
-                matched: stats.matched,
-                bundled: stats.bundled,
-            })
-        }
-        other => bail_key!("errors.modpack.exportFormat", "不支持的导出格式\n{other}"),
-    }
+) -> Result<String, String> {
+    let raw = format.as_deref().unwrap_or("mrpack");
+    let format = ModpackExportFormat::parse(raw)
+        .ok_or_else(|| keyed_msg!("errors.modpack.exportFormat", "不支持的导出格式\n{raw}"))?;
+    spawn_modpack_export(app, version_name, save_path, format)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::game::modpack::pack_modpack;
-    use crate::game::modpack::resolve_version_meta;
+    use crate::game::modpack::{pack_modpack_with, resolve_version_meta, ExportObserver};
     use std::io::Read;
+
+    struct Noop;
+
+    impl ExportObserver for Noop {}
 
     #[test]
     fn pack_modpack_keeps_existing_dirs_and_manifest() {
@@ -322,12 +297,13 @@ mod tests {
         std::fs::write(vdir.path().join("mods").join("nested").join("b.jar"), b"b").unwrap();
         let out = tempfile::tempdir().unwrap();
         let zip_path = out.path().join("pack.zip");
-        pack_modpack(
+        pack_modpack_with(
             vdir.path(),
             "1.20.1-fabric-1.0",
             zip_path.to_str().unwrap(),
             &[],
             &std::collections::HashSet::new(),
+            &Noop,
         )
         .unwrap();
 
@@ -377,12 +353,13 @@ mod tests {
         let vdir = tempfile::tempdir().unwrap();
         let out = tempfile::tempdir().unwrap();
         let zip_path = out.path().join("pack.zip");
-        pack_modpack(
+        pack_modpack_with(
             vdir.path(),
             "1.20.1",
             zip_path.to_str().unwrap(),
             &[],
             &std::collections::HashSet::new(),
+            &Noop,
         )
         .unwrap();
 

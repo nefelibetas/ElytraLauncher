@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{json, Value};
 
@@ -14,16 +14,8 @@ use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::game::version::dir::find_version_json;
 use crate::util::{loader_from_dir, mc_version_from_dir};
 
-use super::export::add_dir_to_zip;
+use super::export::{add_dir_to_zip, mod_candidates, ExportObserver, ExportPhase, PACK_SUBDIRS};
 use super::version_meta::loader_from_version_json;
-
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct CurseForgeExportStats {
-    /// 指纹命中、以 `files[]` 引用的本地文件数
-    pub matched: usize,
-    /// 未命中、物理打进 `overrides/` 的文件数
-    pub bundled: usize,
-}
 
 /// CurseForge 指纹：MurmurHash2（seed 1），哈希前剔除 ASCII 空白。
 pub(crate) fn cf_fingerprint(bytes: &[u8]) -> u32 {
@@ -106,12 +98,16 @@ fn loader_id(loader: &LoaderChoice) -> String {
     format!("{kind}-{}", loader.version)
 }
 
-/// 导出 CurseForge zip：指纹命中写引用，未命中与其它内容目录物理打包。
-pub(crate) async fn pack_curseforge(
+/// 导出 CurseForge zip：指纹命中写引用，未命中与其它内容目录物理打包。取消时提前返回 Ok（任务层据取消令牌清理临时文件）。
+pub(crate) async fn pack_curseforge_with(
     vdir: &Path,
     version_name: &str,
     save_path: &str,
-) -> Result<CurseForgeExportStats, String> {
+    observer: &dyn ExportObserver,
+) -> Result<(), String> {
+    if !observer.on_phase(ExportPhase::Scan) {
+        return Ok(());
+    }
     let (mc_version, loader) = resolve_meta(vdir, version_name);
 
     let mut by_fingerprint: HashMap<u32, Vec<String>> = HashMap::new();
@@ -119,6 +115,9 @@ pub(crate) async fn pack_curseforge(
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        if !observer.on_bytes(data.len() as u64) || !observer.on_file() {
+            return Ok(());
+        }
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -150,12 +149,10 @@ pub(crate) async fn pack_curseforge(
             matched_names.extend(names.iter().cloned());
         }
     }
-    let bundled = by_fingerprint
-        .values()
-        .flatten()
-        .filter(|name| !matched_names.contains(*name))
-        .count();
 
+    if !observer.on_phase(ExportPhase::Pack) {
+        return Ok(());
+    }
     let file = std::fs::File::create(save_path)
         .map_err(common_err_ctx_key!("errors.file.write", "创建文件失败"))?;
     let mut writer = zip::ZipWriter::new(file);
@@ -174,28 +171,27 @@ pub(crate) async fn pack_curseforge(
         .write_all(&content)
         .map_err(common_err_ctx_key!("errors.file.write", "写入清单失败"))?;
 
-    for sub in [
-        "mods",
-        "config",
-        "shaderpacks",
-        "resourcepacks",
-        "datapacks",
-    ] {
+    let mut buf = vec![0u8; 64 * 1024];
+    for sub in PACK_SUBDIRS {
         let dir = vdir.join(sub);
         if !dir.is_dir() {
             continue;
         }
         let skip = (sub == "mods").then_some(&matched_names);
-        add_dir_to_zip(&mut writer, &dir, &format!("overrides/{sub}"), opts, skip)?;
+        add_dir_to_zip(
+            &mut writer,
+            &dir,
+            &format!("overrides/{sub}"),
+            opts,
+            skip,
+            observer,
+            &mut buf,
+        )?;
     }
     writer
         .finish()
         .map_err(common_err_ctx_key!("errors.file.write", "写入 zip 失败"))?;
-
-    Ok(CurseForgeExportStats {
-        matched: matched_names.len(),
-        bundled,
-    })
+    Ok(())
 }
 
 /// 版本元数据：版本 JSON 优先（libraries 提取 loader），目录名兜底。
@@ -237,29 +233,15 @@ fn loader_from_dir_choice(version_name: &str) -> Option<LoaderChoice> {
     })
 }
 
-/// 与 MRPACK 导出保持一致的 mod 候选集合。
-fn mod_candidates(mods_dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(mods_dir) else {
-        return Vec::new();
-    };
-    entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.is_file()
-                && matches!(
-                    path.extension().and_then(|ext| ext.to_str()),
-                    Some("jar" | "zip" | "rar" | "disabled" | "old")
-                )
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::game::community::parse_fingerprint_matches;
     use std::io::Read as _;
+
+    struct Noop;
+
+    impl ExportObserver for Noop {}
 
     #[test]
     fn fingerprint_ignores_ascii_whitespace() {
@@ -310,11 +292,9 @@ mod tests {
         .unwrap();
 
         let out = dir.path().join("cf.zip");
-        let stats = pack_curseforge(&vdir, version_name, out.to_str().unwrap())
+        pack_curseforge_with(&vdir, version_name, out.to_str().unwrap(), &Noop)
             .await
             .expect("CF 导出应成功");
-        assert!(stats.matched >= 1);
-        assert_eq!(stats.bundled, 0);
 
         let mut archive = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
         let mut manifest_text = String::new();
