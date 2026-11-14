@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 联机面板：EasyTier 虚拟局域网（host 开房 / guest 加入 / 停止）；配置在「设置 → 联机设置」。
 // host 可先开联机（等待态）再「对局域网开放」，检测到端口自动生成房间码；正版 host 由服务器验证会话。
-import { onMounted, ref, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { Copy, Link2, Settings2, Unplug } from "@lucide/vue";
@@ -19,10 +19,29 @@ import { copyText } from "../../utils/clipboard";
 const { t } = useI18n();
 const router = useRouter();
 
-/** 跳到 设置 → 联机设置（昵称 / 广播名 / 节点）。 */
-function openOnlineSettings() {
+/** 跳到 设置 → 联机设置，并滚动到昵称/广播名区域。 */
+async function openOnlineSettings() {
   settingsTab.value = "online";
-  void router.push("/settings");
+  await router.push("/settings");
+  await nextTick();
+  // 等设置页切换动画结束（旧页退出期间滚动高度会变，提前滚动会被夹回顶部）。
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
+  for (let i = 0; i < 20; i++) {
+    const el = document.getElementById("settings-online-profile");
+    if (el) {
+      const scroller = el.closest(".sn-body-scroll");
+      if (scroller instanceof HTMLElement) {
+        const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 16;
+        scroller.scrollTo({ top, behavior: "smooth" });
+      } else {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      el.classList.add("is-anchor-flash");
+      window.setTimeout(() => el.classList.remove("is-anchor-flash"), 1600);
+      return;
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
 }
 
 onMounted(() => {
@@ -142,11 +161,13 @@ async function copyRoomCode() {
 
     <div v-show="onlinePanelTab === 'host'" class="online-sec">
       <p class="online-desc">{{ t("tools.online.hostDesc1") }}</p>
-      <p class="online-desc">{{ t("tools.online.hostDesc2") }}</p>
-      <button type="button" class="online-settings-link" @click="openOnlineSettings">
-        <Settings2 :size="12" />
-        {{ t("tools.online.openOnlineSettings") }}
-      </button>
+      <div class="online-hint-row">
+        <p class="online-desc online-hint-row-text">{{ t("tools.online.hostDesc2") }}</p>
+        <button type="button" class="online-settings-link" @click="openOnlineSettings">
+          <Settings2 :size="12" />
+          {{ t("tools.online.openOnlineSettings") }}
+        </button>
+      </div>
 
       <div v-if="hostBlocked()" class="online-sec-note">{{ t("tools.online.hostingInProgress") }}</div>
 
@@ -353,17 +374,32 @@ async function copyRoomCode() {
   margin: 0 0 10px;
 }
 
+.online-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.online-hint-row-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
 .online-settings-link {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 0 0 10px;
   padding: 4px 8px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--fs-sm);
+  white-space: nowrap;
   cursor: pointer;
   transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
 }
