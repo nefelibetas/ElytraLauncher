@@ -27,8 +27,9 @@ use crate::util::sha1_sub_dir;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MissingReport {
     pub client_jar: bool,
-    pub libraries: u32,
+    /// 资源待修复文件数（索引缓存缺失/损坏时含索引文件本身）。
     pub assets: u32,
+    pub libraries: u32,
     pub natives: u32,
 }
 
@@ -79,7 +80,8 @@ pub fn natives_missing_bytes(libraries: &[Library], lib_dir: &Path) -> u64 {
         .sum()
 }
 
-/// 扫描版本缺失文件（client.jar / 支持库 / 资源 / natives），不发起下载；资源按 assets index 与本地缓存 sha1 比对（多线程）。
+/// 扫描版本缺失文件（client.jar / 支持库 / 资源 / natives）；不修改本地文件。
+/// 索引缓存缺失/损坏时只统计对象数（文本不落盘），并把索引文件本身计入 assets。
 pub async fn scan_missing(version_dir_name: &str) -> Result<MissingReport, String> {
     let config: DownloaderConfig = persist::downloader_config();
     let mc = config.minecraft_dir_abs();
@@ -108,25 +110,22 @@ pub async fn scan_missing(version_dir_name: &str) -> Result<MissingReport, Strin
 
     let natives_pending = count_natives_missing(&vj.libraries, &lib_dir);
 
-    // 4. 资源（多线程 sha1；带 index id/sha1 走本地缓存；拉取/解析失败显式报错，不静默视为完整）
-    let (asst_pending, _) = count_assets_all(
-        AssetIndexRef {
-            url: &vj.asset_index.url,
-            id: Some(&vj.asset_index.id),
-            sha1: Some(&vj.asset_index.sha1),
-        },
-        &config,
-        &mc,
-        None,
-        |_, _| {},
-        |_, _| {},
-    )
-    .await?;
+    // 4. 资源（多线程 sha1；索引缓存缺失时才拉取文本、且不落盘——落盘会让提交修复后的二次扫描误判为已完整）
+    let index_cached = assets::read_cached_index(&mc, &vj.asset_index.id, &vj.asset_index.sha1);
+    let index_missing = index_cached.is_none();
+    let index_text = match index_cached {
+        Some(text) => text,
+        None => {
+            assets::fetch_index_text(&config, &vj.asset_index.url, &vj.asset_index.sha1).await?
+        }
+    };
+    let (asst_pending, _) = count_assets_in_index(&index_text, &mc, None, |_, _| {}, |_, _| {})?;
+    let assets = asst_pending + u32::from(index_missing);
 
     Ok(MissingReport {
         client_jar: jar_missing,
         libraries: lib_pending,
-        assets: asst_pending,
+        assets,
         natives: natives_pending,
     })
 }
@@ -585,18 +584,23 @@ pub async fn count_assets_all(
     config: &DownloaderConfig,
     mc_dir: &Path,
     cancel: Option<&AtomicBool>,
+    on_total: impl FnMut(u32, u64),
+    on_checked: impl FnMut(u32, u64),
+) -> Result<(u32, u64), String> {
+    let text = assets::fetch_asset_index(config, mc_dir, index.url, index.id, index.sha1).await?;
+    count_assets_in_index(&text, mc_dir, cancel, on_total, on_checked)
+}
+
+/// 用已就绪的索引文本统计缺失（scan 用不落盘文本，下载任务用缓存/网络拉取的文本）。
+fn count_assets_in_index(
+    text: &str,
+    mc_dir: &Path,
+    cancel: Option<&AtomicBool>,
     mut on_total: impl FnMut(u32, u64),
     mut on_checked: impl FnMut(u32, u64),
 ) -> Result<(u32, u64), String> {
-    let AssetIndexRef {
-        url: asset_index_url,
-        id: index_id,
-        sha1: index_sha1,
-    } = index;
-    let text =
-        assets::fetch_asset_index(config, mc_dir, asset_index_url, index_id, index_sha1).await?;
     eprintln!("[assets] 索引文本: {}B", text.len());
-    let idx: serde_json::Value = serde_json::from_str(&text)
+    let idx: serde_json::Value = serde_json::from_str(text)
         .map_err(common_err_ctx_key!("errors.parse", "解析资源索引失败"))?;
     eprintln!("[assets] JSON 解析完成");
     let objects_dir = mc_dir.join("assets").join("objects");

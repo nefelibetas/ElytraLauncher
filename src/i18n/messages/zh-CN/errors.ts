@@ -304,7 +304,8 @@ export default {
   },
   assets: {
     indexIdMissing: "资源索引缺少版本 id",
-    indexSha1Missing: "资源索引缺少 sha1"
+    indexSha1Missing: "资源索引缺少 sha1",
+    indexCorrupt: "资源索引内容校验失败（sha1 不匹配，源返回内容已损坏）"
   },
   updates: {
     badFileName: "非法文件名",

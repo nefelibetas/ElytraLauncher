@@ -7,7 +7,7 @@ use crate::config::downloader::DownloaderConfig;
 use crate::constants;
 use crate::downloader::hash::sha1_hex;
 use crate::game::loader::expand_inheritance;
-use crate::game::resource::assets::AssetsIndex;
+use crate::game::resource::assets::{self, AssetsIndex};
 use crate::game::resource::library::missing_libraries;
 use crate::game::version::dir::find_version_json;
 use crate::game::version::dir::version_server_section;
@@ -242,10 +242,9 @@ pub fn pre_launch_check(
 
     // 3. assets index（存在 + sha1 校验）+ 资源对象扫描（索引损坏或对象缺失/被截断会漏检 → 无声音/无语言/贴图缺失）。
     let assets_dir = mc_dir.join("assets");
-    let index_path = assets_dir
-        .join("indexes")
-        .join(format!("{}.json", version_json.asset_index.id));
     let index_sha1 = version_json.asset_index.sha1.as_str();
+    // 与下载侧同一套内容寻址路径（同一索引 id 可能对应多份内容）
+    let index_path = assets::index_cache_path(mc_dir, &version_json.asset_index.id, index_sha1);
     match std::fs::read(&index_path) {
         Err(_) => {
             missing.push(format!("资源索引: {}", index_path.display()));
@@ -596,9 +595,9 @@ mod tests {
         let index_json =
             format!(r#"{{"objects":{{"minecraft/x":{{"hash":"{obj_hash}","size":{obj_size}}}}}}}"#);
         let index_sha1 = sha1_hex(index_json.as_bytes());
-        let index_dir = mc.join("assets/indexes");
-        std::fs::create_dir_all(&index_dir).unwrap();
-        std::fs::write(index_dir.join("5.json"), &index_json).unwrap();
+        let index_path = assets::index_cache_path(mc, "5", &index_sha1);
+        std::fs::create_dir_all(index_path.parent().unwrap()).unwrap();
+        std::fs::write(&index_path, &index_json).unwrap();
 
         let vj: VersionJson = serde_json::from_str(&format!(
             r#"{{
@@ -626,7 +625,7 @@ mod tests {
         );
         std::fs::write(objects_dir.join(&obj_hash), obj_body).unwrap();
 
-        std::fs::write(index_dir.join("5.json"), format!("{index_json} ")).unwrap();
+        std::fs::write(&index_path, format!("{index_json} ")).unwrap();
         let err = pre_launch_check(&vj, mc, "1.20.1").unwrap_err();
         assert!(
             err.contains("资源索引校验失败"),
@@ -634,6 +633,57 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 同一索引 id 被 Mojang 重发为不同内容时（26.3 的 index 34），两个版本各用各的缓存路径，互不判损坏。
+    #[test]
+    fn pre_launch_check_handles_reissued_index_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mc = tmp.path();
+        let vdir = mc.join("versions/1.20.1");
+        std::fs::create_dir_all(&vdir).unwrap();
+        std::fs::write(vdir.join("1.20.1.jar"), b"CLIENTJAR").unwrap();
+
+        let build_vj = |index_text: &str| -> VersionJson {
+            serde_json::from_str(&format!(
+                r#"{{
+                    "id":"1.20.1","mainClass":"net.minecraft.client.main.Main","assets":"34",
+                    "assetIndex":{{"id":"34","url":"x","sha1":"{}","size":{},"totalSize":0}},
+                    "downloads":{{"client":{{"url":"x","sha1":"y","size":1}}}},
+                    "arguments":{{"game":[],"jvm":[]}},"libraries":[],
+                    "complianceLevel":0,"minimumLauncherVersion":21,"javaVersion":{{"majorVersion":17}},
+                    "releaseTime":"2023-01-01T00:00:00Z","time":"2023-01-01T00:00:00Z","type":"release"
+                }}"#,
+                sha1_hex(index_text.as_bytes()),
+                index_text.len()
+            ))
+            .unwrap()
+        };
+
+        let old_index = r#"{"objects":{}}"#;
+        let new_index = r#"{"objects":{ } }"#;
+        let old_vj = build_vj(old_index);
+        let new_vj = build_vj(new_index);
+
+        // 旧版单槽缓存内容与旧索引一致：旧版本直接复用，新版本走内容寻址路径
+        let legacy = mc.join("assets/indexes/34.json");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, old_index).unwrap();
+        let new_path = assets::index_cache_path(mc, "34", &new_vj.asset_index.sha1);
+        std::fs::create_dir_all(new_path.parent().unwrap()).unwrap();
+        std::fs::write(&new_path, new_index).unwrap();
+
+        assert!(
+            pre_launch_check(&old_vj, mc, "1.20.1").is_ok(),
+            "旧索引应复用 34.json"
+        );
+        assert!(
+            pre_launch_check(&new_vj, mc, "1.20.1").is_ok(),
+            "重发索引应使用独立缓存路径"
+        );
+        // 互不覆盖：两份内容都还在原处
+        assert_eq!(std::fs::read(&legacy).unwrap(), old_index.as_bytes());
+        assert_eq!(std::fs::read(&new_path).unwrap(), new_index.as_bytes());
     }
 
     #[test]

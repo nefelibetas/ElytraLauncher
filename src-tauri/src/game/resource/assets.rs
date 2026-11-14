@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -27,38 +27,37 @@ pub struct AssetObject {
     pub size: u64,
 }
 
-/// 拉取并缓存资源索引（本地缓存 sha1 匹配则直接读）；`index_id` 为 None 时只拉取不读不写缓存。
-pub async fn fetch_asset_index(
-    config: &DownloaderConfig,
-    mc_dir: &Path,
-    index_url: &str,
-    index_id: Option<&str>,
-    index_sha1: Option<&str>,
-) -> Result<String, String> {
-    let index_path = index_id.map(|id| {
-        mc_dir
-            .join("assets")
-            .join("indexes")
-            .join(format!("{}.json", id))
-    });
-    if let (Some(path), Some(sha1)) = (&index_path, index_sha1) {
-        // 单次读取即校验（避免二次读取）；不匹配或失败走网络
-        if path.exists() {
-            if let Ok(data) = std::fs::read(path) {
-                if sha1_hex(&data) == sha1 {
-                    eprintln!("[assets] 缓存命中: {}", path.display());
-                    return String::from_utf8(data).map_err(common_err_ctx_key!(
-                        "errors.file.read",
-                        "读取缓存资源索引失败"
-                    ));
-                }
-            }
-        }
-        eprintln!("[assets] 缓存无效或无缓存: {}", path.display());
+/// 资源索引本地路径：内容匹配则复用旧版 `{id}.json`，否则按内容寻址 `{id}-{sha1}.json`。
+/// 同一 id 可能被 Mojang 重发为不同内容（26.3 的 index 34 即如此），按 id 单槽会让多版本反复覆盖。
+pub fn index_cache_path(mc_dir: &Path, id: &str, sha1: &str) -> PathBuf {
+    let dir = mc_dir.join("assets").join("indexes");
+    if sha1.is_empty() {
+        return dir.join(format!("{id}.json"));
     }
+    let legacy = dir.join(format!("{id}.json"));
+    if file_sha1_matches(&legacy, sha1) {
+        legacy
+    } else {
+        dir.join(format!("{id}-{sha1}.json"))
+    }
+}
 
-    // 主源过慢（5s）自动降级到备用源
-    eprintln!("[assets] 无有效缓存，走网络 fetch_with_fallback");
+/// 读取本地索引缓存（sha1 为空时只看存在）；不发起网络。
+pub fn read_cached_index(mc_dir: &Path, id: &str, sha1: &str) -> Option<String> {
+    let data = std::fs::read(index_cache_path(mc_dir, id, sha1)).ok()?;
+    if !sha1.is_empty() && sha1_hex(&data) != sha1 {
+        return None;
+    }
+    String::from_utf8(data).ok()
+}
+
+/// 拉取资源索引文本并按 sha1 校验（为空则跳过校验）；不读写本地缓存。
+pub async fn fetch_index_text(
+    config: &DownloaderConfig,
+    index_url: &str,
+    index_sha1: &str,
+) -> Result<String, String> {
+    // 主源过慢（4s）自动降级到备用源
     let text = config
         .fetch_with_fallback(config.game_source_mode, CacheBehaviour::DefaultTtl, |s| {
             s.mirror_url(index_url)
@@ -68,16 +67,47 @@ pub async fn fetch_asset_index(
             "errors.download.fetch",
             "获取资源索引失败"
         ))?;
+    if !index_sha1.is_empty() && sha1_hex(text.as_bytes()) != index_sha1 {
+        bail_key!(
+            "errors.assets.indexCorrupt",
+            "资源索引内容校验失败（sha1 不匹配，源返回内容已损坏）\n{index_url}"
+        );
+    }
+    Ok(text)
+}
+
+/// 拉取并缓存资源索引（本地缓存 sha1 匹配则直接读）；`index_id` 为 None 时只拉取不读不写缓存。
+pub async fn fetch_asset_index(
+    config: &DownloaderConfig,
+    mc_dir: &Path,
+    index_url: &str,
+    index_id: Option<&str>,
+    index_sha1: Option<&str>,
+) -> Result<String, String> {
+    let sha1 = index_sha1.unwrap_or("");
+    if let Some(id) = index_id {
+        if let Some(text) = read_cached_index(mc_dir, id, sha1) {
+            eprintln!(
+                "[assets] 缓存命中: {}",
+                index_cache_path(mc_dir, id, sha1).display()
+            );
+            return Ok(text);
+        }
+    }
+
+    eprintln!("[assets] 无有效缓存，走网络 fetch_with_fallback");
+    let text = fetch_index_text(config, index_url, sha1).await?;
     eprintln!("[assets] 索引文本获取完成: {}B", text.len());
 
-    if let Some(path) = &index_path {
+    if let Some(id) = index_id {
+        let path = index_cache_path(mc_dir, id, sha1);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(common_err_ctx_key!(
                 "errors.file.createDir",
                 "创建索引目录失败"
             ))?;
         }
-        std::fs::write(path, &text)
+        std::fs::write(&path, &text)
             .map_err(common_err_ctx_key!("errors.file.write", "写入资源索引失败"))?;
     }
     Ok(text)
@@ -179,6 +209,44 @@ pub async fn download_assets(
 mod tests {
     use super::*;
     use crate::config::downloader::DownloaderConfig;
+
+    /// 索引按内容寻址：同一 id 的不同内容落到不同文件，损坏缓存不被命中。
+    #[test]
+    fn index_cache_is_content_addressed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mc = tmp.path();
+        let body = br#"{"objects":{}}"#;
+        let sha1 = sha1_hex(body);
+
+        let path = index_cache_path(mc, "34", &sha1);
+        assert_eq!(
+            path.file_name().unwrap().to_string_lossy(),
+            format!("34-{sha1}.json")
+        );
+        assert_eq!(
+            index_cache_path(mc, "34", "").file_name().unwrap(),
+            "34.json"
+        );
+
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, body).unwrap();
+        assert!(
+            read_cached_index(mc, "34", &sha1).is_some(),
+            "内容匹配应命中缓存"
+        );
+
+        std::fs::write(&path, b"corrupt").unwrap();
+        assert!(
+            read_cached_index(mc, "34", &sha1).is_none(),
+            "sha1 不匹配不应命中缓存"
+        );
+
+        // 旧版按 id 单槽的缓存内容匹配时直接复用（升级后无需重下索引）
+        let legacy = mc.join("assets").join("indexes").join("34.json");
+        std::fs::write(&legacy, body).unwrap();
+        assert_eq!(index_cache_path(mc, "34", &sha1), legacy);
+        assert!(read_cached_index(mc, "34", &sha1).is_some());
+    }
 
     /// 端到端：fetch_asset_index 经代理/直连拉官方资源索引应成功；离线/黑洞环境超时报错。
     #[tokio::test]
