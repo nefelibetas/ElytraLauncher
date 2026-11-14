@@ -243,7 +243,7 @@ async function handleSaveNickname() {
     </div>
 
     <!-- 自定义联机广播名 -->
-    <div id="settings-online-profile" class="online-sec">
+    <div class="online-sec">
       <div class="online-sec-title">{{ t("settings.online.motdTitle") }}</div>
       <p class="online-desc">{{ t("settings.online.motdDesc", { example: t("settings.online.motdExample") }) }}</p>
       <input
@@ -261,7 +261,7 @@ async function handleSaveNickname() {
     </div>
 
     <!-- 联机昵称 -->
-    <div class="online-sec">
+    <div id="settings-online-nickname" class="online-sec">
       <div class="online-sec-title">{{ t("settings.online.nicknameTitle") }}</div>
       <p class="online-desc">{{ t("settings.online.nicknameDesc") }}</p>
       <input

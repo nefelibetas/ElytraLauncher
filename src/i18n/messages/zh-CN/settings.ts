@@ -258,7 +258,7 @@ export default {
   },
   external: {
     title: "第三方登录",
-    subtitle: "第三方认证（authlib-injector），登录后游戏内显示该站皮肤",
+    subtitle: "第三方认证，游戏内显示该站皮肤",
     unknownAccount: "未知账号",
     removeAccount: "移除该账号",
     collapse: "收起",
@@ -274,11 +274,11 @@ export default {
     errorCredentials: "请输入账号与密码",
     loginSuccess: "登录成功",
     presetTitle: "预设服务器",
-    presetSubtitle: "登录下拉选项来自此处（含内置）；新增填名称 + 地址",
+    presetSubtitle: "登录下拉选项来自此处；新增填名称 + 地址",
     compatYggdrasil:
-      "兼容说明：内置 LittleSkin 与自建皮肤站为标准 Yggdrasil 格式（如 https://xxx/api/yggdrasil）",
-    compatElyby: "Ely.by 为内置特殊适配（非标准路径，自动处理）",
-    compatCustom: "自定义添加请使用标准格式地址",
+      "LittleSkin 与自建站需标准 Yggdrasil 地址（如 https://xxx/api/yggdrasil）",
+    compatElyby: "Ely.by 为内置特殊适配，自动处理",
+    compatCustom: "自定义添加请使用标准 Yggdrasil 地址",
     openPresetSite: "打开站点",
     remove: "移除",
     emptyPresets: "暂无预设",
@@ -290,10 +290,10 @@ export default {
   },
   online: {
     title: "联机设置",
-    subtitle: "会话操作（开启/加入联机）在启动页右栏；此处配置协调节点与广播名",
+    subtitle: "协调节点、广播名与联机昵称",
     coordTitle: "协调节点（跨网联机）",
     coordDesc:
-      "跨网联机需连同一个协调节点才能互相发现。默认内置两个社区节点（陶瓦同款，与其他 Scaffolding 客户端互通），可删除或添加自己的节点（如 {example}）；列表为空时仅支持同一局域网。节点只负责发现与打洞，默认不承载游戏流量。",
+      "跨网联机需连同一协调节点。默认内置两个社区节点，可增删（如 {example}）；留空仅支持局域网。节点只负责发现与打洞，不承载游戏流量。",
     coordGuide: "如何搭建/寻找协调节点（EasyTier 教程）",
     nodeInputPlaceholder: "tcp://服务器地址:11010 或 https://节点列表地址",
     addNode: "添加",
@@ -308,25 +308,24 @@ export default {
     nodeNotNode: "疑似控制台地址",
     nodeUnchecked: "无法探测",
     nodeHint:
-      "检查只验证格式与 TCP 可达性；UDP/TXT 节点无法在不建网的情况下探测。本版本默认仅直连，节点只参与发现与打洞。",
+      "仅验证格式与 TCP 可达性；UDP/TXT 节点无法探测。默认仅直连，节点只参与发现与打洞。",
     nodeExists: "该节点已在列表中",
     coordExample: "tcp://1.2.3.4:11010",
     relayTitle: "中继策略",
     relayDesc:
-      "默认仅直连：双方通过 P2P 打洞传输游戏流量，打洞失败时连接直接失败，不占用公共节点带宽。修改在下次开房/加入时生效。",
+      "默认仅直连；打洞失败即连接失败，不占用公共节点带宽。修改在下次联机生效。",
     relayToggle: "允许打洞失败时经公共节点中继",
     relayConfirmTitle: "允许使用公共节点中继？",
     relayConfirmMsg:
-      "开启后，打洞失败时游戏流量会经公共节点转发，可能占用社区节点带宽、增加延迟，并受节点限速影响。建议仅在无法直连时临时开启。",
+      "中继会占用社区节点带宽、增加延迟并受限速影响，建议仅在无法直连时临时开启。",
     relayConfirmOk: "仍要开启",
     motdTitle: "联机广播名（可选）",
     motdDesc:
-      "游戏内「局域网」标签页显示的服务器名，支持 § 颜色代码（如 {example}）。留空 = 自动使用主机世界名；可用「工具 → MOTD 生成器」生成。",
+      "局域网列表显示的服务器名，支持 § 颜色代码（如 {example}）；留空使用主机世界名。",
     motdExample: "§6Elytra §f联机",
     motdPlaceholder: "留空自动（host 世界名），支持 § 格式码",
     nicknameTitle: "联机昵称（可选）",
-    nicknameDesc:
-      "联机时向其他玩家展示的名字（Scaffolding 协议 c:player_ping 的 name 字段）。留空 = 系统用户名。",
+    nicknameDesc: "联机时显示给其他玩家的名字；留空使用系统用户名。",
     nicknamePlaceholder: "留空使用系统用户名",
     saving: "保存中...",
     savedConfig: "协调服务器已保存",

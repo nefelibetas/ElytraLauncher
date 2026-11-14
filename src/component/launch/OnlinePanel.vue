@@ -27,7 +27,7 @@ async function openOnlineSettings() {
   // 等设置页切换动画结束（旧页退出期间滚动高度会变，提前滚动会被夹回顶部）。
   await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
   for (let i = 0; i < 20; i++) {
-    const el = document.getElementById("settings-online-profile");
+    const el = document.getElementById("settings-online-nickname");
     if (el) {
       const scroller = el.closest(".sn-body-scroll");
       if (scroller instanceof HTMLElement) {

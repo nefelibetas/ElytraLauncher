@@ -261,7 +261,7 @@ export default {
   },
   external: {
     title: "Third-party Login",
-    subtitle: "Third-party authentication (authlib-injector); after signing in, the site's skins appear in game",
+    subtitle: "Third-party auth; the site's skin is shown in-game",
     unknownAccount: "Unknown account",
     removeAccount: "Remove this account",
     collapse: "Collapse",
@@ -277,11 +277,11 @@ export default {
     errorCredentials: "Enter your account and password",
     loginSuccess: "Logged in successfully",
     presetTitle: "Preset servers",
-    presetSubtitle: "Login options come from here (including built-ins); add a name and an address",
+    presetSubtitle: "Login dropdown options come from here; add a name + URL",
     compatYggdrasil:
-      "Compatibility: the built-in LittleSkin and self-hosted skin sites use the standard Yggdrasil format (e.g. https://xxx/api/yggdrasil)",
-    compatElyby: "Ely.by uses a built-in special adapter (non-standard paths handled automatically)",
-    compatCustom: "Use a standard-format address when adding your own",
+      "LittleSkin and self-hosted sites use the standard Yggdrasil URL (e.g. https://xxx/api/yggdrasil)",
+    compatElyby: "Ely.by uses a built-in adapter",
+    compatCustom: "Use a standard Yggdrasil URL for custom entries",
     openPresetSite: "Open site",
     remove: "Remove",
     emptyPresets: "No presets",
@@ -293,10 +293,10 @@ export default {
   },
   online: {
     title: "Multiplayer Settings",
-    subtitle: "Start or join sessions from the Launch page sidebar; configure coordination nodes and the broadcast name here",
+    subtitle: "Coordination nodes, broadcast name, and nickname",
     coordTitle: "Coordination nodes (cross-network play)",
     coordDesc:
-      "Cross-network sessions require everyone to use the same coordination node to discover each other. Two community nodes are built in (the same as Terracotta, compatible with other Scaffolding clients); you can remove them or add your own (e.g. {example}). An empty list supports only the same LAN. Nodes are used only for discovery and hole punching; by default they do not relay game traffic.",
+      "Cross-network play requires the same coordination node. Two community nodes are built in; add or remove your own (e.g. {example}). An empty list allows LAN only. Nodes handle discovery and hole punching, not game traffic.",
     coordGuide: "How to set up or find a coordination node (EasyTier guide)",
     nodeInputPlaceholder: "tcp://server-address:11010 or https://node-list-url",
     addNode: "Add",
@@ -311,25 +311,24 @@ export default {
     nodeNotNode: "Looks like a console URL",
     nodeUnchecked: "Cannot probe",
     nodeHint:
-      "The check only verifies format and TCP reachability; UDP/TXT nodes cannot be probed without creating a session. This version defaults to direct-only, so nodes only participate in discovery and hole punching.",
+      "Verifies format and TCP reachability only; UDP/TXT nodes cannot be probed. Direct connections only by default; nodes handle discovery and hole punching.",
     nodeExists: "This node is already in the list",
     coordExample: "tcp://1.2.3.4:11010",
     relayTitle: "Relay policy",
     relayDesc:
-      "Direct-only by default: game traffic uses P2P hole punching, and if punching fails the connection fails instead of consuming public node bandwidth. Changes take effect on the next host/join.",
+      "Direct connections only by default; if hole punching fails, the connection fails instead of using public bandwidth. Changes apply to the next session.",
     relayToggle: "Allow public-node relay when hole punching fails",
     relayConfirmTitle: "Allow public-node relay?",
     relayConfirmMsg:
-      "When enabled, game traffic will be forwarded through public nodes if hole punching fails. This may consume community node bandwidth, add latency, and be affected by node rate limits. Enable it only temporarily when a direct connection is impossible.",
+      "Relaying uses community bandwidth, adds latency, and may be rate-limited. Enable only when a direct connection is unavailable.",
     relayConfirmOk: "Enable anyway",
     motdTitle: "Multiplayer broadcast name (optional)",
     motdDesc:
-      "The server name shown on the in-game \"LAN\" tab; supports § color codes (e.g. {example}). Leave empty to use the host's world name automatically; you can generate one with Tools → MOTD Generator.",
+      "Server name shown in the in-game LAN list; supports § color codes (e.g. {example}). Leave empty to use the host world name.",
     motdExample: "§6Elytra §fMultiplayer",
     motdPlaceholder: "Leave empty for automatic (host world name); supports § format codes",
     nicknameTitle: "Multiplayer nickname (optional)",
-    nicknameDesc:
-      "The name shown to other players during multiplayer sessions (the name field of the Scaffolding protocol c:player_ping). Leave empty to use the system username.",
+    nicknameDesc: "Name shown to other players; leave empty to use the system username.",
     nicknamePlaceholder: "Leave empty to use the system username",
     saving: "Saving...",
     savedConfig: "Coordination servers saved",
