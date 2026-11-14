@@ -97,7 +97,7 @@ export async function installJdk(major: number): Promise<void> {
 const pendingInstall = new Map<string, number>();
 
 /** 从版本字符串解析主版本号（"17.0.8" → 17，"1.8.0_202" → 8；与后端 parse_java_major 语义一致）。 */
-function parseMajor(version: string): number | null {
+export function parseJdkMajor(version: string): number | null {
   const m = /^(?:1\.)?(\d+)/.exec(version);
   return m ? Number(m[1]) : null;
 }
@@ -105,7 +105,7 @@ function parseMajor(version: string): number | null {
 async function onJdkInstalled(major: number) {
   try {
     await loadConfig();
-    const info = jdkList.value.find((e) => parseMajor(e.version) === major);
+    const info = jdkList.value.find((e) => parseJdkMajor(e.version) === major);
     if (info) {
       autoMode.value = false;
       activeJdk.value = info;
@@ -126,8 +126,13 @@ export function selectAuto() {
 }
 
 export function selectJdk(env: JdkInfo) {
+  void applyJdk(env);
+}
+
+/** 选中指定 JDK 并落盘（供启动错误弹窗「使用已安装的 Java」直接调用）。 */
+export async function applyJdk(env: JdkInfo) {
   autoMode.value = false;
   activeJdk.value = env;
-  void saveConfig();
+  await saveConfig();
 }
 

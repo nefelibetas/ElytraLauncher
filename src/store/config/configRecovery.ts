@@ -11,7 +11,17 @@ function notify(n: RecoveryNotice) {
       path: n.backup_path ?? t("settings.recovery.backupFailed"),
       reason: n.reason,
     }),
-    true,
+    {
+      copyable: false,
+      title: t("settings.recovery.title"),
+      actions: [
+        {
+          label: t("settings.recovery.openDir"),
+          primary: true,
+          run: () => invoke("open_launcher_log_dir"),
+        },
+      ],
+    },
   );
 }
 

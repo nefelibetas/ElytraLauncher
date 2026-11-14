@@ -401,9 +401,11 @@ export default {
     },
   },
   recovery: {
+    title: "配置已恢复",
     message:
       "配置文件已损坏，已重置为默认配置。\n原文件已备份到：{path}\n原因：{reason}",
     backupFailed: "（备份失败）",
+    openDir: "打开配置目录",
   },
   version: {
     select: {

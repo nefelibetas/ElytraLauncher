@@ -494,3 +494,31 @@ export async function scanMissingFiles(versionDirName: string): Promise<MissingR
 export async function submitMissingDownload(versionDirName: string): Promise<string> {
   return await invoke<string>("submit_missing_download", { versionDirName });
 }
+
+/** 扫描缺失并提交修复任务；返回缺失总数（0 = 无需修复）。 */
+export async function repairVersionFiles(versionDirName: string): Promise<number> {
+  const report = await scanMissingFiles(versionDirName);
+  const total =
+    (report.client_jar ? 1 : 0) + report.libraries + report.assets + report.natives;
+  if (total === 0) return 0;
+  const taskId = await submitMissingDownload(versionDirName);
+  // 预注册任务：徽标立即出现，不等首次 task-progress 事件
+  dlState.addTask({
+    taskId,
+    name: t("launch.version.repairTaskName", { version: versionDirName }),
+    nameKey: "task.backend.name.repair",
+    nameParams: { version: versionDirName },
+    status: "pending",
+    progress: 0,
+    speedBps: 0,
+    etaSeconds: null,
+    completedFiles: 0,
+    totalFiles: 0,
+    completedBytes: 0,
+    totalBytes: 0,
+    currentPhase: t("launch.version.waiting"),
+    currentPhaseKey: "task.backend.phase.waiting",
+    steps: [],
+  });
+  return total;
+}

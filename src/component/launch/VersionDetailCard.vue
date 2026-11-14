@@ -7,7 +7,7 @@ import { Pencil, Folder, FolderOpen, CloudDownload, Puzzle, Map, Settings2, Pale
 import { open } from "@tauri-apps/plugin-dialog";
 import { fmtUnix } from "../../utils/format";
 import { openGameFolder, renameVersionDir } from "../../store/config/gameDirs";
-import { scanMissingFiles, submitMissingDownload } from "../../store/task/download";
+import { repairVersionFiles } from "../../store/task/download";
 import { classifyVersion } from "../../utils/versionClassify";
 import { LOADER_ICONS, LOADER_TITLES } from "../../utils/versionMeta";
 import { showToast } from "../../utils/toast";
@@ -25,7 +25,6 @@ import CommunityFileMeta from "../common/CommunityFileMeta.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import EmptyState from "../common/EmptyState.vue";
 import ErrorState from "../common/ErrorState.vue";
-import { dlState } from "../../store/task/download";
 import { selectedVersion, setSelected } from "../../store/app/selectedVersion";
 import {
   worlds, worldsLoading, worldsError, worldIcons,
@@ -240,32 +239,11 @@ async function repairFiles() {
   if (checking.value || isLaunching.value) return;
   checking.value = true;
   try {
-    const report = await scanMissingFiles(versionName.value);
-    const total =
-      (report.client_jar ? 1 : 0) + report.libraries + report.assets + report.natives;
+    const total = await repairVersionFiles(versionName.value);
     if (total === 0) {
       showToast(t("launch.version.repairComplete"));
       return;
     }
-    const taskId = await submitMissingDownload(versionName.value);
-    // 预注册任务：徽标立即出现，不等首次 task-progress 事件
-    dlState.addTask({
-      taskId,
-      name: t("launch.version.repairTaskName", { version: versionName.value }),
-      nameKey: "task.backend.name.repair",
-      nameParams: { version: versionName.value },
-      status: "pending",
-      progress: 0,
-      speedBps: 0,
-      etaSeconds: null,
-      completedFiles: 0,
-      totalFiles: 0,
-      completedBytes: 0,
-      totalBytes: 0,
-      currentPhase: t("launch.version.waiting"),
-      currentPhaseKey: "task.backend.phase.waiting",
-      steps: [],
-    });
     showToast(t("launch.version.repairSubmitted", { count: total }));
   } catch (e) {
     showToast(errMsg(e));

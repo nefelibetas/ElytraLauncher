@@ -6,13 +6,25 @@ import type { StepStatus } from "../task/download";
 import type { InstalledVersionInfo } from "../config/gameDirs";
 import type { VersionState } from "../../types/game/VersionState";
 import { GAME_EXITED, GAME_WINDOW_VISIBLE } from "../app/events";
-import { authMode, msAccount, username, externalAccount, refreshExternalAccount, type MsAccountInfo } from "../auth/auth";
+import { authMode, msAccount, username, externalAccount, refreshExternalAccount, startMsLogin, type MsAccountInfo } from "../auth/auth";
 import { selectedVersion, setSelected, getSavedDir } from "../app/selectedVersion";
-import { showError } from "../app/alert";
+import { showError, type AlertAction } from "../app/alert";
 import { t } from "../../i18n";
-import { errMsg, formatError } from "../../utils/error";
+import { errMsg, errorKey, errorParams, formatError } from "../../utils/error";
 import { showToast } from "../../utils/toast";
 import { notifyIfUnfocused } from "../../utils/notify";
+import { openPath } from "@tauri-apps/plugin-opener";
+import {
+  applyJdk,
+  installJdk,
+  jdkList,
+  loadConfig as loadJdkConfig,
+  parseJdkMajor,
+  refreshJdks,
+  type JdkInfo,
+} from "../config/jdkOptions";
+import { repairVersionFiles } from "../task/download";
+import { openGameFolder } from "../config/gameDirs";
 
 export const launchState = reactive({
   /** 启动流程："" 空闲 | "running" 启动中 | "done" 完成 */
@@ -82,7 +94,51 @@ export async function loadVersions() {
   }
 }
 
-export async function doLaunch(navigateToDownload: () => void) {
+/** 崩溃/超时弹窗操作：有崩溃报告时优先打开报告，否则打开版本目录。 */
+function crashActions(version: string, report: string | null): AlertAction[] {
+  const folder: AlertAction = {
+    label: t("launch.alert.openVersionFolder"),
+    primary: !report,
+    run: () => openGameFolder("version", version),
+  };
+  if (!report) return [folder];
+  return [
+    { label: t("launch.alert.openCrashReport"), primary: true, run: () => openPath(report) },
+    folder,
+  ];
+}
+
+/** 在已安装 JDK 中找可用项：exact = 必须同主版本（launchwrapper 只要 8）；否则取 >= 要求的最低版本。 */
+async function findInstalledJdk(required: number, exact: boolean): Promise<JdkInfo | null> {
+  const pick = () => {
+    const candidates = jdkList.value
+      .map((j) => ({ j, major: parseJdkMajor(j.version) }))
+      .filter((x): x is { j: JdkInfo; major: number } => x.major !== null);
+    if (exact) return candidates.find((x) => x.major === required)?.j ?? null;
+    if (required > 0) {
+      return (
+        candidates
+          .filter((x) => x.major >= required)
+          .sort((a, b) => a.major - b.major)[0]?.j ?? null
+      );
+    }
+    return candidates.sort((a, b) => b.major - a.major)[0]?.j ?? null;
+  };
+  await loadJdkConfig();
+  let match = pick();
+  if (!match) {
+    // 缓存没有时现场扫描一次（用户可能刚装好 JDK 或缓存过期）
+    await refreshJdks();
+    match = pick();
+  }
+  return match;
+}
+
+export async function doLaunch(
+  navigateToDownload: () => void,
+  navigateToSettings?: (tab: "launch" | "external") => void,
+  retryJdk = false,
+) {
   if (isLaunching.value) return;
   if (!selectedVersion.value) {
     navigateToDownload();
@@ -93,18 +149,18 @@ export async function doLaunch(navigateToDownload: () => void) {
   const isExternal = authMode.value === "external";
 
   if (isOffline && !username.value.trim()) {
-    showError(t("launch.error.usernameRequired"));
+    showToast(t("launch.error.usernameRequired"));
     return;
   }
 
   // 正版须已登录；启动前静默刷新 token（界面切换在前，避免点击后无反馈）
   if (!isOffline && !isExternal && !msAccount.value) {
-    showError(t("launch.error.premiumRequired"));
+    showToast(t("launch.error.premiumRequired"));
     return;
   }
 
   if (isExternal && !externalAccount.value) {
-    showError(t("launch.error.externalRequired"));
+    showToast(t("launch.error.externalRequired"));
     return;
   }
 
@@ -144,7 +200,17 @@ export async function doLaunch(navigateToDownload: () => void) {
           if (seq !== launchSeq) return;
           externalAccount.value = null;
           resetLaunch();
-          showError(t("launch.error.externalExpired", { error: errMsg(e) }), true);
+          showError(t("launch.error.externalExpired", { error: errMsg(e) }), {
+            copyable: true,
+            title: t("launch.alert.loginFailed"),
+            actions: [
+              {
+                label: t("launch.alert.openLoginSettings"),
+                primary: true,
+                run: () => navigateToSettings?.("external"),
+              },
+            ],
+          });
           return;
         }
       }
@@ -155,7 +221,17 @@ export async function doLaunch(navigateToDownload: () => void) {
         if (seq !== launchSeq) return;
         msAccount.value = null;
         resetLaunch();
-        showError(t("launch.error.premiumExpired", { error: errMsg(e) }), true);
+        showError(t("launch.error.premiumExpired", { error: errMsg(e) }), {
+          copyable: true,
+          title: t("launch.alert.loginFailed"),
+          actions: [
+            {
+              label: t("launch.alert.relogin"),
+              primary: true,
+              run: () => startMsLogin(),
+            },
+          ],
+        });
         return;
       }
     }
@@ -218,10 +294,13 @@ export async function doLaunch(navigateToDownload: () => void) {
           outcome.exited.code === 0
             ? t("launch.error.exitedNoWindow", { code: 0, version: label })
             : crashMessage(label, outcome.exited.code, outcome.exited.report, outcome.exited.cause),
-          true,
+          { copyable: true, actions: crashActions(label, outcome.exited.report) },
         );
       } else {
-        showError(t("launch.error.windowTimeout", { version: label }), true);
+        showError(t("launch.error.windowTimeout", { version: label }), {
+          copyable: true,
+          actions: crashActions(label, null),
+        });
       }
     }
 
@@ -232,6 +311,74 @@ export async function doLaunch(navigateToDownload: () => void) {
     // 已取消：本次流程的落点全部作废（取消路径不放错误弹窗，后端「启动已取消」亦不提示）
     if (seq !== launchSeq) return;
     resetLaunch();
+    const key = errorKey(e);
+    const params = errorParams(e);
+    const version = selectedVersion.value;
+    const needJava =
+      Number(params.required ?? params.need) ||
+      (key === "errors.jdk.legacy_java" ? 8 : 0);
+    if (
+      key === "errors.launch.jdkRequired" ||
+      key === "errors.jdk.too_old" ||
+      key === "errors.jdk.legacy_java" ||
+      key === "errors.launch.jdkNotConfigured" ||
+      key === "errors.launch.jdkNotFound"
+    ) {
+      const knownNeed = key !== "errors.launch.jdkNotConfigured" && key !== "errors.launch.jdkNotFound";
+      const exact = key === "errors.jdk.legacy_java";
+      const required = exact ? 8 : knownNeed ? needJava : 0;
+      const installed = await findInstalledJdk(required, exact);
+      const actions: AlertAction[] = [];
+      if (installed) {
+        actions.push({
+          label: t("launch.alert.useJava", { version: installed.version }),
+          primary: true,
+          run: async () => {
+            await applyJdk(installed);
+            if (!retryJdk) {
+              await doLaunch(navigateToDownload, navigateToSettings, true);
+            } else {
+              showToast(t("launch.alert.javaSelected", { version: installed.version }));
+            }
+          },
+        });
+      } else if (knownNeed) {
+        const major = required || 21;
+        actions.push({
+          label: t("launch.alert.downloadJava", { major }),
+          primary: true,
+          run: () => installJdk(major),
+        });
+      }
+      actions.push({
+        label: t("launch.alert.openJavaSettings"),
+        primary: !installed && !knownNeed,
+        run: () => navigateToSettings?.("launch"),
+      });
+      showError(formatError(e).full, { copyable: false, actions });
+      return;
+    }
+    if (key === "errors.launch.filesIncomplete" || key === "errors.launch.missing_files") {
+      showError(formatError(e).full, {
+        copyable: false,
+        actions: [
+          {
+            label: t("launch.alert.repairFiles"),
+            primary: true,
+            run: async () => {
+              const total = await repairVersionFiles(version);
+              if (total === 0) showToast(t("launch.version.repairComplete"));
+              else showToast(t("launch.version.repairSubmitted", { count: total }));
+            },
+          },
+          {
+            label: t("launch.alert.openVersionFolder"),
+            run: () => openGameFolder("version", version),
+          },
+        ],
+      });
+      return;
+    }
     // 传完整错误：弹窗正文取短摘要，细节（当前 JDK、路径等）随复制按钮带走
     showError(formatError(e).full, true);
   }
@@ -317,7 +464,7 @@ export async function ensureGameExitListener() {
     // 取消启动会终止已拉起的进程（非零退出码）：不算崩溃
     if (exitCode !== null && exitCode !== 0 && !cancelledLabels.has(label)) {
       const message = crashMessage(label, exitCode, crashReport, cause);
-      showError(message, true);
+      showError(message, { copyable: true, actions: crashActions(label, crashReport) });
       void notifyIfUnfocused(t("common.notify.gameCrashed"), errMsg(message));
     }
   });

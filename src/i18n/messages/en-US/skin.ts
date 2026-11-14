@@ -54,6 +54,7 @@ export default {
     capeSwitched: "Switched to cape \"{name}\"",
     capeRemoved: "Cape removed",
     pngFilter: "PNG Image",
+    errorTitle: "Skin operation failed",
     changeFailed: "Failed to change skin: {error}",
     applyFailed: "Failed to apply skin: {error}",
     deleteFailed: "Failed to delete wardrobe skin: {error}",

@@ -438,7 +438,10 @@ export const skinStudio = reactive({
       showToast(t("skin.studio.uploadedPending"));
       await this.settleAfterSkinChange(acc.uuid);
     } catch (e) {
-      showError(t("skin.studio.changeFailed", { error: String(e) }), true);
+      showError(t("skin.studio.changeFailed", { error: String(e) }), {
+        copyable: true,
+        title: t("skin.studio.errorTitle"),
+      });
     } finally {
       this.applyBusy = false;
     }
@@ -452,7 +455,17 @@ export const skinStudio = reactive({
       }
       showToast(t("skin.studio.deleted", { name: item.name }));
     } catch (e) {
-      showError(t("skin.studio.deleteFailed", { error: String(e) }), true);
+      showError(t("skin.studio.deleteFailed", { error: String(e) }), {
+        copyable: true,
+        title: t("skin.studio.errorTitle"),
+        actions: [
+          {
+            label: t("common.action.retry"),
+            primary: true,
+            run: () => this.removeSkin(item),
+          },
+        ],
+      });
     }
   },
 
@@ -466,7 +479,17 @@ export const skinStudio = reactive({
       showToast(t("skin.studio.uploadedPending"));
       await this.settleAfterSkinChange(acc.uuid);
     } catch (e) {
-      showError(t("skin.studio.applyFailed", { error: String(e) }), true);
+      showError(t("skin.studio.applyFailed", { error: String(e) }), {
+        copyable: true,
+        title: t("skin.studio.errorTitle"),
+        actions: [
+          {
+            label: t("common.action.retry"),
+            primary: true,
+            run: () => this.applySelected(),
+          },
+        ],
+      });
     } finally {
       this.applyBusy = false;
     }
@@ -494,7 +517,17 @@ export const skinStudio = reactive({
       await invoke("save_skin", { uuid: acc.uuid, path });
       showToast(t("skin.studio.skinSaved"));
     } catch (e) {
-      showError(t("skin.studio.saveFailed", { error: String(e) }), true);
+      showError(t("skin.studio.saveFailed", { error: String(e) }), {
+        copyable: true,
+        title: t("skin.studio.errorTitle"),
+        actions: [
+          {
+            label: t("common.action.retry"),
+            primary: true,
+            run: () => this.saveSkinFile(),
+          },
+        ],
+      });
     }
   },
 
@@ -518,7 +551,17 @@ export const skinStudio = reactive({
       await this.loadCapes();
     } catch (e) {
       this.selectedCapeId = prev;
-      showError(t("skin.studio.capeFailed", { error: String(e) }), true);
+      showError(t("skin.studio.capeFailed", { error: String(e) }), {
+        copyable: true,
+        title: t("skin.studio.errorTitle"),
+        actions: [
+          {
+            label: t("common.action.retry"),
+            primary: true,
+            run: () => this.useCape(id),
+          },
+        ],
+      });
     } finally {
       this.capeBusy = false;
     }

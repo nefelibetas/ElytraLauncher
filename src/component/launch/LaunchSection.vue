@@ -5,12 +5,18 @@ import { useRouter } from "vue-router";
 import { LayoutGrid, Wrench } from "@lucide/vue";
 import { isLaunching, doLaunch } from "../../store/app/launch";
 import { selectedVersion } from "../../store/app/selectedVersion";
+import { settingsTab } from "../../store/app/settingsTab";
 
 const router = useRouter();
 const { t } = useI18n();
 
 function goDownload() {
   router.push("/download");
+}
+
+function goSettings(tab: "launch" | "external") {
+  settingsTab.value = tab;
+  void router.push("/settings");
 }
 </script>
 
@@ -21,7 +27,7 @@ function goDownload() {
         class="launch-btn"
         :class="{ launching: isLaunching }"
         :disabled="isLaunching"
-        @click="doLaunch(goDownload)"
+        @click="doLaunch(goDownload, goSettings)"
       >
         <template v-if="!selectedVersion">
           <span class="launch-label">{{ t("launch.action.downloadGame") }}</span>

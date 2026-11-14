@@ -404,9 +404,11 @@ export default {
     },
   },
   recovery: {
+    title: "Settings Recovered",
     message:
       "The configuration file was corrupted and has been reset to defaults.\nThe original file was backed up to: {path}\nReason: {reason}",
     backupFailed: "(backup failed)",
+    openDir: "Open config folder",
   },
   version: {
     select: {

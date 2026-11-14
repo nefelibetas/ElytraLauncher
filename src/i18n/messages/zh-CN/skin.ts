@@ -54,6 +54,7 @@ export default {
     capeSwitched: "已切换到披风「{name}」",
     capeRemoved: "已移除披风",
     pngFilter: "PNG 图片",
+    errorTitle: "皮肤操作失败",
     changeFailed: "更换皮肤失败：{error}",
     applyFailed: "应用皮肤失败：{error}",
     deleteFailed: "删除衣柜皮肤失败：{error}",

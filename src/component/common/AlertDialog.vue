@@ -157,7 +157,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dialog-header {
   position: relative;
   flex: none;
-  padding: 14px 20px 12px;
+  padding: 16px 20px 14px;
   /* 分隔线统一 1px text-tertiary（比 border-* 深一档），左右 20px 与内容对齐 */
 }
 
@@ -182,7 +182,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 20px;
+  padding: 18px 20px;
 }
 
 .dialog-body p {
@@ -201,7 +201,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 14px 20px;
 }
 
 .dialog-footer::before {

@@ -1,6 +1,16 @@
 export default {
   alert: {
     launchFailed: "启动失败",
+    loginFailed: "登录失败",
+    downloadJava: "下载 Java {major}",
+    useJava: "使用已安装的 Java {version}",
+    javaSelected: "已切换到 Java {version}，请重新启动",
+    openJavaSettings: "打开 Java 设置",
+    repairFiles: "提交修复",
+    openVersionFolder: "打开版本目录",
+    openCrashReport: "打开崩溃报告",
+    relogin: "重新登录",
+    openLoginSettings: "打开第三方登录",
   },
   empty: {
     selectVersion: "选择一个游戏实例",
@@ -74,12 +84,10 @@ export default {
     tokenExpired: "登录凭证已过期，将在使用时自动续签",
     tokenHours: "凭证有效，约 {hours} 小时后到期（自动续签）",
     tokenMinutes: "凭证有效，约 {mins} 分钟后到期（自动续签）",
-    openClosetFailed: "打开站点衣柜失败：{error}",
     refreshRolesFailed: "角色列表刷新失败：{error}",
     refreshFailed: "刷新失败：{error}",
     switchRoleFailed: "切换角色失败：{error}",
     switchAccountFailed: "切换账号失败：{error}",
-    removeAccountFailed: "移除账号失败：{error}",
   },
   error: {
     usernameRequired: "请输入用户名后再启动游戏",

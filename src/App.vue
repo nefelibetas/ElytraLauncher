@@ -12,6 +12,7 @@ import CheckToggle from "./component/common/CheckToggle.vue";
 import { dlState, ensureListen, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
 import { ensureAutoTasksListen, lastAutoTasksFinished } from "./store/config/autoTasks";
 import { setSelected } from "./store/app/selectedVersion";
+import { alertState, type AlertAction } from "./store/app/alert";
 import { toasts, dismissToast, pauseToast, resumeToast, showToast } from "./utils/toast";
 import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/focusNav";
 import { errMsg, formatError } from "./utils/error";
@@ -23,6 +24,7 @@ import {
   closeAction, setCloseAction, trayAvailable, initCloseBehavior, syncTrayLabels,
 } from "./store/app/closeBehavior";
 import { ensureGameLanguageDetected } from "./store/config/launchOptions";
+import { settingsTab } from "./store/app/settingsTab";
 
 const router = useRouter();
 const { t } = useI18n();
@@ -78,6 +80,29 @@ dlState.onTaskError = (_taskName: string, error: string) => {
   void flashTaskbarAttention("critical");
   void notifyIfUnfocused(t("common.notify.downloadFailed"), errMsg(error));
 };
+
+/** 下载失败弹窗：直接进任务中心。 */
+function openTaskCenter() {
+  errorDialog.value = false;
+  void router.push("/download-detail");
+}
+
+/** 自动任务失败弹窗：直接看启动器日志。 */
+function openLauncherLog() {
+  autoTaskFailDialog.value = false;
+  settingsTab.value = "log";
+  void router.push("/settings");
+}
+
+/** 执行全局错误弹窗里的直接操作：先关弹窗，再跑；失败降级为 toast。 */
+async function runAlertAction(action: AlertAction) {
+  alertState.show = false;
+  try {
+    await action.run();
+  } catch (e) {
+    showToast(errMsg(e));
+  }
+}
 
 /** 复制挂起任务错误全文（中文首行 + 技术细节）。 */
 async function copyWaitingError() {
@@ -362,10 +387,35 @@ onUnmounted(() => {
     </TransitionGroup>
     <AlertDialog v-model="errorDialog" :title="t('task.dialog.downloadFailed')" :message="errorMessage" copyable>
       <p>{{ t("task.dialog.downloadFailedBody") }}</p>
+      <template #actions>
+        <button class="dialog-btn primary" @click="openTaskCenter">{{ t("task.dialog.openTaskCenter") }}</button>
+      </template>
     </AlertDialog>
 
     <AlertDialog v-model="autoTaskFailDialog" :title="t('task.dialog.autoTaskFailed')" :message="autoTaskFailMessage" copyable>
       <p>{{ t("task.dialog.autoTaskFailedBody") }}</p>
+      <template #actions>
+        <button class="dialog-btn primary" @click="openLauncherLog">{{ t("task.dialog.viewLog") }}</button>
+      </template>
+    </AlertDialog>
+
+    <AlertDialog
+      v-model="alertState.show"
+      :title="alertState.title"
+      :message="alertState.msg"
+      :copyable="alertState.copyable"
+    >
+      <template v-if="alertState.actions.length" #actions>
+        <button
+          v-for="(action, index) in alertState.actions"
+          :key="index"
+          class="dialog-btn"
+          :class="{ primary: action.primary }"
+          @click="runAlertAction(action)"
+        >
+          {{ action.label }}
+        </button>
+      </template>
     </AlertDialog>
 
     <!-- 关闭窗口：退出 / 最小化到托盘；勾选后记住选择 -->

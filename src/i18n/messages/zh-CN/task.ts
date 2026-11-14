@@ -9,6 +9,8 @@ export default {
     downloadFailedBody: "下载失败，已清理该任务下载的文件，请重试",
     autoTaskFailed: "自动任务执行失败",
     autoTaskFailedBody: "部分自动任务动作未成功（游戏启动/退出不受影响）",
+    openTaskCenter: "打开任务中心",
+    viewLog: "查看日志",
   },
   waiting: {
     title: "下载失败",

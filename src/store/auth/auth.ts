@@ -199,7 +199,17 @@ export async function startMsLogin() {
     // 结果由 ms-login-complete 事件推送
   } catch (e) {
     msLoginState.value = "idle";
-    showError(String(e), true);
+    showError(String(e), {
+      copyable: true,
+      title: t("launch.alert.loginFailed"),
+      actions: [
+        {
+          label: t("common.action.retry"),
+          primary: true,
+          run: () => startMsLogin(),
+        },
+      ],
+    });
   }
 }
 
@@ -235,7 +245,17 @@ export async function ensureLoginListener() {
         void notifyIfUnfocused(t("common.notify.loginDone"), ev.payload.account.name);
       } else {
         const message = ev.payload.error || t("launch.error.loginFailed");
-        showError(message, true);
+        showError(message, {
+          copyable: true,
+          title: t("launch.alert.loginFailed"),
+          actions: [
+            {
+              label: t("common.action.retry"),
+              primary: true,
+              run: () => startMsLogin(),
+            },
+          ],
+        });
         void notifyIfUnfocused(t("common.notify.loginFailed"), errMsg(message));
       }
     },

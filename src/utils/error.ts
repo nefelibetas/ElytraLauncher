@@ -21,6 +21,24 @@ export interface FormattedError {
   full: string;
 }
 
+/** 后端 @i18n 错误首行的 key；非 keyed 错误返回 null。 */
+export function errorKey(e: unknown): string | null {
+  const line = String(e ?? "").split("\n")[0].trim();
+  if (!line.startsWith(I18N_PREFIX)) return null;
+  const spec = line.slice(I18N_PREFIX.length);
+  const queryAt = spec.indexOf("?");
+  return queryAt >= 0 ? spec.slice(0, queryAt) : spec;
+}
+
+/** 后端 @i18n 错误首行 `?k=v` 查询参数；无参数返回空对象。 */
+export function errorParams(e: unknown): Record<string, string> {
+  const line = String(e ?? "").split("\n")[0].trim();
+  if (!line.startsWith(I18N_PREFIX)) return {};
+  const queryAt = line.indexOf("?");
+  if (queryAt < 0) return {};
+  return Object.fromEntries(new URLSearchParams(line.slice(queryAt + 1)));
+}
+
 /** 兼容旧约定 "短文案\n技术细节" 与后端 @i18n 协议；未识别的错误原样展示。 */
 export function formatError(e: unknown): FormattedError {
   const raw = String(e ?? "");

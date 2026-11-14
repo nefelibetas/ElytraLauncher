@@ -479,7 +479,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .dialog-header {
   position: relative;
   flex: none;
-  padding: 14px 20px 12px;
+  padding: 16px 20px 14px;
 }
 
 .dialog-header::after {
@@ -502,7 +502,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 20px;
+  padding: 18px 20px;
 }
 
 .dialog-footer {
@@ -512,7 +512,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 14px 20px;
 }
 
 .dialog-footer::before {

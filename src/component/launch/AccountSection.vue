@@ -90,7 +90,7 @@ function openSkinStudio() {
   accountUi.closeMenus();
   if (canOpenSiteCloset.value) {
     void openUrl(siteClosetUrl.value).catch((e) =>
-      showError(t("launch.auth.openClosetFailed", { error: errMsg(e) }), true),
+      showToast(errMsg(e)),
     );
     return;
   }
@@ -117,8 +117,20 @@ watch(showRoles, async (open) => {
   try {
     await refreshExternalAccount(acc.api_url, acc.uuid);
   } catch (e) {
-    showError(t("launch.auth.refreshRolesFailed", { error: errMsg(e) }), true);
     showRoles.value = false;
+    showError(t("launch.auth.refreshRolesFailed", { error: errMsg(e) }), {
+      copyable: true,
+      title: t("launch.alert.loginFailed"),
+      actions: [
+        {
+          label: t("common.action.retry"),
+          primary: true,
+          run: () => {
+            showRoles.value = true;
+          },
+        },
+      ],
+    });
     return;
   }
   const fresh = externalAccount.value;
@@ -137,7 +149,17 @@ async function refreshExternalSkin() {
     if (fresh) void renderExternalAvatar(fresh.api_url, fresh.uuid, true);
     showToast(t("launch.auth.refreshed"));
   } catch (e) {
-    showError(t("launch.auth.refreshFailed", { error: errMsg(e) }), true);
+    showError(t("launch.auth.refreshFailed", { error: errMsg(e) }), {
+      copyable: true,
+      title: t("launch.alert.loginFailed"),
+      actions: [
+        {
+          label: t("common.action.retry"),
+          primary: true,
+          run: () => refreshExternalSkin(),
+        },
+      ],
+    });
   }
 }
 
@@ -149,7 +171,17 @@ async function doSwitchRole(profileId: string, profileName: string) {
     await switchExternalRole(acc.api_url, acc.uuid, profileId, profileName);
     showToast(t("launch.auth.switchedRole", { name: profileName }));
   } catch (e) {
-    showError(t("launch.auth.switchRoleFailed", { error: errMsg(e) }), true);
+    showError(t("launch.auth.switchRoleFailed", { error: errMsg(e) }), {
+      copyable: true,
+      title: t("launch.alert.loginFailed"),
+      actions: [
+        {
+          label: t("common.action.retry"),
+          primary: true,
+          run: () => doSwitchRole(profileId, profileName),
+        },
+      ],
+    });
   }
 }
 
@@ -209,7 +241,17 @@ async function switchAccount(uuid: string) {
   try {
     await switchMsAccount(uuid);
   } catch (e) {
-    showError(t("launch.auth.switchAccountFailed", { error: errMsg(e) }), true);
+    showError(t("launch.auth.switchAccountFailed", { error: errMsg(e) }), {
+      copyable: true,
+      title: t("launch.alert.loginFailed"),
+      actions: [
+        {
+          label: t("launch.alert.relogin"),
+          primary: true,
+          run: () => startMsLogin(),
+        },
+      ],
+    });
   } finally {
     accountUi.accountsBusy = false;
     accountUi.closeAccountsMenu();
@@ -221,7 +263,7 @@ async function removeAccount(uuid: string) {
   try {
     await removeMsAccount(uuid);
   } catch (e) {
-    showError(t("launch.auth.removeAccountFailed", { error: errMsg(e) }), true);
+    showToast(errMsg(e));
   }
   accountUi.closeAccountsMenu();
 }

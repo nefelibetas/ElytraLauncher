@@ -1,6 +1,16 @@
 export default {
   alert: {
     launchFailed: "Launch Failed",
+    loginFailed: "Sign-in Failed",
+    downloadJava: "Download Java {major}",
+    useJava: "Use installed Java {version}",
+    javaSelected: "Switched to Java {version}; launch again",
+    openJavaSettings: "Open Java settings",
+    repairFiles: "Repair files",
+    openVersionFolder: "Open version folder",
+    openCrashReport: "Open crash report",
+    relogin: "Sign in again",
+    openLoginSettings: "Open third-party login",
   },
   empty: {
     selectVersion: "Select a game instance",
@@ -74,12 +84,10 @@ export default {
     tokenExpired: "The login credential has expired and will renew automatically when used",
     tokenHours: "Credential valid for about {hours} hour(s) (auto-renew)",
     tokenMinutes: "Credential valid for about {mins} minute(s) (auto-renew)",
-    openClosetFailed: "Failed to open the site wardrobe: {error}",
     refreshRolesFailed: "Failed to refresh characters: {error}",
     refreshFailed: "Refresh failed: {error}",
     switchRoleFailed: "Failed to switch character: {error}",
     switchAccountFailed: "Failed to switch account: {error}",
-    removeAccountFailed: "Failed to remove account: {error}",
   },
   error: {
     usernameRequired: "Enter a username before launching",

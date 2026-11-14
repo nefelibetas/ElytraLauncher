@@ -3,12 +3,10 @@
 import { onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { FileText } from "@lucide/vue";
-import AlertDialog from "../component/common/AlertDialog.vue";
 import LaunchProgress from "../component/launch/LaunchProgress.vue";
 import AccountSection from "../component/launch/AccountSection.vue";
 import LaunchSection from "../component/launch/LaunchSection.vue";
 import VersionDetailCard from "../component/launch/VersionDetailCard.vue";
-import { alertState } from "../store/app/alert";
 import { renderOfflineAvatar, renderPremiumAvatar } from "../store/auth/avatar";
 import {
   msAccount, username, ensureAuthReady, loadOfflineAccounts, loadLastUsername, ensureLoginListener,
@@ -59,13 +57,6 @@ onMounted(async () => {
         <VersionDetailCard v-else key="card" />
       </Transition>
     </div>
-
-    <AlertDialog
-      v-model="alertState.show"
-      :title="t('launch.alert.launchFailed')"
-      :message="alertState.msg"
-      :copyable="alertState.copyable"
-    />
 
   </div>
 </template>
