@@ -21,6 +21,8 @@
     "core:window:allow-destroy",
     "core:window:allow-set-progress-bar",
     "core:window:allow-request-user-attention",
-    "notification:default"
+    "notification:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }

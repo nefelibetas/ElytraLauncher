@@ -44,6 +44,10 @@ export interface NodeCheckResult {
 
 export const onlineStatus = ref<OnlineStatus>("idle");
 export const onlineRoomCode = ref("");
+/** guest 输入的房间码（模块级：面板收起/重开、加入失败后都保留）。 */
+export const onlineRoomInput = ref("");
+/** 联机面板当前 tab（模块级：重开面板仍停在主机/加入页）。 */
+export const onlinePanelTab = ref<"host" | "join">("host");
 export const onlineLocalPort = ref<number | null>(null);
 export const onlinePlayers = ref<PlayerProfile[]>([]);
 export const onlinePath = ref<"direct" | "relay" | null>(null);

@@ -63,7 +63,10 @@ function onOnlineEsc(e: KeyboardEvent) {
 function onOnlineOutside(e: MouseEvent) {
   if (!onlineOpen.value) return;
   const target = e.target as HTMLElement | null;
-  if (target && !target.closest(".vdc-online")) onlineOpen.value = false;
+  // 应用内右键菜单挂在 body 上：点菜单项不算“点面板外”，否则粘贴会先关掉面板。
+  if (target && !target.closest(".vdc-online") && !target.closest(".app-context-menu")) {
+    onlineOpen.value = false;
+  }
 }
 
 const info = computed(() => classifyVersion(versionName.value));

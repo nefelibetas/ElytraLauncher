@@ -118,6 +118,7 @@ easytier-core = { git = "https://github.com/EasyTier/EasyTier", default-features
 # rustls 无法自动选择（协调节点 HTTPS 发现会在握手前 panic）；显式装 ring（与 easytier 内部一致）。
 # 主版本须与 easytier 依赖的 rustls 一致，否则 install_default 装到另一份 rustls 上无效。
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tauri-plugin-clipboard-manager = "2.5.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

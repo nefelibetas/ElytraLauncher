@@ -5,15 +5,18 @@ withDefaults(defineProps<{
   title?: string;
   desc?: string;
   padded?: boolean;
+  /** settings = 设置页大卡片（标题 h3 级别）；setup = 版本设置页紧凑卡片。 */
+  variant?: "setup" | "settings";
 }>(), {
   title: "",
   desc: "",
   padded: true,
+  variant: "setup",
 });
 </script>
 
 <template>
-  <div class="setup-card" :class="{ 'setup-card--flush': !padded }">
+  <div class="setup-card" :class="[{ 'setup-card--flush': !padded }, `setup-card--${variant}`]">
     <div v-if="title || $slots.actions" class="setup-card-hdr">
       <div class="setup-card-titles">
         <div v-if="title" class="setup-card-title">{{ title }}</div>

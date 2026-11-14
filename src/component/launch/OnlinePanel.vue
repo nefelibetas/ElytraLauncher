@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // 联机面板：EasyTier 虚拟局域网（host 开房 / guest 加入 / 停止）；配置在「设置 → 联机设置」。
 // host 可先开联机（等待态）再「对局域网开放」，检测到端口自动生成房间码；正版 host 由服务器验证会话。
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Copy, Link2, Unplug } from "@lucide/vue";
 import {
-  onlineStatus, onlineRoomCode, onlineLocalPort, onlinePlayers,
+  onlineStatus, onlineRoomCode, onlineRoomInput, onlinePanelTab, onlineLocalPort, onlinePlayers,
   onlinePath, onlineLatency, onlineAllowRelay,
   onlineErrorHost, onlineErrorGuest,
   startHost, joinRoom, stopOnline, loadOnlineStatus, ensureOnlineListen,
@@ -21,8 +21,20 @@ onMounted(() => {
   void loadOnlineStatus();
 });
 
-/** guest 输入的房间码。 */
-const roomCodeInput = ref("");
+/** 主机 / 加入 二选一，以 tab 呈现；会话进行中自动切到对应页。 */
+watch(
+  onlineStatus,
+  (status) => {
+    if (status === "joining") onlinePanelTab.value = "join";
+    else if (status === "waiting" || status === "hosting") onlinePanelTab.value = "host";
+  },
+  { immediate: true },
+);
+
+/** 当前 tab 是否被进行中的另一种会话挡住。 */
+const hostBlocked = () => onlineStatus.value === "joining";
+const joinBlocked = () => onlineStatus.value === "waiting" || onlineStatus.value === "hosting";
+
 const busy = ref(false);
 
 async function handleStartHost() {
@@ -41,7 +53,7 @@ async function handleJoin() {
   if (busy.value) return;
   busy.value = true;
   try {
-    await joinRoom(roomCodeInput.value.trim());
+    await joinRoom(onlineRoomInput.value.trim());
     showToast(t("tools.online.joined"));
   } catch (e) {
     showToast(errMsg(e));
@@ -96,10 +108,34 @@ async function copyRoomCode() {
       {{ t("tools.online.relayWarning") }}
     </div>
 
-    <div class="online-sec">
-      <div class="online-sec-title">{{ t("tools.online.hostSection") }}</div>
+    <div class="online-tabs" role="tablist">
+      <button
+        type="button"
+        class="online-tab"
+        :class="{ active: onlinePanelTab === 'host' }"
+        role="tab"
+        :aria-selected="onlinePanelTab === 'host'"
+        @click="onlinePanelTab = 'host'"
+      >
+        {{ t("tools.online.hostSection") }}
+      </button>
+      <button
+        type="button"
+        class="online-tab"
+        :class="{ active: onlinePanelTab === 'join' }"
+        role="tab"
+        :aria-selected="onlinePanelTab === 'join'"
+        @click="onlinePanelTab = 'join'"
+      >
+        {{ t("tools.online.joinSection") }}
+      </button>
+    </div>
+
+    <div v-show="onlinePanelTab === 'host'" class="online-sec">
       <p class="online-desc">{{ t("tools.online.hostDesc1") }}</p>
       <p class="online-desc">{{ t("tools.online.hostDesc2") }}</p>
+
+      <div v-if="hostBlocked()" class="online-sec-note">{{ t("tools.online.hostingInProgress") }}</div>
 
       <div v-if="onlineStatus === 'waiting'" class="online-waiting">
         {{ t("tools.online.waitingHint") }}
@@ -140,14 +176,15 @@ async function copyRoomCode() {
       </div>
     </div>
 
-    <div class="online-sec">
-      <div class="online-sec-title">{{ t("tools.online.joinSection") }}</div>
+    <div v-show="onlinePanelTab === 'join'" class="online-sec">
       <p class="online-desc">{{ t("tools.online.joinDesc") }}</p>
+
+      <div v-if="joinBlocked()" class="online-sec-note">{{ t("tools.online.joiningInProgress") }}</div>
 
       <div class="online-row">
         <span class="online-label">{{ t("tools.online.roomCode") }}</span>
         <input
-          v-model="roomCodeInput"
+          v-model="onlineRoomInput"
           class="online-input"
           placeholder="U/XXXX-XXXX-XXXX-XXXX"
           :disabled="onlineStatus !== 'idle' || busy"
@@ -175,7 +212,7 @@ async function copyRoomCode() {
         <button
           v-else-if="onlineStatus === 'idle'"
           class="online-btn online-btn-primary"
-          :disabled="busy || !roomCodeInput.trim()"
+          :disabled="busy || !onlineRoomInput.trim()"
           @click="handleJoin"
         >
           <Link2 :size="14" />
@@ -243,6 +280,38 @@ async function copyRoomCode() {
   margin: -2px 0 6px;
 }
 
+.online-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 4px 0 2px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+}
+
+.online-tab {
+  flex: 1;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.online-tab:hover {
+  color: var(--text-primary);
+}
+
+.online-tab.active {
+  color: var(--color-brand);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
 .online-sec {
   padding: 12px 0;
   border-top: 1px solid var(--border-default);
@@ -253,6 +322,15 @@ async function copyRoomCode() {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
+}
+
+.online-sec-note {
+  margin: 8px 0 2px;
+  padding: 6px 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  background: var(--surface-hover);
+  border-radius: var(--radius-sm);
 }
 
 .online-desc {

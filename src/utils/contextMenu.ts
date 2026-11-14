@@ -1,6 +1,7 @@
 // 应用内右键菜单：统一主题样式与 i18n，替代系统原生菜单（后者风格与应用割裂）。
 // 文本菜单仅用于输入框/可选中文本；行级操作菜单由调用方传入文案与回调。
 import { t } from "../i18n";
+import { readClipboardText, writeClipboardText } from "./clipboard";
 
 export interface ActionMenuItem {
   id: string;
@@ -33,6 +34,31 @@ function isEditable(el: Element | null): el is HTMLElement {
     el instanceof HTMLTextAreaElement ||
     !!el.closest("[contenteditable='true']")
   );
+}
+
+/** 当前输入框/文本框的选中文本；contenteditable 走全局选区。 */
+function selectedTextOf(el: HTMLElement): string {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    return start === end ? "" : el.value.slice(start, end);
+  }
+  return window.getSelection()?.toString() ?? "";
+}
+
+/** 用文本替换当前选区（input/textarea 直接改值并派发 input，contenteditable 走编辑命令）。 */
+function replaceSelection(el: HTMLElement, text: string) {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    // number/date 等类型没有选区 API（selectionStart 为 null），直接覆盖值。
+    if (el.selectionStart === null) {
+      el.value = text;
+    } else {
+      el.setRangeText(text, el.selectionStart, el.selectionEnd ?? el.selectionStart, "end");
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  document.execCommand("insertText", false, text);
 }
 
 function closeMenu() {
@@ -141,17 +167,18 @@ function openMenu(items: ActionMenuItem[], onSelect: MenuAction, x: number, y: n
 export function showTextMenu(): boolean {
   const active = document.activeElement;
   const editable = isEditable(active);
-  const selectedText = window.getSelection()?.toString() ?? "";
-  if (!editable && !selectedText) return false;
-
   const target = active instanceof HTMLElement ? active : null;
+  const selectedText = target && editable ? selectedTextOf(target) : window.getSelection()?.toString() ?? "";
+  if (!editable && !selectedText) return false;
+  const hasSelection = selectedText.length > 0;
+
   const items: ActionMenuItem[] = editable
     ? [
         { id: "undo", label: t("common.contextMenu.undo") },
         { id: "redo", label: t("common.contextMenu.redo") },
         { id: "sep-1", label: "", separator: true },
-        { id: "cut", label: t("common.contextMenu.cut") },
-        { id: "copy", label: t("common.contextMenu.copy") },
+        { id: "cut", label: t("common.contextMenu.cut"), disabled: !hasSelection },
+        { id: "copy", label: t("common.contextMenu.copy"), disabled: !hasSelection },
         { id: "paste", label: t("common.contextMenu.paste") },
         { id: "sep-2", label: "", separator: true },
         { id: "selectAll", label: t("common.contextMenu.selectAll") },
@@ -159,32 +186,56 @@ export function showTextMenu(): boolean {
     : [{ id: "copy", label: t("common.contextMenu.copy") }];
 
   openMenu(items, async (id) => {
-    if (id === "copy" && !editable) {
+    if (!editable) {
+      if (id !== "copy" || !selectedText) return;
       try {
-        await navigator.clipboard.writeText(selectedText);
+        await writeClipboardText(selectedText);
       } catch {
         document.execCommand("copy");
       }
       return;
     }
-    target?.focus({ preventScroll: true });
+    if (!target) return;
+    target.focus({ preventScroll: true });
+
     if (id === "paste") {
       try {
-        const text = await navigator.clipboard.readText();
-        document.execCommand("insertText", false, text);
+        replaceSelection(target, await readClipboardText());
       } catch {
-        document.execCommand("paste");
+        // 读取失败（权限/空剪贴板）不弹浏览器菜单，保持静默。
       }
       return;
     }
-    const command = {
-      undo: "undo",
-      redo: "redo",
-      cut: "cut",
-      copy: "copy",
-      selectAll: "selectAll",
-    }[id];
-    if (command) document.execCommand(command);
+
+    if (id === "copy" || id === "cut") {
+      if (!hasSelection) return;
+      const text = selectedTextOf(target);
+      if (!text) return;
+      try {
+        await writeClipboardText(text);
+      } catch {
+        document.execCommand(id);
+        return;
+      }
+      if (id === "cut") replaceSelection(target, "");
+      return;
+    }
+
+    if (id === "selectAll") {
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        try {
+          target.select();
+        } catch {
+          // number/date 等类型不支持 select()，忽略。
+        }
+      } else {
+        document.execCommand("selectAll");
+      }
+      return;
+    }
+
+    // 撤销/重做仍交给 WebView 的编辑命令（input/textarea 与 contenteditable 共用）。
+    if (id === "undo" || id === "redo") document.execCommand(id);
   }, lastPoint.x, lastPoint.y);
   return true;
 }

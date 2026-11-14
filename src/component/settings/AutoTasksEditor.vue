@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 自动任务编辑器（双模式复用）：instance 版本设置页，实例文件存在即完全采用实例配置，否则跟随全局；
 // global 设置页直接编辑全局配置（无实例上下文，"立即执行"不可用）。
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Play, Plus, Trash2, Undo2 } from "@lucide/vue";
@@ -49,7 +49,23 @@ function stepsOf(phase: AutoTaskPhase): AutoTaskStep[] {
   return draft.value[phase];
 }
 
+/** 添加动作菜单：点面板外或 Esc 关闭（与 DropSelect 行为一致）。 */
+function closeAddOutside(e: PointerEvent) {
+  if (expandAdd.value === null) return;
+  const target = e.target as HTMLElement | null;
+  if (!target?.closest(".vsh-add")) expandAdd.value = null;
+}
+
+function closeAddOnEsc(e: KeyboardEvent) {
+  if (e.key === "Escape" && expandAdd.value !== null) {
+    e.stopPropagation();
+    expandAdd.value = null;
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener("pointerdown", closeAddOutside, true);
+  document.addEventListener("keydown", closeAddOnEsc, true);
   try {
     if (!isInstance.value) {
       draft.value = await getGlobalAutoTasks();
@@ -69,6 +85,11 @@ onMounted(async () => {
   } catch (e) {
     showToast(errMsg(e));
   }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", closeAddOutside, true);
+  document.removeEventListener("keydown", closeAddOnEsc, true);
 });
 
 /** 切到"自定义"：预填当前全局值。 */
@@ -156,6 +177,7 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 <template>
   <div :class="isInstance ? 'vs-page' : 'auto-tasks-global'">
     <SetupCard
+      :variant="isInstance ? 'setup' : 'settings'"
       :title="t('settings.autoTasks.title')"
       :desc="t('settings.autoTasks.subtitle')"
     >
@@ -285,20 +307,22 @@ function toggleWorld(name: string, step: AutoTaskStep) {
             <button class="vsh-add-btn" @click="expandAdd = expandAdd === p.key ? null : p.key">
               <Plus :size="12" /> {{ t("settings.autoTasks.addAction") }}
             </button>
-            <div v-if="expandAdd === p.key" class="vsh-add-menu">
-              <button
-                v-for="b in builtinCatalog"
-                :key="b.kind"
-                class="vsh-add-item"
-                :title="t(b.descKey)"
-                @click="addAction(p.key, b.kind)"
-              >
-                {{ t(b.labelKey) }}
-              </button>
-              <button class="vsh-add-item cmd" @click="addAction(p.key, 'command')">
-                {{ t("settings.autoTasks.customCommand") }}
-              </button>
-            </div>
+            <Transition name="vsh-drop">
+              <div v-if="expandAdd === p.key" class="vsh-add-menu">
+                <button
+                  v-for="b in builtinCatalog"
+                  :key="b.kind"
+                  class="vsh-add-item"
+                  :title="t(b.descKey)"
+                  @click="addAction(p.key, b.kind)"
+                >
+                  {{ t(b.labelKey) }}
+                </button>
+                <button class="vsh-add-item cmd" @click="addAction(p.key, 'command')">
+                  {{ t("settings.autoTasks.customCommand") }}
+                </button>
+              </div>
+            </Transition>
           </div>
         </div>
 
@@ -352,6 +376,10 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 </template>
 
 <style scoped>
+.auto-tasks-global {
+  margin-top: 16px;
+}
+
 .vsh-save {
   flex: none;
   height: 28px;
@@ -595,30 +623,42 @@ function toggleWorld(name: string, step: AutoTaskStep) {
 }
 .vsh-add-menu {
   position: absolute;
-  z-index: 5;
+  z-index: 30;
   top: 28px;
   left: 0;
   display: flex;
   flex-direction: column;
-  min-width: 160px;
-  padding: 4px;
+  min-width: 180px;
+  padding: 6px;
   background: var(--surface-card);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
 }
+
 .vsh-add-item {
-  padding: 6px 8px;
-  font-size: var(--fs-sm);
+  padding: 8px 10px;
+  font-size: var(--fs-base);
   text-align: left;
   color: var(--text-primary);
   background: transparent;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background 0.1s;
 }
 .vsh-add-item:hover {
-  background: var(--surface-elevated);
+  background: var(--surface-hover);
+}
+
+.vsh-drop-enter-active,
+.vsh-drop-leave-active {
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+}
+.vsh-drop-enter-from,
+.vsh-drop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 .vsh-prefailure {
   display: flex;

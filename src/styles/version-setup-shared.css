@@ -25,6 +25,23 @@
   padding: 0;
 }
 
+/* 设置页大卡片：与 .stg-card 对齐（圆角/内边距/标题层级） */
+.setup-card--settings {
+  padding: 20px 24px;
+  border-radius: var(--radius-lg);
+}
+
+.setup-card--settings .setup-card-hdr {
+  margin-bottom: 16px;
+}
+
+.setup-card--settings .setup-card-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
 /* flush 卡片的标题/内容各自带内边距，header 不再叠加底距 */
 .setup-card--flush .setup-card-hdr {
   margin-bottom: 0;

@@ -223,6 +223,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         // 自管窗口几何：统一写入 Elytra 配置目录，避免插件另建 identifier 目录。
         .on_window_event(|window, event| {
             if window.label() != "main" {
