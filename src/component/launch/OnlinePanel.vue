@@ -3,18 +3,27 @@
 // host 可先开联机（等待态）再「对局域网开放」，检测到端口自动生成房间码；正版 host 由服务器验证会话。
 import { onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, Link2, Unplug } from "@lucide/vue";
+import { useRouter } from "vue-router";
+import { Copy, Link2, Settings2, Unplug } from "@lucide/vue";
 import {
   onlineStatus, onlineRoomCode, onlineRoomInput, onlinePanelTab, onlineLocalPort, onlinePlayers,
   onlinePath, onlineLatency, onlineAllowRelay,
   onlineErrorHost, onlineErrorGuest,
   startHost, joinRoom, stopOnline, loadOnlineStatus, ensureOnlineListen,
 } from "../../store/config/online";
+import { settingsTab } from "../../store/app/settingsTab";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
 import { copyText } from "../../utils/clipboard";
 
 const { t } = useI18n();
+const router = useRouter();
+
+/** 跳到 设置 → 联机设置（昵称 / 广播名 / 节点）。 */
+function openOnlineSettings() {
+  settingsTab.value = "online";
+  void router.push("/settings");
+}
 
 onMounted(() => {
   ensureOnlineListen();
@@ -134,6 +143,10 @@ async function copyRoomCode() {
     <div v-show="onlinePanelTab === 'host'" class="online-sec">
       <p class="online-desc">{{ t("tools.online.hostDesc1") }}</p>
       <p class="online-desc">{{ t("tools.online.hostDesc2") }}</p>
+      <button type="button" class="online-settings-link" @click="openOnlineSettings">
+        <Settings2 :size="12" />
+        {{ t("tools.online.openOnlineSettings") }}
+      </button>
 
       <div v-if="hostBlocked()" class="online-sec-note">{{ t("tools.online.hostingInProgress") }}</div>
 
@@ -338,6 +351,27 @@ async function copyRoomCode() {
   color: var(--text-tertiary);
   line-height: 1.5;
   margin: 0 0 10px;
+}
+
+.online-settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.online-settings-link:hover {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+  background: var(--color-brand-bg);
 }
 
 .online-row {
