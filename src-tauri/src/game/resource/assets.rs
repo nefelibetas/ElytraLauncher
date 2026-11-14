@@ -51,6 +51,62 @@ pub fn read_cached_index(mc_dir: &Path, id: &str, sha1: &str) -> Option<String> 
     String::from_utf8(data).ok()
 }
 
+/// 游戏只认 `--assetIndex <id>` → `assets/indexes/{id}.json`；下载侧按内容寻址存 `{id}-{sha1}.json`。
+/// 启动前把对应内容物化到游戏可见路径（内容一致则跳过），否则语言/声音等索引资源列表为空。
+pub fn ensure_index_visible(mc_dir: &Path, id: &str, sha1: &str) -> Result<(), String> {
+    let cache = index_cache_path(mc_dir, id, sha1);
+    let visible = mc_dir
+        .join("assets")
+        .join("indexes")
+        .join(format!("{id}.json"));
+    if file_sha1_matches(&visible, sha1) {
+        return Ok(());
+    }
+    if !cache.is_file() {
+        bail_key!(
+            "errors.assets.indexMissing",
+            "资源索引缓存缺失\n{}",
+            cache.display()
+        );
+    }
+    let parent = visible.parent().ok_or_else(|| {
+        keyed_msg!(
+            "errors.assets.indexWriteFailed",
+            "写入游戏可见的资源索引失败"
+        )
+    })?;
+    std::fs::create_dir_all(parent).map_err(common_err_ctx_key!(
+        "errors.assets.indexWriteFailed",
+        "创建索引目录失败"
+    ))?;
+    // `{id}.json` 可能仍是另一个版本同 id 的旧索引：先按内容迁移到 `{id}-{oldsha1}.json`，
+    // 否则覆盖后旧版本的缓存路径失效，下次启动会误判资源索引缺失。
+    if let Ok(old) = std::fs::read(&visible) {
+        let old_sha1 = sha1_hex(&old);
+        if old_sha1 != sha1 {
+            let old_path = parent.join(format!("{id}-{old_sha1}.json"));
+            if !old_path.exists() {
+                std::fs::copy(&visible, &old_path).map_err(common_err_ctx_key!(
+                    "errors.assets.indexWriteFailed",
+                    "迁移旧资源索引失败"
+                ))?;
+            }
+        }
+    }
+    // 临时文件 + rename：避免游戏启动时读到半截 JSON（进程号隔离并发写入）。
+    let tmp = parent.join(format!(".{id}.json.{}.tmp", std::process::id()));
+    std::fs::copy(&cache, &tmp).map_err(common_err_ctx_key!(
+        "errors.assets.indexWriteFailed",
+        "复制资源索引失败"
+    ))?;
+    let _ = std::fs::remove_file(&visible);
+    std::fs::rename(&tmp, &visible).map_err(common_err_ctx_key!(
+        "errors.assets.indexWriteFailed",
+        "替换资源索引失败"
+    ))?;
+    Ok(())
+}
+
 /// 拉取资源索引文本并按 sha1 校验（为空则跳过校验）；不读写本地缓存。
 pub async fn fetch_index_text(
     config: &DownloaderConfig,
@@ -246,6 +302,59 @@ mod tests {
         std::fs::write(&legacy, body).unwrap();
         assert_eq!(index_cache_path(mc, "34", &sha1), legacy);
         assert!(read_cached_index(mc, "34", &sha1).is_some());
+    }
+
+    /// 游戏按 `--assetIndex <id>` 读 `{id}.json`；内容寻址缓存必须物化到该文件名，否则语言/声音列表为空。
+    #[test]
+    fn visible_index_is_materialized_for_game() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mc = tmp.path();
+        let body = br#"{"objects":{}}"#;
+        let sha1 = sha1_hex(body);
+        let cache = index_cache_path(mc, "17", &sha1);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, body).unwrap();
+
+        let visible = mc.join("assets").join("indexes").join("17.json");
+        ensure_index_visible(mc, "17", &sha1).unwrap();
+        assert_eq!(std::fs::read(&visible).unwrap(), body);
+
+        // 旧内容/半截文件必须被替换
+        std::fs::write(&visible, b"stale").unwrap();
+        ensure_index_visible(mc, "17", &sha1).unwrap();
+        assert_eq!(std::fs::read(&visible).unwrap(), body);
+
+        // 缓存缺失应报错，而不是静默启动
+        assert!(ensure_index_visible(mc, "18", &sha1).is_err());
+    }
+
+    /// 同一 id 被重发为不同内容时，物化新索引不能覆盖旧版本的 `{id}.json` 单槽缓存。
+    #[test]
+    fn materialize_preserves_reissued_index_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mc = tmp.path();
+        let dir = mc.join("assets").join("indexes");
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = br#"{"objects":{"old":1}}"#;
+        let new = br#"{"objects":{"new":1}}"#;
+        let old_sha1 = sha1_hex(old);
+        let new_sha1 = sha1_hex(new);
+        std::fs::write(dir.join("34.json"), old).unwrap();
+        std::fs::write(dir.join(format!("34-{new_sha1}.json")), new).unwrap();
+
+        ensure_index_visible(mc, "34", &new_sha1).unwrap();
+        assert_eq!(std::fs::read(dir.join("34.json")).unwrap(), new);
+        assert_eq!(
+            std::fs::read(dir.join(format!("34-{old_sha1}.json"))).unwrap(),
+            old,
+            "旧内容应迁移到内容寻址路径"
+        );
+        assert_eq!(
+            index_cache_path(mc, "34", &old_sha1),
+            dir.join(format!("34-{old_sha1}.json")),
+            "旧版本下次启动应命中迁移后的缓存"
+        );
+        assert!(read_cached_index(mc, "34", &old_sha1).is_some());
     }
 
     /// 端到端：fetch_asset_index 经代理/直连拉官方资源索引应成功；离线/黑洞环境超时报错。

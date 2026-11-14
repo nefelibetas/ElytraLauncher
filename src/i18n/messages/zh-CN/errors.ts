@@ -305,7 +305,9 @@ export default {
   assets: {
     indexIdMissing: "资源索引缺少版本 id",
     indexSha1Missing: "资源索引缺少 sha1",
-    indexCorrupt: "资源索引内容校验失败（sha1 不匹配，源返回内容已损坏）"
+    indexCorrupt: "资源索引内容校验失败（sha1 不匹配，源返回内容已损坏）",
+    indexMissing: "资源索引缓存缺失",
+    indexWriteFailed: "写入游戏可见的资源索引失败"
   },
   updates: {
     badFileName: "非法文件名",

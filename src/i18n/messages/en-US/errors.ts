@@ -305,7 +305,9 @@ export default {
   assets: {
     indexIdMissing: "Asset index is missing the version id",
     indexSha1Missing: "Asset index is missing sha1",
-    indexCorrupt: "Asset index content verification failed (sha1 mismatch, the source returned corrupted content)"
+    indexCorrupt: "Asset index content verification failed (sha1 mismatch, the source returned corrupted content)",
+    indexMissing: "Asset index cache is missing",
+    indexWriteFailed: "Failed to write the game-visible asset index"
   },
   updates: {
     badFileName: "Invalid file name",

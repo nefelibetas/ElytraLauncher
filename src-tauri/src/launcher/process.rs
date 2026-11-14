@@ -81,6 +81,11 @@ pub fn ensure_game_ready(
     version_dir_name: &str,
 ) -> Result<(), String> {
     pre_launch_check(version_json, mc_dir, version_dir_name)?;
+    crate::game::resource::assets::ensure_index_visible(
+        mc_dir,
+        &version_json.asset_index.id,
+        &version_json.asset_index.sha1,
+    )?;
     let natives_dir = mc_dir.join("natives").join(mc_version_of(version_dir_name));
     ensure_old_style_natives(version_json, &mc_dir.join("libraries"), &natives_dir)?;
     Ok(())
