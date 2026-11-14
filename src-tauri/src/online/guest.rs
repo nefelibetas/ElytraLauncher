@@ -13,7 +13,7 @@ use super::service::{
     emit_snapshot, free_tcp_port, online_player_name, snapshot_inner, vendor_string, GuestProxy,
     OnlineServiceInner, SERVICE,
 };
-use super::session::{EasyTierSession, SessionConfig, SessionRole};
+use super::session::{EasyTierSession, RouteSnapshot, SessionConfig, SessionRole};
 use crate::persist::online_config;
 use crate::task::EventSink;
 use easytier_core::gateway::DataPlaneTcpStream;
@@ -150,7 +150,8 @@ async fn connect_center(
     Ok((stream, center_addr, center_ip))
 }
 
-/// 数据面连接重试：中心路由先于直连隧道进入路由表，首次连接常因打洞未完成而失败。
+/// 数据面连接重试：中心 hostname 会先经公共节点出现在路由表里，但该路径不转发数据；
+/// p2p-only 下必须等 cost=1 的直连路由出现再发起，否则 KCP 首包只会得到 RouteError。
 /// 单次尝试上限 12s（网关无直连时约 11s 返回失败），剩余窗口内每 2s 重试。
 async fn connect_data_plane(
     session: &EasyTierSession,
@@ -159,20 +160,35 @@ async fn connect_data_plane(
 ) -> Result<DataPlaneTcpStream, String> {
     const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(12);
     const RETRY_INTERVAL: Duration = Duration::from_secs(2);
+    const DIRECT_POLL: Duration = Duration::from_millis(500);
 
+    let require_direct = !online_config().allow_relay;
     let deadline = tokio::time::Instant::now() + total;
     let mut last_err = String::new();
+    let mut attempt = 0u32;
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            return Err(last_err);
+            return Err(if last_err.is_empty() {
+                "直连尚未建立".to_string()
+            } else {
+                last_err
+            });
         }
+        if require_direct && !center_route_is_direct(session, addr).await {
+            tokio::time::sleep(remaining.min(DIRECT_POLL)).await;
+            continue;
+        }
+        attempt += 1;
         match session
             .data_plane_tcp_connect(addr, remaining.min(ATTEMPT_TIMEOUT))
             .await
         {
             Ok(stream) => return Ok(stream),
-            Err(e) => last_err = e,
+            Err(e) => {
+                eprintln!("[online] 数据面连接第 {attempt} 次失败: {e}");
+                last_err = e;
+            }
         }
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
@@ -180,6 +196,20 @@ async fn connect_data_plane(
         }
         tokio::time::sleep(remaining.min(RETRY_INTERVAL)).await;
     }
+}
+
+/// 中心是否已有直连路由（cost=1）；V6 地址不参与判定。
+async fn center_route_is_direct(session: &EasyTierSession, addr: SocketAddr) -> bool {
+    has_direct_route(&session.route_snapshots().await, addr)
+}
+
+fn has_direct_route(routes: &[RouteSnapshot], addr: SocketAddr) -> bool {
+    let SocketAddr::V4(addr) = addr else {
+        return true;
+    };
+    routes
+        .iter()
+        .any(|r| r.is_direct() && r.ipv4_addr() == Some(*addr.ip()))
 }
 
 /// 阶段三：信息协议握手（心跳 → 协议协商 → server_port），返回本地玩家资料、是否支持 easytier_id、游戏端口。
@@ -557,5 +587,36 @@ async fn rollback_join_and_emit(sink: &dyn EventSink, gen: u64) {
     }
     if let Some(s) = session {
         s.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(ipv4: [u8; 4], cost: i32) -> RouteSnapshot {
+        RouteSnapshot {
+            peer_id: 1,
+            hostname: "scaffolding-mc-server-13448".into(),
+            ipv4: Some(ipv4),
+            cost,
+            next_hop_peer_id: 1,
+            path_latency: 10,
+            udp_nat_type: 0,
+        }
+    }
+
+    #[test]
+    fn direct_route_gate_requires_cost_one_to_target() {
+        let center: SocketAddr = "10.144.144.1:13448".parse().unwrap();
+        assert!(
+            !has_direct_route(&[route([10, 144, 144, 1], 2)], center),
+            "经公共节点的 cost=2 不算直连"
+        );
+        assert!(has_direct_route(&[route([10, 144, 144, 1], 1)], center));
+        assert!(
+            !has_direct_route(&[route([10, 144, 144, 9], 1)], center),
+            "其他 peer 的直连不算"
+        );
     }
 }
