@@ -399,7 +399,7 @@ mod tests {
             ("1.20.1", r#"{"id":"1.20.1","type":"release"}"#),
             (
                 "1.20.1-fabric-0.15.0",
-                r#"{"id":"x","inheritsFrom":"net.fabricmc:fabric-loader"}"#,
+                r#"{"id":"x","inheritsFrom":"1.20.1","mainClass":"net.fabricmc.loader.impl.launch.knot.KnotClient"}"#,
             ),
         ] {
             let vdir = versions.join(name);
@@ -413,7 +413,11 @@ mod tests {
         assert_eq!(list_installed_in(&versions).unwrap(), first);
 
         let json = versions.join("1.20.1").join("1.20.1.json");
-        fs::write(&json, r#"{"inheritsFrom":"net.minecraftforge:forge"}"#).unwrap();
+        fs::write(
+            &json,
+            r#"{"inheritsFrom":"1.20.1","mainClass":"cpw.mods.bootstraplauncher.BootstrapLauncher","libraries":[{"name":"net.minecraftforge:forge:47.1.0"}]}"#,
+        )
+        .unwrap();
         std::fs::File::options()
             .write(true)
             .open(&json)

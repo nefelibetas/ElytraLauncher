@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::game::loader::{LoaderChoice, LoaderKind};
 
-/// 解析 libraries 坐标与 FML 参数，按 fabric → quilt → neoforge → forge 顺序取第一个已知 loader。
+/// 解析 libraries 坐标与 FML 参数，按 quilt → fabric → neoforge → forge 顺序取第一个已知 loader。
 pub(crate) fn loader_from_version_json(text: &str) -> Option<LoaderChoice> {
     let value: Value = serde_json::from_str(text).ok()?;
     let mut libraries = Vec::new();
