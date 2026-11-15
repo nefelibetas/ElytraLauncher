@@ -1,5 +1,5 @@
 // 社区资源聚合器：纯状态机，不依赖 Vue/Tauri；请求函数注入，便于单独验证分页与去重。
-import { identityKey, scoreItem, type CommunitySource } from "./rank";
+import { identityKey, scoreItem, type CommunitySort, type CommunitySource } from "./rank";
 
 /** 聚合模式每页展示条数（累积列表切片）。 */
 export const AGG_PAGE_SIZE = 40;
@@ -13,6 +13,8 @@ export interface AggParams {
   category: string | null;
   /** 内容分类 "CFID/MRslug"；空串为全部。 */
   tag: string;
+  /** 排序口径。 */
+  sort: CommunitySort;
 }
 
 /** 聚合器需要的最小字段；CommunityDisplayItem 结构满足。 */
@@ -22,6 +24,8 @@ export interface AggregatorItem {
   title_zh: string | null;
   mcmod_id: number | null;
   downloads: number;
+  /** 最后更新时间 ISO 8601；缺失为 null/undefined。 */
+  updated_at?: string | null;
   source: CommunitySource;
   page_url: string;
   key: string;
@@ -95,6 +99,7 @@ export class CommunityAggregator<T extends AggregatorItem> {
       params.loader,
       params.category,
       params.tag,
+      params.sort,
     ]);
     if (force || signature !== this.signature) {
       this.reset(signature);
@@ -201,7 +206,8 @@ export class CommunityAggregator<T extends AggregatorItem> {
     }
     fresh.sort(
       (a, b) =>
-        scoreItem(b, params.query, params.category) - scoreItem(a, params.query, params.category) ||
+        scoreItem(b, params.query, params.category, params.sort) -
+          scoreItem(a, params.query, params.category, params.sort) ||
         b.downloads - a.downloads,
     );
     this.items.push(...fresh);

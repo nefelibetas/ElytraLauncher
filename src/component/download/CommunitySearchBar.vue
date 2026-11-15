@@ -16,6 +16,8 @@ export interface CommunitySearchState {
   loader?: string;
   /** 内容分类 "CFID/MRslug"；空串为全部。 */
   tag?: string;
+  /** 排序口径（relevance/downloads/updated）。 */
+  sort?: string;
   searching: boolean;
   search(page?: number, force?: boolean): Promise<void> | void;
   reset(): void;
@@ -32,6 +34,8 @@ const props = withDefaults(
     /** 是否显示内容分类（仅部分资源类型提供标签表） */
     showTag?: boolean;
     tagOptions?: { value: string; label: string }[];
+    /** 是否显示排序（默认显示；所有社区搜索共用） */
+    showSort?: boolean;
     /** 表单控件 id 前缀（同页多实例防 id 冲突；当前 tab 互斥） */
     idPrefix?: string;
   }>(),
@@ -40,6 +44,7 @@ const props = withDefaults(
     showLoader: false,
     showTag: false,
     tagOptions: () => [],
+    showSort: true,
     idPrefix: "cs",
   },
 );
@@ -55,6 +60,12 @@ const versionOptions = computed<SelOption[]>(() => [
   ...releases.value.map((r) => ({ value: r.id, label: r.id })),
 ]);
 
+const sortOptions = computed<SelOption[]>(() => [
+  { value: "relevance", label: t("download.search.sortRelevance") },
+  { value: "downloads", label: t("download.search.sortDownloads") },
+  { value: "updated", label: t("download.search.sortUpdated") },
+]);
+
 // 来源/版本/加载器切换即自动搜索（名称走回车）；watch 在微任务触发，无对应字段的实例取常量占位不误触发。
 watch(
   () => [
@@ -62,6 +73,7 @@ watch(
     props.search.gameVersion,
     props.search.loader ?? "",
     props.showTag ? (props.search.tag ?? "") : "",
+    props.showSort ? (props.search.sort ?? "relevance") : "",
   ],
   () => props.search.search(),
 );
@@ -91,7 +103,7 @@ watch(
           />
         </template>
       </div>
-      <div v-if="showSource || showLoader || (showTag && tagOptions.length)" class="cs-form-row">
+      <div v-if="showSource || showLoader || (showTag && tagOptions.length) || showSort" class="cs-form-row">
         <template v-if="showSource && !showLoader">
           <label class="cs-form-label" :for="`${idPrefix}SourceSelect`">{{ t("download.search.source") }}</label>
           <DropSelect
@@ -128,6 +140,16 @@ watch(
             :options="tagOptions"
             class="cs-fill"
             @update:model-value="search.tag = $event"
+          />
+        </template>
+        <template v-if="showSort">
+          <label class="cs-form-label" :for="`${idPrefix}SortSelect`">{{ t("download.search.sort") }}</label>
+          <DropSelect
+            :id="`${idPrefix}SortSelect`"
+            :model-value="search.sort ?? 'relevance'"
+            :options="sortOptions"
+            class="cs-fill"
+            @update:model-value="search.sort = $event"
           />
         </template>
       </div>

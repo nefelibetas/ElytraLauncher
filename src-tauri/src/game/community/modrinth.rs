@@ -46,26 +46,17 @@ fn modrinth_version_range(hit: &serde_json::Value) -> Option<String> {
 // ── Modrinth（无需 key）──
 
 pub(super) async fn search_modrinth(
+    q: &SearchQuery,
     query: &str,
-    game_version: Option<&str>,
-    loader: Option<&str>,
-    category: Option<&str>,
-    tag: Option<&str>,
-    offset: u64,
-    page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
-    let cache_query = SearchQuery::new(
-        query,
-        game_version,
-        loader,
-        category,
-        tag,
-        offset,
-        page_size,
-    );
+    let cache_query = SearchQuery {
+        query: query.to_string(),
+        ..q.clone()
+    };
     if let Some(page) = cache::get_search("modrinth", &cache_query) {
         return Ok(page);
     }
+    let tag = q.tag.as_deref();
     let (_, mr_tag) = split_tag(tag);
     // 只有 CurseForge 侧的组合（"407/"）：MR 无对应分类，返回空页并缓存，避免退化成未过滤全量。
     if tag.is_some_and(|t| t.contains('/')) && mr_tag.is_none() {
@@ -76,6 +67,9 @@ pub(super) async fn search_modrinth(
         cache::put_search("modrinth", &cache_query, &page);
         return Ok(page);
     }
+    let game_version = q.game_version.as_deref();
+    let loader = q.loader.as_deref();
+    let category = q.category.as_deref();
     let mut facets: Vec<Vec<String>> = Vec::new();
     if let Some(gv) = game_version {
         facets.push(vec![format!("versions:{}", gv)]);
@@ -106,8 +100,8 @@ pub(super) async fn search_modrinth(
     }
     let mut params: Vec<(&str, String)> = vec![
         ("query", query.to_string()),
-        ("limit", page_size.to_string()),
-        ("offset", offset.to_string()),
+        ("limit", q.page_size.to_string()),
+        ("offset", q.offset.to_string()),
     ];
     if !facets.is_empty() {
         let facets_json = serde_json::to_string(&facets).map_err(common_err_ctx_key!(
@@ -116,8 +110,13 @@ pub(super) async fn search_modrinth(
         ))?;
         params.push(("facets", facets_json));
     }
-    // 统一相关度序：空查询时 Modrinth 的 relevance 本身就是热门序；聚合层再做来源加权排序。
-    params.push(("index", "relevance".into()));
+    // 按 sort 映射：relevance 相关度 / downloads 下载量 / updated 最近更新；聚合层再做来源加权。
+    let index = match q.sort.as_deref() {
+        Some("downloads") => "downloads",
+        Some("updated") => "updated",
+        _ => "relevance",
+    };
+    params.push(("index", index.into()));
     let urls: Vec<String> = api_urls(ApiPlatform::Modrinth, "/v2/search", &params)?;
     let data = get_json_multi(&urls, |u| http().get(u.to_string())).await?;
 
@@ -146,6 +145,7 @@ pub(super) async fn search_modrinth(
                 game_version_range: modrinth_version_range(h),
                 author: h["author"].as_str().unwrap_or("").to_string(),
                 downloads: h["downloads"].as_u64().unwrap_or(0),
+                updated_at: h["date_modified"].as_str().map(str::to_string),
                 icon_url: h["icon_url"].as_str().map(str::to_string),
                 // 项目 URL 按 project_type 分段；写死 /mod/ 会让光影包等详情页「转到 Modrinth」404
                 page_url: format!(
@@ -324,9 +324,20 @@ pub(super) async fn modrinth_details(
 mod tests {
     use super::*;
 
+    fn sq(
+        query: &str,
+        game_version: Option<&str>,
+        loader: Option<&str>,
+        category: Option<&str>,
+        tag: Option<&str>,
+    ) -> SearchQuery {
+        SearchQuery::new(query, game_version, loader, category, tag, 0, 30)
+    }
+
     #[tokio::test]
     async fn search_modrinth_works() {
-        let page = search_modrinth("jei", Some("1.21.1"), Some("fabric"), None, None, 0, 30).await;
+        let q = sq("jei", Some("1.21.1"), Some("fabric"), None, None);
+        let page = search_modrinth(&q, "jei").await;
         assert!(page.is_ok(), "Modrinth 搜索应成功: {:?}", page.err());
         let page = page.unwrap();
         assert!(!page.items.is_empty(), "搜 jei 应返回结果");
@@ -340,9 +351,8 @@ mod tests {
 
     #[tokio::test]
     async fn modrinth_empty_query_returns_popular() {
-        let page = search_modrinth("", None, None, None, None, 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, None, None);
+        let page = search_modrinth(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "空关键字应返回热门 Mod");
         let first = &page.items[0];
         assert!(
@@ -357,34 +367,23 @@ mod tests {
 
     #[tokio::test]
     async fn modrinth_category_filter_works() {
-        let page = search_modrinth("", None, None, None, Some("6814/optimization"), 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, None, Some("6814/optimization"));
+        let page = search_modrinth(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "分类过滤应返回结果");
     }
 
     #[tokio::test]
     async fn modrinth_skips_curseforge_only_tag() {
-        let page = search_modrinth("", None, None, None, Some("407/"), 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, None, Some("407/"));
+        let page = search_modrinth(&q, "").await.unwrap();
         assert!(page.items.is_empty(), "MR 无对应分类时应返回空页");
         assert_eq!(page.total, 0);
     }
 
     #[tokio::test]
     async fn modrinth_modpack_category_filter_works() {
-        let page = search_modrinth(
-            "",
-            None,
-            None,
-            Some("modpack"),
-            Some("4472/technology"),
-            0,
-            30,
-        )
-        .await
-        .unwrap();
+        let q = sq("", None, None, Some("modpack"), Some("4472/technology"));
+        let page = search_modrinth(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "整合包分类过滤应返回结果");
     }
 
@@ -395,10 +394,18 @@ mod tests {
             ("shader", "6553/realistic"),
             ("datapack", "6951/technology"),
         ] {
-            let page = search_modrinth("", None, None, Some(category), Some(tag), 0, 30)
-                .await
-                .unwrap();
+            let q = sq("", None, None, Some(category), Some(tag));
+            let page = search_modrinth(&q, "").await.unwrap();
             assert!(!page.items.is_empty(), "{category} 分类过滤应返回结果");
+        }
+    }
+
+    #[tokio::test]
+    async fn modrinth_sort_params_work() {
+        for sort in ["downloads", "updated"] {
+            let q = sq("sodium", None, None, None, None).with_sort(Some(sort));
+            let page = search_modrinth(&q, "sodium").await.unwrap();
+            assert!(!page.items.is_empty(), "{sort} 排序应返回结果");
         }
     }
 

@@ -139,6 +139,7 @@ mod tests {
             loader: Some("fabric".into()),
             category: None,
             tag: None,
+            sort: None,
             offset: 0,
             page_size: 30,
         };
@@ -156,6 +157,14 @@ mod tests {
         assert!(
             get_search(&source, &other_tag).is_none(),
             "内容分类必须参与缓存键"
+        );
+        let other_sort = SearchQuery {
+            sort: Some("downloads".into()),
+            ..q.clone()
+        };
+        assert!(
+            get_search(&source, &other_sort).is_none(),
+            "排序口径必须参与缓存键"
         );
         let other_offset = SearchQuery {
             offset: 30,
@@ -284,7 +293,17 @@ pub(crate) fn merge_details(
     ids.iter().filter_map(|id| by_id.remove(id)).collect()
 }
 
-type SearchKey = (String, String, String, String, String, String, u64, u32);
+type SearchKey = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    u64,
+    u32,
+);
 type SearchEntry = (Instant, CommunitySearchPage);
 
 static SEARCH_CACHE: LazyLock<Mutex<HashMap<SearchKey, SearchEntry>>> =
@@ -300,6 +319,7 @@ fn search_key(source: &str, q: &SearchQuery) -> SearchKey {
         q.loader.clone().unwrap_or_default(),
         q.category.clone().unwrap_or_default(),
         q.tag.clone().unwrap_or_default(),
+        q.sort.clone().unwrap_or_default(),
         q.offset,
         q.page_size,
     )

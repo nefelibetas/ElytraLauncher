@@ -9,6 +9,7 @@ import {
   type CommunitySearchPage,
 } from "../community/communitySearch";
 import { AGG_PAGE_SIZE, StaleSearchError } from "./aggregator";
+import type { CommunitySort } from "./rank";
 import {
   datapackTags,
   modpackTags,
@@ -36,8 +37,9 @@ export function createCategorySearch(
     source: initialSource,
     query: "",
     gameVersion: "",
-    /** 内容分类 "CFID/MRslug"；当前分类页未开放，保留字段供后续标签表复用。 */
+    /** 内容分类 "CFID/MRslug"；当前分类页未开放时为空串。 */
     tag: "",
+    sort: "relevance" as CommunitySort,
     searching: false,
     error: "",
     partialError: "",
@@ -76,7 +78,7 @@ export function createCategorySearch(
         if (this.source === "all") {
           const res = await aggregator.page(
             page,
-            { query: this.query.trim(), gameVersion: this.gameVersion, loader: "", category, tag: this.tag },
+            { query: this.query.trim(), gameVersion: this.gameVersion, loader: "", category, tag: this.tag, sort: this.sort },
             resetAll,
           );
           if (seq !== this.searchSeq) return;
@@ -94,6 +96,7 @@ export function createCategorySearch(
               loader: null,
               category,
               tag: this.tag || null,
+              sort: this.sort,
               pageSize: PAGE_SIZE,
               offset: (page - 1) * PAGE_SIZE,
             },
@@ -127,6 +130,7 @@ export function createCategorySearch(
       this.source = initialSource;
       this.gameVersion = "";
       this.tag = "";
+      this.sort = "relevance";
       this.results = [];
       this.total = 0;
       this.loaded = 0;

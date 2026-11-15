@@ -25,6 +25,8 @@ pub struct CommunitySearchResult {
     pub game_version_range: Option<String>,
     pub author: String,
     pub downloads: u64,
+    /// 最后更新时间（ISO 8601；两源字段名不同，缺失为 None）
+    pub updated_at: Option<String>,
     pub icon_url: Option<String>,
     pub page_url: String,
     /// 所属分类（由查询条件透传；普通 mod 为 None）。供详情页按类别裁剪操作。
@@ -90,12 +92,15 @@ pub struct SearchQuery {
     pub category: Option<String>,
     /// 内容分类，格式 "CurseForge 分类 ID/Modrinth 分类 slug"；空侧表示该源无对应分类。
     pub tag: Option<String>,
+    /// 排序口径：relevance（默认，综合）/ downloads / updated。
+    pub sort: Option<String>,
     pub offset: u64,
     pub page_size: u32,
 }
 
 impl SearchQuery {
-    /// 搜索入口共用：可选筛选项统一转 owned，避免各源重复拼缓存键。
+    /// 测试构造器：可选筛选项统一转 owned。
+    #[cfg(test)]
     pub(crate) fn new(
         query: &str,
         game_version: Option<&str>,
@@ -111,9 +116,17 @@ impl SearchQuery {
             loader: loader.map(str::to_string),
             category: category.map(str::to_string),
             tag: tag.map(str::to_string),
+            sort: None,
             offset,
             page_size,
         }
+    }
+
+    /// 测试/调用方按需追加排序口径；避免 `new` 参数继续膨胀。
+    #[cfg(test)]
+    pub(crate) fn with_sort(mut self, sort: Option<&str>) -> Self {
+        self.sort = sort.map(str::to_string);
+        self
     }
 }
 
@@ -130,30 +143,8 @@ pub async fn search_community(
         .query_for_chinese(source, raw)
         .unwrap_or_else(|| raw.to_string());
     let mut page = match source {
-        "modrinth" => {
-            modrinth::search_modrinth(
-                &query,
-                q.game_version.as_deref(),
-                q.loader.as_deref(),
-                q.category.as_deref(),
-                q.tag.as_deref(),
-                q.offset,
-                q.page_size,
-            )
-            .await?
-        }
-        "curseforge" => {
-            curseforge::search_curseforge(
-                &query,
-                q.game_version.as_deref(),
-                q.loader.as_deref(),
-                q.category.as_deref(),
-                q.tag.as_deref(),
-                q.offset,
-                q.page_size,
-            )
-            .await?
-        }
+        "modrinth" => modrinth::search_modrinth(q, &query).await?,
+        "curseforge" => curseforge::search_curseforge(q, &query).await?,
         other => bail_key!("errors.community.unknownSource", "未知 Mod 来源\n{other}"),
     };
     if translate {

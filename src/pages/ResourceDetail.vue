@@ -314,6 +314,7 @@ function depToItem(d: CommunityDependencyItem): CommunityDisplayItem {
     game_version_range: null,
     author: "",
     downloads: 0,
+    updated_at: null,
     icon_url: d.icon_url,
     page_url: "",
     category: null,

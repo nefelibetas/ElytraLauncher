@@ -259,26 +259,17 @@ pub(crate) fn parse_fingerprint_matches(
 }
 
 pub(super) async fn search_curseforge(
+    q: &SearchQuery,
     query: &str,
-    game_version: Option<&str>,
-    loader: Option<&str>,
-    category: Option<&str>,
-    tag: Option<&str>,
-    offset: u64,
-    page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
-    let cache_query = SearchQuery::new(
-        query,
-        game_version,
-        loader,
-        category,
-        tag,
-        offset,
-        page_size,
-    );
+    let cache_query = SearchQuery {
+        query: query.to_string(),
+        ..q.clone()
+    };
     if let Some(page) = cache::get_search("curseforge", &cache_query) {
         return Ok(page);
     }
+    let tag = q.tag.as_deref();
     let (cf_tag, _) = split_tag(tag);
     // 只有 Modrinth 侧的组合（"/game-mechanics"）：CF 无对应分类，返回空页并缓存。
     if tag.is_some_and(|t| t.contains('/')) && cf_tag.is_none() {
@@ -289,18 +280,26 @@ pub(super) async fn search_curseforge(
         cache::put_search("curseforge", &cache_query, &page);
         return Ok(page);
     }
-    // sortField=2（Popularity）必须显式传：默认 Featured 与名称序接近，首条可能只有几百下载量。
-    // 只传 sortField 不够，API 默认 sortOrder=asc，会返回下载量最低的条目。
+    // sortField：2=Popularity（默认/综合）、6=TotalDownloads、3=LastUpdated。
+    // 必须显式传 sortField 和 sortOrder：默认 Featured/asc，会返回低下载或按名称序的条目。
+    let sort_field = match q.sort.as_deref() {
+        Some("downloads") => "6",
+        Some("updated") => "3",
+        _ => "2",
+    };
     let mut params: Vec<(&str, String)> = vec![
-        ("pageSize", page_size.to_string()),
-        ("index", offset.to_string()),
-        ("sortField", "2".into()),
+        ("pageSize", q.page_size.to_string()),
+        ("index", q.offset.to_string()),
+        ("sortField", sort_field.into()),
         ("sortOrder", "desc".into()),
     ];
     // 空关键字不传 searchFilter：Popularity 负责热门列表
     if !query.is_empty() {
         params.push(("searchFilter", query.to_string()));
     }
+    let game_version = q.game_version.as_deref();
+    let loader = q.loader.as_deref();
+    let category = q.category.as_deref();
     if let Some(gv) = game_version {
         params.push(("gameVersion", gv.to_string()));
     }
@@ -351,6 +350,10 @@ pub(super) async fn search_curseforge(
                     .as_str()?
                     .to_string(),
                 downloads: m["downloadCount"].as_u64().unwrap_or(0),
+                updated_at: m["dateModified"]
+                    .as_str()
+                    .or_else(|| m["dateReleased"].as_str())
+                    .map(str::to_string),
                 icon_url: m["logo"]["url"].as_str().map(str::to_string),
                 // 官网 URL 以 API websiteUrl 为准（分类段随 classId 变化，自拼 mc-mods 会让整合包等 404）；缺失时按已知分类段兜底拼接
                 page_url: m["links"]["websiteUrl"]
@@ -501,6 +504,15 @@ mod tests {
     /// CurseForge API 对并发请求敏感（并发测试会偶发连接失败），串行化。
     static CF_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+    fn sq(
+        query: &str,
+        game_version: Option<&str>,
+        category: Option<&str>,
+        tag: Option<&str>,
+    ) -> SearchQuery {
+        SearchQuery::new(query, game_version, None, category, tag, 0, 30)
+    }
+
     #[test]
     fn curseforge_key_format_validation() {
         let valid = format!("$2a$10${}", "a".repeat(53));
@@ -531,7 +543,8 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("jei", Some("1.21.1"), None, None, None, 0, 30).await;
+        let q = sq("jei", Some("1.21.1"), None, None);
+        let page = search_curseforge(&q, "jei").await;
         assert!(page.is_ok(), "CurseForge 搜索应成功: {:?}", page.err());
         let page = page.unwrap();
         assert!(!page.items.is_empty(), "搜 jei 应返回结果");
@@ -551,9 +564,8 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("", None, None, None, None, 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, None);
+        let page = search_curseforge(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "空关键字应返回热门 Mod");
         assert!(
             page.items[0].downloads > 1_000_000,
@@ -570,17 +582,15 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("", None, None, None, Some("6814/optimization"), 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, Some("6814/optimization"));
+        let page = search_curseforge(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "分类过滤应返回结果");
     }
 
     #[tokio::test]
     async fn curseforge_skips_modrinth_only_tag() {
-        let page = search_curseforge("", None, None, None, Some("/game-mechanics"), 0, 30)
-            .await
-            .unwrap();
+        let q = sq("", None, None, Some("/game-mechanics"));
+        let page = search_curseforge(&q, "").await.unwrap();
         assert!(page.items.is_empty(), "CF 无对应分类时应返回空页");
         assert_eq!(page.total, 0);
     }
@@ -592,17 +602,8 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge(
-            "",
-            None,
-            None,
-            Some("modpack"),
-            Some("4472/technology"),
-            0,
-            30,
-        )
-        .await
-        .unwrap();
+        let q = sq("", None, Some("modpack"), Some("4472/technology"));
+        let page = search_curseforge(&q, "").await.unwrap();
         assert!(!page.items.is_empty(), "整合包分类过滤应返回结果");
     }
 
@@ -614,10 +615,23 @@ mod tests {
             return;
         }
         for (category, tag) in [("shader", "6553/realistic"), ("worlds", "251/")] {
-            let page = search_curseforge("", None, None, Some(category), Some(tag), 0, 30)
-                .await
-                .unwrap();
+            let q = sq("", None, Some(category), Some(tag));
+            let page = search_curseforge(&q, "").await.unwrap();
             assert!(!page.items.is_empty(), "{category} 分类过滤应返回结果");
+        }
+    }
+
+    #[tokio::test]
+    async fn curseforge_sort_params_work() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        for sort in ["downloads", "updated"] {
+            let q = sq("sodium", None, None, None).with_sort(Some(sort));
+            let page = search_curseforge(&q, "sodium").await.unwrap();
+            assert!(!page.items.is_empty(), "{sort} 排序应返回结果");
         }
     }
 
@@ -629,9 +643,8 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("just enough items", Some("1.21.1"), None, None, None, 0, 30)
-            .await
-            .unwrap();
+        let q = sq("just enough items", Some("1.21.1"), None, None);
+        let page = search_curseforge(&q, "just enough items").await.unwrap();
         assert!(
             page.items
                 .iter()

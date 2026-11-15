@@ -1,5 +1,7 @@
 /** 社区资源聚合排序：纯函数，无 Vue/IPC 依赖，便于单独验证评分与去重键。 */
 export type CommunitySource = "modrinth" | "curseforge";
+/** 排序口径：relevance（综合）/ downloads / updated。 */
+export type CommunitySort = "relevance" | "downloads" | "updated";
 
 /** scoreItem / identityKey 需要的最小字段；CommunityDisplayItem 结构满足。 */
 export interface RankableItem {
@@ -7,6 +9,8 @@ export interface RankableItem {
   title_zh: string | null;
   mcmod_id: number | null;
   downloads: number;
+  /** 最后更新时间 ISO 8601；缺失为 null/undefined。 */
+  updated_at?: string | null;
   source: CommunitySource;
   page_url: string;
 }
@@ -67,8 +71,20 @@ export function titleRelevance(title: string, titleZh: string | null, query: str
   return best;
 }
 
-/** 聚合排序分：空查询按加权下载量；有查询按标题相关度 + 对数下载量 + 百科条目加成。 */
-export function scoreItem(item: RankableItem, query: string, category: string | null): number {
+/** 聚合排序分：按 sort 选择下载量 / 更新时间 / 标题相关度 + 百科加成。 */
+export function scoreItem(
+  item: RankableItem,
+  query: string,
+  category: string | null,
+  sort: CommunitySort,
+): number {
+  if (sort === "downloads") {
+    return item.downloads * platformMultiplier(category, item.source);
+  }
+  if (sort === "updated") {
+    const ts = Date.parse(item.updated_at ?? "");
+    return Number.isNaN(ts) ? 0 : ts;
+  }
   const weighted = item.downloads * platformMultiplier(category, item.source);
   if (!query) return weighted;
   return (

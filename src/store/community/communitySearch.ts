@@ -11,6 +11,7 @@ import {
   type FetchPage,
 } from "./aggregator";
 import { modTags, tagSupports } from "./tags";
+import type { CommunitySort } from "./rank";
 
 export interface CommunitySearchResult {
   id: string;
@@ -25,6 +26,8 @@ export interface CommunitySearchResult {
   game_version_range: string | null;
   author: string;
   downloads: number;
+  /** 最后更新时间 ISO 8601；缺失为 null */
+  updated_at: string | null;
   icon_url: string | null;
   page_url: string;
   category: string | null;
@@ -144,6 +147,7 @@ const fetchCommunitySource: FetchPage<CommunityDisplayItem> = async (source, par
       loader: params.loader || null,
       category: params.category,
       tag: params.tag || null,
+      sort: params.sort,
       pageSize,
       offset,
     },
@@ -167,6 +171,7 @@ export const communitySearch = reactive({
   loader: "",
   /** 内容分类 "CFID/MRslug"；空串为全部。 */
   tag: "",
+  sort: "relevance" as CommunitySort,
   searching: false,
   error: "",
   partialError: "",
@@ -211,6 +216,7 @@ export const communitySearch = reactive({
             loader: this.loader,
             category: null,
             tag: this.tag,
+            sort: this.sort,
           },
           resetAll,
         );
@@ -228,6 +234,7 @@ export const communitySearch = reactive({
             gameVersion: this.gameVersion || null,
             loader: this.loader || null,
             tag: this.tag || null,
+            sort: this.sort,
             pageSize: MOD_PAGE_SIZE,
             offset: (page - 1) * MOD_PAGE_SIZE,
           },
@@ -262,6 +269,7 @@ export const communitySearch = reactive({
     this.gameVersion = "";
     this.loader = "";
     this.tag = "";
+    this.sort = "relevance";
     this.results = [];
     this.total = 0;
     this.loaded = 0;

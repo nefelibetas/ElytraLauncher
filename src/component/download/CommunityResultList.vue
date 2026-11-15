@@ -22,6 +22,8 @@ export interface CommunityResultState {
   total: number;
   /** 聚合模式：已加载列表之外是否还有结果（决定“下一页”是否可点） */
   hasMore?: boolean;
+  /** 排序口径（relevance/downloads/updated） */
+  sort?: string;
   page: number;
   search(page?: number, force?: boolean): Promise<void> | void;
 }
@@ -95,7 +97,7 @@ const canNext = computed(
         <!-- 聚合 all 的 total 是去重后下限，故用「至少」；单源精确用「共」 -->
         <span
           class="cs-result-count"
-          :title="search.source === 'all' ? t('download.search.rankHint') : undefined"
+          :title="search.source === 'all' && (search.sort ?? 'relevance') === 'relevance' ? t('download.search.rankHint') : undefined"
         >{{ t(search.source === "all" ? "download.search.resultCountAtLeast" : "download.search.resultCountExact", { count: search.total }, search.total) }}</span>
       </div>
     </template>
