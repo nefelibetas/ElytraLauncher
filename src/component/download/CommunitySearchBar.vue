@@ -4,6 +4,8 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { releases } from "../../store/task/versionDownload";
 import { modLoaderOptions } from "../../store/community/communitySearch";
+import { tagSupports } from "../../store/community/tags";
+import type { CommunitySource } from "../../store/community/rank";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 
 const { t } = useI18n();
@@ -49,11 +51,14 @@ const props = withDefaults(
   },
 );
 
-const sourceOptions = computed<SelOption[]>(() => [
-  { value: "all", label: t("download.search.all") },
-  { value: "curseforge", label: "CurseForge" },
-  { value: "modrinth", label: "Modrinth" },
-]);
+const sourceOptions = computed<SelOption[]>(() => {
+  const tag = props.search.tag ?? "";
+  return [
+    { value: "all", label: t("download.search.all") },
+    { value: "curseforge", label: "CurseForge" },
+    { value: "modrinth", label: "Modrinth" },
+  ].filter(option => option.value === "all" || !tag || tagSupports(tag, option.value as CommunitySource));
+});
 
 const versionOptions = computed<SelOption[]>(() => [
   { value: "", label: t("download.search.all") },
@@ -75,7 +80,20 @@ watch(
     props.showTag ? (props.search.tag ?? "") : "",
     props.showSort ? (props.search.sort ?? "relevance") : "",
   ],
-  () => props.search.search(),
+  () => {
+    const tag = props.showTag ? (props.search.tag ?? "") : "";
+    if (
+      props.showSource &&
+      tag &&
+      props.search.source !== "all" &&
+      !tagSupports(tag, props.search.source as CommunitySource)
+    ) {
+      // 单侧分类不支持当前来源：回到“全部”，由来源变化再次触发搜索。
+      props.search.source = "all";
+      return;
+    }
+    props.search.search();
+  },
 );
 </script>
 

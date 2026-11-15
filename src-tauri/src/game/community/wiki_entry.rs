@@ -188,6 +188,15 @@ impl WikiIndex {
         if q.is_empty() || !q.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c)) {
             return None;
         }
+        // 精确命中中文名/别名时直接取该条目的英文词，避免词频策略把 "钠" 泛化成无关词。
+        if let Some(query) = self.chinese.iter().find_map(|(name, idx)| {
+            if !chinese_matches_exactly(name, q) {
+                return None;
+            }
+            self.entries[*idx].derived_query(platform)
+        }) {
+            return Some(query);
+        }
         let queries: Vec<String> = self
             .search_chinese(platform, q, CHINESE_MATCH_LIMIT)
             .into_iter()
@@ -216,6 +225,16 @@ impl WikiIndex {
             _ => Some(first),
         }
     }
+}
+
+/// 中文别名精确判断：拆 `/` 别名，去掉 ` - 备注` 与 ` (English)` 后缀后比较。
+fn chinese_matches_exactly(name: &str, query: &str) -> bool {
+    let query = query.trim();
+    name.split('/').any(|part| {
+        let part = part.split(" - ").next().unwrap_or(part);
+        let part = part.split(" (").next().unwrap_or(part).trim();
+        !part.is_empty() && part == query
+    })
 }
 
 /// 处理译名：丢弃 `*`（原名用搜索 title）、剥离末尾 " (英文原名)"；结果含中文才算译名（避免 "X | X" 假翻译）。
@@ -325,6 +344,21 @@ mod tests {
             q.as_deref(),
             Some("entity"),
             "「实体」的命中里 entity 是高频词，应作为宽泛查询词"
+        );
+    }
+
+    /// 精确中文名/别名优先于词频策略，避免 "钠" 被泛化。
+    #[test]
+    fn chinese_exact_match_uses_entry_query() {
+        assert!(chinese_matches_exactly("钠/钠锭", "钠锭"));
+        assert!(!chinese_matches_exactly("实体渲染机制优化", "实体"));
+        assert_eq!(
+            WIKI.query_for_chinese("modrinth", "钠").as_deref(),
+            Some("sodium")
+        );
+        assert_eq!(
+            WIKI.query_for_chinese("modrinth", "工业时代2").as_deref(),
+            Some("Industrial Craft 2")
         );
     }
 
