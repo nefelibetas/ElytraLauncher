@@ -13,5 +13,6 @@ const { t } = useI18n();
     :total-pages="shaderTotalPages"
     :label="t('download.categories.shader')"
     :empty-icon="Sun"
+    kind="shader"
   />
 </template>

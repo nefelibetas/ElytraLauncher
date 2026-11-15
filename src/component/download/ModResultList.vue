@@ -14,6 +14,7 @@ const { t } = useI18n();
     :total-pages="communityTotalPages"
     :label="t('download.categories.mod')"
     :empty-icon="Puzzle"
+    kind="mod"
     :detail-loader="communitySearch.loader"
   />
 </template>

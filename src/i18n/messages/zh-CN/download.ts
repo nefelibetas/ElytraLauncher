@@ -191,6 +191,7 @@ export default {
     depsPartial: "部分前置信息未获取（{count} 个），点击重试",
     clickToRetry: "点击重试",
     noVersions: "暂无可用版本",
+    noFilesForTab: "该项目没有适用于当前下载类型的文件（可能是插件或数据包）",
     noMatchingVersions: "没有匹配的版本，试试调整过滤条件",
     dependencies: "前置依赖",
     dependencyCount: "{count} 个",

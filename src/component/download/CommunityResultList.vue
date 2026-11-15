@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { AlertCircle } from "@lucide/vue";
 import { communityTranslationEnabled, type CommunityDisplayItem } from "../../store/community/communitySearch";
 import { openResourceDetail } from "../../store/community/resourceDetail";
+import { displayLoadersForKind } from "../../store/community/resourceKind";
+import type { DownloadTab } from "../../store/task/downloadTab";
 import { fmtCount } from "../../utils/format";
 import IconImage from "../common/IconImage.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
@@ -37,6 +39,8 @@ const props = withDefaults(
     emptyIcon: Component;
     /** 打开详情回填的加载器（Mod 传 search.loader 保持响应式） */
     detailLoader?: string;
+    /** 当前资源入口；用于只展示与该目录匹配的加载器徽章 */
+    kind?: DownloadTab;
   }>(),
   {
     detailLoader: "",
@@ -91,8 +95,8 @@ const canNext = computed(
                 <span class="cs-sub">{{ t("download.search.downloads", { count: fmtCount(m.downloads) }) }}</span>
               </span>
               <span class="cs-desc">{{ communityTranslationEnabled ? (m.translated ?? m.description) : m.description }}</span>
-              <span v-if="m.loaders.length || m.game_version_range" class="cs-support">
-                <span v-for="ld in m.loaders" :key="ld" class="cs-ld" :class="ld">{{ ld }}</span>
+              <span v-if="(kind ? displayLoadersForKind(kind, m.loaders).length : m.loaders.length) || m.game_version_range" class="cs-support">
+                <span v-for="ld in (kind ? displayLoadersForKind(kind, m.loaders) : m.loaders)" :key="ld" class="cs-ld" :class="ld">{{ ld }}</span>
                 <span v-if="m.game_version_range" class="cs-gv">{{ m.game_version_range }}</span>
               </span>
             </span>

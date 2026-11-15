@@ -13,5 +13,6 @@ const { t } = useI18n();
     :total-pages="modpackTotalPages"
     :label="t('download.categories.modpack')"
     :empty-icon="Archive"
+    kind="modpack"
   />
 </template>

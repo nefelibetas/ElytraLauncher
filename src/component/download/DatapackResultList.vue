@@ -13,5 +13,6 @@ const { t } = useI18n();
     :total-pages="datapackTotalPages"
     :empty-icon="Database"
     :label="t('download.categories.datapack')"
+    kind="datapack"
   />
 </template>

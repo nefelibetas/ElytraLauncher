@@ -21,6 +21,11 @@ import {
   type DownloadFileKind,
 } from "../store/task/download";
 import { resolveModDependencies, type ModDependencyPlan } from "../store/community/modDependencies";
+import {
+  displayLoadersForKind,
+  isModLoader,
+  versionMatchesKind,
+} from "../store/community/resourceKind";
 import { installModpack } from "../store/task/modpack";
 import { getInstanceModTarget } from "../store/task/versionSetup";
 import { LOADER_TITLES } from "../utils/versionMeta";
@@ -36,8 +41,6 @@ const sourceLabel = computed(() =>
   item.value?.source === "modrinth" ? "Modrinth" : "CurseForge",
 );
 
-const MOD_LOADERS = new Set(["fabric", "forge", "neoforge", "quilt"]);
-
 function loaderName(loader: string): string {
   return loader === "vanilla"
     ? t("download.tabs.vanilla")
@@ -49,6 +52,8 @@ function loaderName(loader: string): string {
 const versions = ref<CommunityVersion[]>([]);
 const loadingVersions = ref(false);
 const versionError = ref("");
+/** 原始版本存在，但全部因下载入口/加载器不匹配被过滤。 */
+const versionsHiddenForTab = ref(false);
 
 // ── 版本列表过滤（本地过滤，选项从已加载版本收集）──
 
@@ -58,11 +63,15 @@ const gameVersionFilter = ref("");
 const LOADER_ORDER = ["fabric", "forge", "neoforge", "quilt"];
 
 const isMod = computed(() => resourceDetail.backTab === "mod");
-const loaderOptions = computed(() =>
-  Array.from(new Set(versions.value.flatMap(v => v.loaders))).sort(
+
+const loaderOptions = computed(() => {
+  const values = Array.from(new Set(
+    versions.value.flatMap(version => displayLoadersForKind(resourceDetail.backTab, version.loaders)),
+  ));
+  return values.sort(
     (a, b) => (LOADER_ORDER.indexOf(a) + 1 || 99) - (LOADER_ORDER.indexOf(b) + 1 || 99),
-  ),
-);
+  );
+});
 
 /** 主版本归类：提取开头 major.minor（"1.20.4"→"1.20"）；无该前缀（快照等）原样保留 */
 function majorVersion(gv: string): string {
@@ -192,15 +201,19 @@ async function loadVersions(refresh = false) {
   if (!it) return;
   // 先清空旧数据：否则依赖卡片会用旧列表 + 旧选中版本算出残留前置依赖
   versions.value = [];
+  versionsHiddenForTab.value = false;
   loadingVersions.value = true;
   versionError.value = "";
   try {
     const all = await fetchVersions(it.source, it.id, refresh);
     if (seq !== versionsSeq) return; // 过期响应丢弃
+    const applicable = all.filter(version =>
+      versionMatchesKind(resourceDetail.backTab, version.loaders));
+    versionsHiddenForTab.value = all.length > 0 && applicable.length === 0;
     // 仅显示正式版：剔除所有支持版本均为快照/预发布的文件（混版保留）
     versions.value = dlShowReleaseOnly.value
-      ? all.filter(v => v.game_versions.some(gv => !isSnapshot(gv)))
-      : all;
+      ? applicable.filter(v => v.game_versions.some(gv => !isSnapshot(gv)))
+      : applicable;
   } catch (e) {
     if (seq !== versionsSeq) return;
     versionError.value = errMsg(e);
@@ -650,7 +663,7 @@ async function submitDownloadInner() {
       showToast(errMsg(e));
       return;
     }
-    if (!MOD_LOADERS.has(target.loader)) {
+    if (!isModLoader(target.loader)) {
       showToast(t("download.detail.modLoaderRequired", { loader: loaderName(target.loader) }));
       return;
     }
@@ -829,7 +842,7 @@ async function copyName() {
                 <span class="md-load-error-desc">{{ versionError }}</span>
               </span>
             </button>
-            <div v-else-if="versions.length === 0" class="mv-state">{{ t("download.detail.noVersions") }}</div>
+            <div v-else-if="versions.length === 0" class="mv-state">{{ t(versionsHiddenForTab ? "download.detail.noFilesForTab" : "download.detail.noVersions") }}</div>
             <div v-else class="mv-list">
               <div v-if="filteredVersions.length === 0" class="mv-state">{{ t("download.detail.noMatchingVersions") }}</div>
               <div
@@ -841,7 +854,7 @@ async function copyName() {
               >
                 <div class="mv-info">
                   <span class="mv-name-row">
-                    <span v-for="ld in v.loaders" :key="ld" class="md-ld" :class="`md-ld-${ld}`">{{ ld }}</span>
+                    <span v-for="ld in displayLoadersForKind(resourceDetail.backTab, v.loaders)" :key="ld" class="md-ld" :class="`md-ld-${ld}`">{{ ld }}</span>
                     <span class="mv-name" v-tooltip="v.filename">{{ v.filename }}</span>
                     <span v-if="v.version_type === 'alpha'" class="mv-type alpha">alpha</span>
                     <span v-else-if="v.version_type === 'beta'" class="mv-type beta">beta</span>

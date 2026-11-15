@@ -14,6 +14,10 @@ use crate::downloader::fetcher::http;
 /// 搜索命中 categories 中的加载器：四种游戏加载器 + 光影加载器（iris/optifine）。
 const KNOWN_LOADERS: [&str; 6] = ["fabric", "forge", "neoforge", "quilt", "iris", "optifine"];
 
+/// 能进 `mods/` 的游戏加载器；与前端 `src/store/community/resourceKind.ts` 同步。
+/// Mod 搜索用 facet 要求至少命中一个，避免插件/数据包项目混入。
+const MOD_LOADERS: [&str; 4] = ["fabric", "forge", "neoforge", "quilt"];
+
 fn modrinth_loaders(categories: &serde_json::Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     if let Some(arr) = categories.as_array() {
@@ -77,6 +81,15 @@ pub(super) async fn search_modrinth(
     }
     if let Some(ld) = loader {
         facets.push(vec![format!("categories:{}", ld)]);
+    }
+    // Mod 入口只接受至少一个游戏加载器的项目；内层数组为 OR，避免插件/数据包项目混入
+    if matches!(category, None | Some("mod")) {
+        facets.push(
+            MOD_LOADERS
+                .iter()
+                .map(|loader| format!("categories:{loader}"))
+                .collect(),
+        );
     }
     // /v2/search 不带 project_type facet 会混入全部项目类型，必须显式过滤：普通 mod 搜索固定
     // project_type:mod；分类搜索按类型映射；datapack 无 project_type 实体（= mod 类型 + datapack
@@ -437,6 +450,23 @@ mod tests {
             modrinth_loaders(&serde_json::json!(null)).is_empty(),
             "非数组返回空"
         );
+    }
+
+    #[tokio::test]
+    async fn modrinth_mod_search_requires_mod_loader() {
+        let q = sq("veinmine", None, None, None, None);
+        let page = search_modrinth(&q, "veinmine").await.unwrap();
+        assert!(!page.items.is_empty(), "Mod 搜索应返回结果");
+        for item in &page.items {
+            assert!(
+                item.loaders
+                    .iter()
+                    .any(|loader| MOD_LOADERS.contains(&loader.as_str())),
+                "Mod 搜索不应返回仅插件/数据包项目: {} {:?}",
+                item.title,
+                item.loaders
+            );
+        }
     }
 
     #[test]

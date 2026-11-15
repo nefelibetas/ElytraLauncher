@@ -191,6 +191,7 @@ export default {
     depsPartial: "{count} dependencies could not be loaded. Click to retry.",
     clickToRetry: "Click to retry",
     noVersions: "No versions available",
+    noFilesForTab: "This project has no files for this resource type (it may be a plugin or datapack).",
     noMatchingVersions: "No matching versions. Try adjusting the filters.",
     dependencies: "Dependencies",
     dependencyCount: "{count} dependency | {count} dependencies",

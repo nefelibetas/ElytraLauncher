@@ -13,5 +13,6 @@ const { t } = useI18n();
     :total-pages="resourcepackTotalPages"
     :label="t('download.categories.resourcepack')"
     :empty-icon="Palette"
+    kind="resourcepack"
   />
 </template>

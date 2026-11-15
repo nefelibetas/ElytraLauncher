@@ -13,5 +13,6 @@ const { t } = useI18n();
     :total-pages="worldsTotalPages"
     :label="t('download.categories.worlds')"
     :empty-icon="Map"
+    kind="worlds"
   />
 </template>
