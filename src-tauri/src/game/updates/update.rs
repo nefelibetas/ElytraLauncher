@@ -10,6 +10,7 @@ use super::identify::QUERY_CONCURRENCY;
 use super::scan::LocalModFile;
 use crate::downloader::fetcher;
 use crate::game::community::{api_routes, api_urls, get_json_multi, ApiPlatform};
+use crate::util::is_simple_name;
 
 /// 单个 mod 的更新信息（命中 Modrinth 且有新版本时产出）。
 #[derive(Debug, Clone, Serialize)]
@@ -62,7 +63,7 @@ async fn latest_version(
 
 /// 删除 mods 目录下单个文件；仅接受纯文件名（防路径穿越），不存在报错。
 pub fn delete_mod_file(mods_dir: &Path, file_name: &str) -> Result<(), String> {
-    if !crate::util::is_simple_name(file_name) {
+    if !is_simple_name(file_name) {
         return Err(keyed_msg!("errors.updates.badFileName", "非法文件名"));
     }
     let path = mods_dir.join(file_name);
@@ -92,7 +93,7 @@ pub async fn delete_resource_file(
             "未知资源类型"
         ));
     }
-    if !crate::util::is_simple_name(file_name) {
+    if !is_simple_name(file_name) {
         return Err(keyed_msg!("errors.updates.badFileName", "非法文件名"));
     }
     let path = version_dir.join(kind).join(file_name);
@@ -107,7 +108,7 @@ pub async fn delete_resource_file(
 /// 切换 mod 启用/禁用：`name.jar` → `name.jar.disabled`（扫描按扩展名自动隐藏），反向即启用。
 /// 仅接受纯文件名（防穿越），不存在报错；返回 true=已禁用，false=已启用。
 pub fn toggle_mod_file(mods_dir: &Path, file_name: &str) -> Result<bool, String> {
-    if !crate::util::is_simple_name(file_name) {
+    if !is_simple_name(file_name) {
         return Err(keyed_msg!("errors.updates.badFileName", "非法文件名"));
     }
     let path = mods_dir.join(file_name);
@@ -195,7 +196,7 @@ pub async fn update_mod_file(
     file_sha1: &str,
 ) -> Result<(), String> {
     // 同 delete/toggle：文件名不得含分隔符或 `..`，否则 join 会越界写删。
-    if !crate::util::is_simple_name(file_name) {
+    if !is_simple_name(file_name) {
         bail_key!("errors.updates.badFileName", "非法的文件名");
     }
     let target = mods_dir.join(file_name);

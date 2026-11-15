@@ -10,6 +10,7 @@ use crate::config::downloader::DownloaderConfig;
 use crate::downloader::path_lock::PathLock;
 use crate::jdk::download::{auto_install, runtime_dir, InstallProgress};
 use crate::jdk::model::JdkInfo;
+use crate::jdk::register_scanned;
 use crate::persist;
 use crate::task::progress::{
     cancelled, set_cancelled, set_error, set_phase, set_total, update_progress,
@@ -224,7 +225,7 @@ fn settle_jdk_install(
     match result {
         Ok(info) => {
             // 注册进 jdk 扫描缓存（去重），前端完成监听自动选中
-            crate::jdk::register_scanned(vec![info]);
+            register_scanned(vec![info]);
             emit_handle.abort();
             task::update_and_emit(app, progress, |p| {
                 p.status = TaskStatus::Done;

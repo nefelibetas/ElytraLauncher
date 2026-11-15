@@ -13,6 +13,7 @@ use std::sync::LazyLock;
 use fastanvil::Rgba;
 
 use super::chunk_pos::ChunkPos;
+use super::mod_color::ModOverlay;
 use super::region_io::{BlockRef, ChunkData, ParsedChunk};
 
 /// 自然色表（tools/gen_palette.mjs 生成）：
@@ -207,7 +208,7 @@ impl NaturalPalette {
         &self,
         block: &BlockRef,
         biome: Option<fastanvil::biome::Biome>,
-        overlay: Option<&crate::map::mod_color::ModOverlay>,
+        overlay: Option<&ModOverlay>,
     ) -> Rgba {
         let name = block.name();
         if !name.starts_with("minecraft:") {
@@ -362,7 +363,7 @@ struct TopDownView<'a> {
 pub fn render_chunk(
     parsed: &ParsedChunk,
     style: RenderStyle,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     heights: Option<&[i16]>,
     hx0: usize,
     hz0: usize,
@@ -395,7 +396,7 @@ pub fn render_chunk(
 fn compose_region(
     parsed: &[Option<ParsedChunk>],
     style: RenderStyle,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
 ) -> (Vec<Rgba>, bool) {
     let mut out = vec![[0u8, 0, 0, 0]; 512 * 512];
     let mut any_opaque = false;
@@ -504,7 +505,7 @@ fn surface_height_field_lod(
 
 fn render_chunk_lod(
     chunk: &ChunkData,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     view: TopDownView<'_>,
     cx: usize,
     cz: usize,
@@ -525,7 +526,7 @@ fn render_chunk_lod(
 fn compose_region_lod(
     parsed: &[Option<ParsedChunk>],
     style: RenderStyle,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     step: usize,
 ) -> (Vec<Rgba>, bool) {
     let size = 512 / step;
@@ -565,7 +566,7 @@ fn compose_region_lod(
 pub fn render_region_tile_lod(
     region_file: &Path,
     style: RenderStyle,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     step: usize,
 ) -> Result<Vec<u8>, String> {
     let step = step.clamp(1, 4).next_power_of_two();
@@ -589,7 +590,7 @@ pub fn render_region_tile_lod(
 pub fn render_region_tile(
     region_file: &Path,
     style: RenderStyle,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
 ) -> Result<Vec<u8>, String> {
     let parsed = super::region_io::parse_region(region_file);
     let (pixels, any_opaque) = compose_region(&parsed, style, overlay);
@@ -607,7 +608,7 @@ pub fn render_region_tile(
 fn render_top_down(
     chunk: &ChunkData,
     pal: &NaturalPalette,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     view: TopDownView<'_>,
     out: &mut [Rgba; 256],
 ) {
@@ -622,7 +623,7 @@ fn render_top_down(
 fn render_column(
     chunk: &ChunkData,
     pal: &NaturalPalette,
-    overlay: Option<&crate::map::mod_color::ModOverlay>,
+    overlay: Option<&ModOverlay>,
     view: TopDownView<'_>,
     x: usize,
     z: usize,

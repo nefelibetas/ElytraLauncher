@@ -8,6 +8,7 @@ use sha2::Digest;
 use crate::constants;
 use crate::downloader;
 use crate::persist;
+use crate::util::config_dir;
 
 /// authlib-injector jar 文件名（数据目录 = exe 旁 Elytra/）。
 pub const AUTHLIB_JAR: &str = "authlib-injector.jar";
@@ -516,7 +517,7 @@ pub async fn server_name(api_url: &str) -> Option<String> {
 /// 确保 authlib-injector.jar 存在（数据目录）；缺失时从官方/BMCLAPI 镜像拉取 latest.json
 /// （download_url + sha256 校验）。返回 jar 绝对路径。
 pub async fn ensure_jar() -> Result<std::path::PathBuf, String> {
-    let path = crate::util::config_dir().join(AUTHLIB_JAR);
+    let path = config_dir().join(AUTHLIB_JAR);
     if path.exists() {
         return Ok(path);
     }

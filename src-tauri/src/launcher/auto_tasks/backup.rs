@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use super::model::BackupScope;
+use crate::util::{dir_entries, utc_stamp};
 
 /// 备份根目录：`versions/{id}/back/saves/`。
 pub fn backup_root(game_dir: &Path) -> PathBuf {
@@ -31,7 +32,7 @@ fn is_excluded(name: &str) -> bool {
 
 /// `saves/` 下的全部世界名（排序）。
 pub fn all_worlds(game_dir: &Path) -> Vec<String> {
-    let mut names: Vec<String> = crate::util::dir_entries(&saves_dir(game_dir), true)
+    let mut names: Vec<String> = dir_entries(&saves_dir(game_dir), true)
         .into_iter()
         .map(|(name, _, _)| name)
         .collect();
@@ -104,7 +105,7 @@ fn copy_tree(
 /// 清理旧 timepoint：只保留按名字（= 时间）排序后最新的 `keep` 份。返回删除数量。
 fn cleanup_old(root: &Path, keep: u32) -> usize {
     let keep = keep.max(1) as usize;
-    let mut dirs: Vec<String> = crate::util::dir_entries(root, true)
+    let mut dirs: Vec<String> = dir_entries(root, true)
         .into_iter()
         .map(|(name, _, _)| name)
         .filter(|name| !name.ends_with(".tmp"))
@@ -150,7 +151,7 @@ pub fn backup_saves(
         "创建备份目录失败"
     ))?;
 
-    let stamp = crate::util::utc_stamp();
+    let stamp = utc_stamp();
     let tmp = root.join(format!("{stamp}.tmp"));
     let final_dir = root.join(&stamp);
     if tmp.exists() {
@@ -300,7 +301,7 @@ mod tests {
         let game = tmp_dir("nottmp");
         seed_world(&game, "world");
         backup_saves(&game, &BackupScope::All, 5, &mut |_, _| {}).unwrap();
-        let leftovers: Vec<String> = crate::util::dir_entries(&backup_root(&game), true)
+        let leftovers: Vec<String> = dir_entries(&backup_root(&game), true)
             .into_iter()
             .map(|(n, _, _)| n)
             .filter(|n| n.ends_with(".tmp"))

@@ -8,6 +8,7 @@ use crate::game::loader::LoaderChoice;
 use crate::game::version::manifest::fetch_version_list;
 use crate::util::open_zip;
 use crate::util::safe_relative_path;
+use crate::util::{config_dir, fnv1a64, modified_secs, sanitize_fs_name, unique_child_dir};
 
 use super::curseforge::{direct_pack_file, parse_curseforge_manifest, resolve_cf_files};
 use super::detect::{detect_pack, existing_overrides};
@@ -25,7 +26,7 @@ const MAX_EMBEDDED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// 包体缓存目录（在线包、内嵌包与恢复计划共用）。
 pub(crate) fn cache_dir() -> PathBuf {
-    crate::util::config_dir().join("modpacks")
+    config_dir().join("modpacks")
 }
 
 fn find_reusable_pack_dir(mc: &Path, cache_key: &str) -> Option<String> {
@@ -56,8 +57,8 @@ pub fn cache_key(request: &ModpackRequest) -> String {
     };
     format!(
         "{}-{:08x}",
-        crate::util::sanitize_fs_name(&request.name, "modpack"),
-        crate::util::fnv1a64(&seed)
+        sanitize_fs_name(&request.name, "modpack"),
+        fnv1a64(&seed)
     )
 }
 
@@ -125,15 +126,10 @@ pub fn assemble_plan(meta: PackMeta<'_>) -> Result<PackPlan, String> {
     }
 
     // 包名净化统一走 util（Windows 保留名回退 "modpack"）；目录冲突 `_{n}`
-    let base_dir = format!(
-        "{}-{}",
-        crate::util::sanitize_fs_name(pack_name, "modpack"),
-        mc_version
-    );
+    let base_dir = format!("{}-{}", sanitize_fs_name(pack_name, "modpack"), mc_version);
     // 优先复用同 cache_key 的版本目录（更新语义，sha1 幂等跳过才生效）；否则新建并按 `_{n}` 消解冲突
-    let version_dir_name = find_reusable_pack_dir(minecraft_dir, cache_key).unwrap_or_else(|| {
-        crate::util::unique_child_dir(&minecraft_dir.join("versions"), &base_dir)
-    });
+    let version_dir_name = find_reusable_pack_dir(minecraft_dir, cache_key)
+        .unwrap_or_else(|| unique_child_dir(&minecraft_dir.join("versions"), &base_dir));
 
     Ok(PackPlan {
         name: pack_name.to_string(),
@@ -371,7 +367,7 @@ pub(super) fn extract_embedded(
         .map_err(common_err_ctx_key!("errors.file.createDir", "创建目录失败"))?;
     // 外层文件被同名覆盖时尺寸/mtime 会变化，不能用旧内嵌包。
     let stamp = std::fs::metadata(outer)
-        .map(|m| format!("{}-{}", m.len(), crate::util::modified_secs(&m)))
+        .map(|m| format!("{}-{}", m.len(), modified_secs(&m)))
         .unwrap_or_else(|_| "unknown".into());
     let dest = dir.join(format!("{}-embedded-{stamp}.zip", cache_key(request)));
     if dest.is_file() {

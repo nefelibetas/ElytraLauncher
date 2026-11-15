@@ -101,7 +101,8 @@ impl TaskSpec for DownloadFilesTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task::model::test_valid_task as valid_task;
+    use crate::task::model::{test_valid_task as valid_task, FabricApi};
+    use crate::task::{LoaderChoice, LoaderKind};
 
     #[test]
     fn download_task_steps_analysis() {
@@ -120,11 +121,11 @@ mod tests {
 
         // Fabric + Fabric API：追加 下载本体/Fabric API/生成配置(最后)
         let mut t = valid_task();
-        t.loader = Some(crate::task::LoaderChoice {
-            kind: crate::task::LoaderKind::Fabric,
+        t.loader = Some(LoaderChoice {
+            kind: LoaderKind::Fabric,
             version: "0.19.3".into(),
         });
-        t.fabric_api = Some(crate::task::model::FabricApi {
+        t.fabric_api = Some(FabricApi {
             url: "u".into(),
             version: "15.0.0".into(),
         });
@@ -154,8 +155,8 @@ mod tests {
         t.optifine_patch = Some("G8".into());
         assert_eq!(t.name(), "26.2 OptiFine 安装");
         let mut t = valid_task();
-        t.loader = Some(crate::task::LoaderChoice {
-            kind: crate::task::LoaderKind::Quilt,
+        t.loader = Some(LoaderChoice {
+            kind: LoaderKind::Quilt,
             version: "1.0".into(),
         });
         assert_eq!(t.name(), "26.2 Quilt-1.0 安装");

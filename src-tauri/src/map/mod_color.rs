@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use zip::ZipArchive;
 
+use crate::downloader::hash::sha1_hex;
 use crate::map::render::palette;
 
 /// RGBA 像素（与 fastanvil 一致：`[u8; 4]`）。
@@ -536,7 +537,7 @@ fn fingerprint(mods_dir: &Path) -> String {
             md.modified().map(|t| format!("{t:?}")).unwrap_or_default()
         ));
     }
-    crate::downloader::hash::sha1_hex(desc.as_bytes())
+    sha1_hex(desc.as_bytes())
 }
 
 #[cfg(test)]

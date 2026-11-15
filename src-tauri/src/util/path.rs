@@ -47,6 +47,12 @@ pub fn is_simple_name(name: &str) -> bool {
     !name.is_empty() && !name.contains(['/', '\\', ':']) && !name.contains("..")
 }
 
+/// 下载/替换文件名安全判定：拒绝路径分隔符、冒号与整名 `.`/`..`；允许名称内部出现 `..`（如 `a..b.jar`）。
+pub fn is_safe_filename(name: &str) -> bool {
+    let name = name.trim();
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
+}
+
 /// 目录条目枚举（want_dir 选文件或子目录）：返回 (名称, 字节大小, 修改时间秒)。
 /// 目录不存在/不可读返回空 Vec（列表类命令的静默空列表语义）。
 pub fn dir_entries(dir: &Path, want_dir: bool) -> Vec<(String, u64, u64)> {
@@ -154,6 +160,19 @@ mod tests {
         // 单个字母文件名（无冒号）仍合法，别误伤
         assert!(safe_relative_path("c/evil.txt").is_ok());
         assert!(safe_relative_path("mods/file:stream").is_err());
+    }
+
+    #[test]
+    fn safe_filename_allows_inner_double_dots() {
+        assert!(is_safe_filename("fabric-api-0.166.2+26.3.jar"));
+        assert!(is_safe_filename("a..b.jar"));
+        assert!(!is_safe_filename(".."));
+        assert!(!is_safe_filename("."));
+        assert!(!is_safe_filename("a/b.jar"));
+        assert!(!is_safe_filename("a\\b.jar"));
+        assert!(!is_safe_filename("C:evil.jar"));
+        assert!(!is_safe_filename(""));
+        assert!(!is_safe_filename("  "));
     }
 
     #[test]

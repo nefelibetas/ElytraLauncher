@@ -4,6 +4,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::util::modified_secs;
+
 /// 本地 mod 文件信息。
 #[derive(Debug, Clone, Serialize)]
 pub struct LocalModFile {
@@ -35,8 +37,8 @@ pub fn scan_dir_files(dir: &Path, filter: ScanFilter) -> Vec<LocalModFile> {
         }
         let ext = path.extension().and_then(|s| s.to_str());
         let keep = match filter {
-            ScanFilter::Jar => ext == Some("jar"),
-            ScanFilter::Zip => ext == Some("zip"),
+            ScanFilter::Jar => ext.is_some_and(|e| e.eq_ignore_ascii_case("jar")),
+            ScanFilter::Zip => ext.is_some_and(|e| e.eq_ignore_ascii_case("zip")),
         };
         if !keep {
             continue;
@@ -51,7 +53,7 @@ pub fn scan_dir_files(dir: &Path, filter: ScanFilter) -> Vec<LocalModFile> {
         out.push(LocalModFile {
             file_name: file_name.to_string(),
             size: meta.len(),
-            last_modified: crate::util::modified_secs(&meta),
+            last_modified: modified_secs(&meta),
         });
     }
     out.sort_by(|a, b| a.file_name.cmp(&b.file_name));
@@ -105,5 +107,25 @@ mod tests {
         assert_eq!(names, vec!["a.zip", "b.zip"]);
         assert_eq!(files[0].size, 1);
         assert_eq!(files[1].size, 2);
+    }
+
+    #[test]
+    fn scan_dir_files_extension_case_insensitive() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("A.JAR"), b"a").unwrap();
+        std::fs::write(dir.path().join("B.Zip"), b"b").unwrap();
+        std::fs::write(dir.path().join("c.jar"), b"c").unwrap();
+        std::fs::write(dir.path().join("d.zip"), b"d").unwrap();
+
+        let jars: Vec<String> = scan_mod_files(dir.path())
+            .into_iter()
+            .map(|f| f.file_name)
+            .collect();
+        assert_eq!(jars, vec!["A.JAR", "c.jar"]);
+        let zips: Vec<String> = scan_dir_files(dir.path(), ScanFilter::Zip)
+            .into_iter()
+            .map(|f| f.file_name)
+            .collect();
+        assert_eq!(zips, vec!["B.Zip", "d.zip"]);
     }
 }

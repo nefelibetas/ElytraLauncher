@@ -8,11 +8,13 @@ use std::path::PathBuf;
 
 use getrandom::getrandom;
 
+use crate::util::config_dir;
+
 /// machine-id 文件名（exe 旁 Elytra 配置目录下）。
 const MACHINE_ID_FILE: &str = "machine-id";
 
 pub fn get_machine_id() -> String {
-    let dir = crate::util::config_dir();
+    let dir = config_dir();
     let path = dir.join(MACHINE_ID_FILE);
     load_or_create(&path)
 }

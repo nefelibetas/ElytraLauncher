@@ -16,6 +16,7 @@ use super::forge::resolve_java;
 use super::run_installer_command;
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::fetcher;
+use crate::downloader::hash::file_sha1_matches;
 use crate::util::NoWindow as _;
 
 /// `install_profile.json` 的执行相关视图（其余字段忽略）。
@@ -324,7 +325,7 @@ async fn ensure_artifact(
     };
 
     let sha1 = artifact.and_then(|a| a.sha1.clone()).unwrap_or_default();
-    if !sha1.is_empty() && crate::downloader::hash::file_sha1_matches(&dest, &sha1) {
+    if !sha1.is_empty() && file_sha1_matches(&dest, &sha1) {
         return finish_extract(dest, ext, ctx);
     }
     if sha1.is_empty() && dest.is_file() {

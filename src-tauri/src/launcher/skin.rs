@@ -3,6 +3,7 @@
 use base64::Engine as _;
 
 use crate::launcher::model::AuthMode;
+use crate::util::fnv1a64;
 
 const OFFLINE_BASE_UUID: &str = "00000000FFFFFFFFFFFFFFFFFFFFFFFF";
 
@@ -47,7 +48,7 @@ pub fn apply_offline_skin(auth: &mut AuthMode) {
 
 /// Random 皮肤模型决策：哈希奇数 → Alex（slim）；与前端头像渲染共用同一哈希（FNV-1a 奇偶一致）。
 fn random_is_alex(username: &str) -> bool {
-    crate::util::fnv1a64(username) % 2 == 1
+    fnv1a64(username) % 2 == 1
 }
 
 /// 构造 `--user-properties`（authlib PropertyMap `{"textures":["<b64>"]}`）：仅 1.19.2 以下参数含 `${user_properties}`；
@@ -137,7 +138,7 @@ mod tests {
             "测试用户",
         ] {
             assert_eq!(
-                crate::util::fnv1a64(name) % 2,
+                fnv1a64(name) % 2,
                 (hash32(name) % 2) as u64,
                 "64/32 位 FNV-1a 奇偶应一致: {name}"
             );

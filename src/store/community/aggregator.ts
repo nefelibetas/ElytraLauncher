@@ -1,5 +1,5 @@
 // 社区资源聚合器：纯状态机，不依赖 Vue/Tauri；请求函数注入，便于单独验证分页与去重。
-import { identityKey, scoreItem, type CommunitySort, type CommunitySource } from "./rank";
+import { normalizeText, scoreItem, type CommunitySort, type CommunitySource } from "./rank";
 
 /** 聚合模式每页展示条数（累积列表切片）。 */
 export const AGG_PAGE_SIZE = 40;
@@ -68,7 +68,9 @@ export class CommunityAggregator<T extends AggregatorItem> {
   private signature = "";
   private generation = 0;
   private items: T[] = [];
-  private seen = new Set<string>();
+  /** 已展示条目按 mcmod_id / 归一化标题双索引；跨源缺一侧 id 时靠标题兜底合并。 */
+  private byId = new Map<number, T>();
+  private byTitle = new Map<string, T>();
   private offsets: Record<CommunitySource, number> = { curseforge: 0, modrinth: 0 };
   private totals: Record<CommunitySource, number> = { curseforge: 0, modrinth: 0 };
   private done: Record<CommunitySource, boolean> = { curseforge: false, modrinth: false };
@@ -85,7 +87,8 @@ export class CommunityAggregator<T extends AggregatorItem> {
     this.signature = signature;
     this.generation += 1;
     this.items = [];
-    this.seen.clear();
+    this.byId.clear();
+    this.byTitle.clear();
     this.offsets = { curseforge: 0, modrinth: 0 };
     this.totals = { curseforge: 0, modrinth: 0 };
     this.done = { curseforge: false, modrinth: false };
@@ -182,26 +185,15 @@ export class CommunityAggregator<T extends AggregatorItem> {
       throw new Error(this.allSourcesFailed());
     }
 
-    // 同一批内按身份合并：保留下载量更高的一侧，并把另一侧的译名/百科 id 补过来。
-    const byIdentity = new Map<string, T>();
-    for (const item of batch) {
-      const key = identityKey(item);
-      const prev = byIdentity.get(key);
-      if (prev === undefined) {
-        byIdentity.set(key, item);
-      } else if (item.downloads > prev.downloads) {
-        copyMissingMetadata(prev, item);
-        byIdentity.set(key, item);
-      } else {
-        copyMissingMetadata(item, prev);
-      }
-    }
-
+    // 同批与跨批统一按 id + 归一化标题查找；重复项只合并元数据，不重复插入。
     const fresh: T[] = [];
-    for (const item of byIdentity.values()) {
-      const key = identityKey(item);
-      if (this.seen.has(key)) continue;
-      this.seen.add(key);
+    for (const item of batch) {
+      const existing = this.findExisting(item);
+      if (existing) {
+        this.mergeInto(existing, item);
+        continue;
+      }
+      this.index(item);
       fresh.push(item);
     }
     fresh.sort(
@@ -211,5 +203,46 @@ export class CommunityAggregator<T extends AggregatorItem> {
         b.downloads - a.downloads,
     );
     this.items.push(...fresh);
+  }
+
+  /** 同一项目：mcmod_id 精确优先；缺 id 时按归一化标题兜底，两个不同非空 id 绝不合并。 */
+  private findExisting(item: T): T | undefined {
+    if (item.mcmod_id != null) {
+      const hit = this.byId.get(item.mcmod_id);
+      if (hit) return hit;
+    }
+    const title = normalizeText(item.title);
+    if (!title) return undefined;
+    const hit = this.byTitle.get(title);
+    if (!hit) return undefined;
+    if (
+      item.mcmod_id != null
+      && hit.mcmod_id != null
+      && hit.mcmod_id !== item.mcmod_id
+    ) {
+      return undefined;
+    }
+    return hit;
+  }
+
+  /** 登记 id 与标题索引；标题为空时不登记。 */
+  private index(item: T) {
+    if (item.mcmod_id != null) this.byId.set(item.mcmod_id, item);
+    const title = normalizeText(item.title);
+    if (title) this.byTitle.set(title, item);
+  }
+
+  /** 合并重复项：下载量更高的一侧作为展示主体，缺失元数据从另一侧补齐。 */
+  private mergeInto(existing: T, item: T) {
+    if (item.downloads > existing.downloads) {
+      const merged = { ...existing, ...item } as T;
+      copyMissingMetadata(existing, merged);
+      Object.assign(existing, merged);
+    } else {
+      copyMissingMetadata(item, existing);
+    }
+    this.index(existing);
+    const incomingTitle = normalizeText(item.title);
+    if (incomingTitle) this.byTitle.set(incomingTitle, existing);
   }
 }

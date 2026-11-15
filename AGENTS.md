@@ -86,7 +86,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **持久化**：`persist::read::<T>("section").unwrap_or_default()`；结构体实现 `Default`；save 前读改写
 - **锁**：一律 `parking_lot`；锁序 inner→progress；`fail()` 前先 `drop` progress 锁；DB 写移出锁 + 2s 超时
 - **模块组织**：`mod.rs` 只允许子模块声明 / `pub use` / 模块文档 / `#[cfg(test)]` / 条件编译，不许任何逻辑代码（哪怕一个小函数）；实现放同级命名文件
-- **import**：禁止函数体内 `use`（测试模块顶部不受限）；方法体内最多两级路径，禁止三段及以上；同名 trait 用 `use xxx as _;`；分组 `std` → 外部 crate → `crate::`，组内字母序；`#[cfg]` 约束的 `use` 上提时保留属性
+- **import**：禁止函数体内 `use`（测试模块顶部不受限）；**禁止在函数体内直接写 `crate::...` 或任何三段及以上路径**——一律模块顶部 `use` 后用短名；测试函数同样（在测试模块顶部导入），仅宏卫生 `$crate::` 除外；同名 trait 用 `use xxx as _;`；分组 `std` → 外部 crate → `crate::`，组内字母序；`#[cfg]` 约束的 `use` 上提时保留属性
 - **参数收敛**：超过 7 个抽上下文结构体（`TaskCtx`、`InstallCtx`、`PackMeta`、`LaunchRequest`、`AssetIndexRef`…）；**禁止 `#[allow(clippy::too_many_arguments)]`**
 - **测试位置**：与实现同文件 `#[cfg(test)] mod tests`，不建 `tests.rs`；共用测试辅助放被测模块的 `#[cfg(test)] pub(super)` 区
 - **下载**：`fetch_with`（3 次重试+退避）/ `fetch_fallback`（多源）/ `fetch_verified(_c)`（逐源 sha1，空 sha1 跳过）；`_c` 变体带取消（每块检查，Cancelled 不重试）；批量走 `downloader::batch::run`；全局 `http()` 带 2s connect + 30s read + 系统代理

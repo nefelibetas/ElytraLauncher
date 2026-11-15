@@ -1,3 +1,4 @@
+use crate::auth::account::valid_access_token;
 use crate::launcher::args;
 use crate::launcher::process;
 use crate::launcher::script;
@@ -15,7 +16,7 @@ pub async fn export_launch_script(
 ) -> Result<String, String> {
     // 与 spawn_game 同：正版模式用后端取的有效 token（自动刷新），其余沿用传入值
     let access_token = if auth_mode == "online" {
-        crate::auth::account::valid_access_token().await?
+        valid_access_token().await?
     } else {
         access_token
     };

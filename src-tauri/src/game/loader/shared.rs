@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use tokio::process::Child;
 
+use crate::downloader::endpoints::MOJANG_LIBRARIES;
+
 fn maven_path(name: &str) -> String {
     // 坐标形态 `group:artifact:version[:classifier][@ext]`（classifier 与扩展名都必须进路径，否则 native 分类器会指向错误文件名）
     let (coord, ext) = match name.split_once('@') {
@@ -53,11 +55,7 @@ pub(crate) fn normalize_legacy_libraries(libs: &mut [serde_json::Value]) {
             .trim_end_matches('/')
             .to_string();
         let url = if base.is_empty() {
-            format!(
-                "{}/{}",
-                crate::downloader::endpoints::MOJANG_LIBRARIES,
-                path
-            )
+            format!("{}/{}", MOJANG_LIBRARIES, path)
         } else {
             format!("{base}/{path}")
         };

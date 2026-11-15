@@ -15,8 +15,8 @@ use crate::downloader::progress::ProgressCounters;
 use crate::downloader::reuse::LocalRuntimeSource;
 use crate::game::loader::{self, LoaderEvent};
 use crate::game::modpack::{
-    build_plan, cache_key, parse_optifine_version, ModpackRequest, OverridesRef, PackFile,
-    PackPlan, PackSource,
+    build_plan, cache_dir as modpack_cache_dir, cache_key, parse_optifine_version, ModpackRequest,
+    OverridesRef, PackFile, PackPlan, PackSource,
 };
 use crate::game::resource::assets::AssetIndexRef;
 use crate::game::resource::{assets, extract, library};
@@ -32,10 +32,11 @@ use crate::task::{
     TaskProgress, TaskStatus,
 };
 use crate::util::archive;
+use crate::util::community_download_urls;
 use crate::util::safe_relative_path;
 
 fn cache_dir() -> PathBuf {
-    crate::game::modpack::cache_dir()
+    modpack_cache_dir()
 }
 
 /// 包体缓存路径（config_dir()/modpacks）：**仅在线源**落 `{key}.{ext}`；本地源直接用用户文件（缓存目录从不持有其副本）。
@@ -411,7 +412,7 @@ async fn persist_pack_icon(cancel: &Arc<AtomicBool>, request: &ModpackRequest, v
         let dest = vdir.join("pack-icon.png");
         if !dest.exists() {
             // 空 sha1 跳过校验；取消感知；MCIM 双源回退对 cdn.modrinth.com 适用
-            let urls = crate::util::community_download_urls(icon).await;
+            let urls = community_download_urls(icon).await;
             let _ = fetcher::fetch_verified_c(&urls, &dest, None::<fn(u64, u64)>, "", Some(cancel))
                 .await;
         }
@@ -1037,7 +1038,7 @@ impl<'a> PackInstall<'a> {
                 let bytes = self.c.bytes.clone();
                 let size = f.size;
                 set.spawn(async move {
-                    let urls = crate::util::community_download_urls(&f_url).await;
+                    let urls = community_download_urls(&f_url).await;
                     // 幂等：目标已存在且校验命中则跳过（恢复场景零重下）；sha1 缺失时降级为体积匹配
                     let hit = dest.is_file()
                         && if !sha1.is_empty() {
@@ -1195,7 +1196,7 @@ async fn phase_fetch_pack(
                     a_bytes.fetch_add(d.saturating_sub(prev), Ordering::Relaxed);
                 }
             };
-            let urls = crate::util::community_download_urls(url).await;
+            let urls = community_download_urls(url).await;
             if let Err(e) =
                 fetcher::fetch_verified_c(&urls, zip_path, Some(dl_cb), sha1, Some(cancel)).await
             {

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::jdk::model::JdkSelection;
+use crate::launcher::auto_tasks::model::AutoTasks;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export_to = "launcher/")]
@@ -120,7 +121,7 @@ pub struct LaunchOptions {
 
     /// 自动任务（pre_launch / on_crash / post_exit）。实例文件存在时由实例配置覆盖。
     #[serde(default)]
-    pub auto_tasks: crate::launcher::auto_tasks::model::AutoTasks,
+    pub auto_tasks: AutoTasks,
 
     #[serde(default)]
     pub gc_type: GcType,

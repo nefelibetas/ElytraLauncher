@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::auth::external::{is_ely_by, AUTHLIB_JAR};
 use crate::constants;
+use crate::downloader::hash::sha1_hex;
 use crate::game::resource::extract::{
     extract_jar, legacy_classifier_artifact, matches_rules, modern_native_matches,
     modern_natives_key, NativesKind, TARGET_OS,
@@ -10,6 +11,7 @@ use crate::game::version::model::VersionJson;
 use crate::launcher::env::game_language_props;
 use crate::launcher::memory;
 use crate::launcher::model::{AuthMode, LaunchOptions, MemoryMode, WindowSize};
+use crate::util::config_dir;
 
 // ── 启动协议常量 ──
 
@@ -479,7 +481,7 @@ fn build_game_args_from_auth(
 /// 第三方登录（authlib-injector）：javaagent 注入 + client side（jar 下载到数据目录；缺失由启动前置检查拦截）。
 fn push_external_auth_args(args: &mut Vec<String>, auth: &AuthMode) {
     if let AuthMode::External { api_url, .. } = auth {
-        let jar = crate::util::config_dir().join(AUTHLIB_JAR);
+        let jar = config_dir().join(AUTHLIB_JAR);
         // Ely.by 用 authlib-injector 内置别名；其余标准站传完整 URL
         let server = if is_ely_by(api_url) {
             "ely.by".to_string()
@@ -655,7 +657,7 @@ fn natives_fingerprint(version_json: &VersionJson) -> String {
         })
         .collect();
     parts.sort_unstable();
-    crate::downloader::hash::sha1_hex(parts.join("\n").as_bytes())
+    sha1_hex(parts.join("\n").as_bytes())
 }
 
 fn clear_dir_contents(dir: &Path) -> Result<(), String> {

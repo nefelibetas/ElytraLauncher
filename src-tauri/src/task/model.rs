@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::game::modpack::ModpackRequest;
+use crate::util::is_safe_filename;
 
 /// 任务状态（进度事件 payload，前端 ProgressPayload.status 为 string）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default, ts_rs::TS)]
@@ -352,8 +353,7 @@ impl DownloadFilesTask {
         for f in &self.files {
             validate_file_item(&f.url, &f.filename)?;
             for name in &f.replace {
-                if !crate::util::is_simple_name(name)
-                    || self.files.iter().any(|other| other.filename == *name)
+                if !is_safe_filename(name) || self.files.iter().any(|other| other.filename == *name)
                 {
                     return Err(keyed_msg!("errors.task.fileNameInvalid", "文件名不合法"));
                 }
@@ -367,8 +367,8 @@ fn validate_file_item(url: &str, filename: &str) -> Result<(), String> {
     if url.trim().is_empty() {
         return Err(keyed_msg!("errors.task.urlEmpty", "下载地址不能为空"));
     }
-    // 挡路径穿越：文件名不得含路径分隔符
-    if filename.trim().is_empty() || filename.contains(['/', '\\']) {
+    // 挡路径穿越/非法字符：整名 `.`/`..`、分隔符、冒号；保留名称内部的 `..`
+    if !is_safe_filename(filename) {
         return Err(keyed_msg!("errors.task.fileNameInvalid", "文件名不合法"));
     }
     Ok(())
@@ -547,6 +547,9 @@ mod tests {
         assert!(f("a.jar").validate().is_ok());
         assert!(f("../evil.jar").validate().is_err(), "路径穿越文件名应拒绝");
         assert!(f("a/b.jar").validate().is_err(), "含斜杠文件名应拒绝");
+        assert!(f("..").validate().is_err(), "裸 .. 应拒绝");
+        assert!(f("C:evil.jar").validate().is_err(), "含冒号文件名应拒绝");
+        assert!(f("a..b.jar").validate().is_ok(), "名称内部的 .. 应允许");
         assert!(f("").validate().is_err(), "空文件名应拒绝");
         let mut t = f("a.jar");
         t.url = "".into();

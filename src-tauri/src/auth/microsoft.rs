@@ -1,5 +1,6 @@
 use crate::auth;
 use crate::constants;
+use crate::downloader::proxy::apply_system_proxy;
 use crate::persist;
 
 use base64::Engine;
@@ -448,7 +449,7 @@ pub fn extract_xuid_from_jwt(token: &str) -> String {
 fn build_auth_client() -> reqwest::Client {
     let verify = persist::launch_options().verify_ssl;
     let builder = reqwest::Client::builder().danger_accept_invalid_certs(!verify);
-    crate::downloader::proxy::apply_system_proxy(builder)
+    apply_system_proxy(builder)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
 }

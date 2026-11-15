@@ -211,8 +211,8 @@ async fn resolve_pass(
         mods_dir,
         versions_cache,
     } = ctx;
-    let installed = installed_filenames(mods_dir);
-    let mut installed_files: Vec<String> = installed.iter().cloned().collect();
+    let installed = InstalledFiles::from_mods_dir(mods_dir);
+    let mut installed_files: Vec<String> = installed.exact.iter().cloned().collect();
     installed_files.sort();
     let mut plan = ModDependencyPlan {
         instance_mc: mc_version.to_string(),
@@ -390,11 +390,7 @@ async fn resolve_pass(
                 )
             });
             let (candidates, candidate_total) = build_candidates(&versions, &selected.version_id);
-            let installed_files: Vec<String> = versions
-                .iter()
-                .filter(|version| installed.contains(&version.filename))
-                .map(|version| version.filename.clone())
-                .collect();
+            let installed_files = installed.installed_names(&versions);
             let installed_version_label = versions
                 .iter()
                 .find(|version| installed.contains(&version.filename))
@@ -553,7 +549,7 @@ fn pick_version<'a>(
     versions: &'a [CommunityVersion],
     override_id: Option<&str>,
     hint: Option<&str>,
-    installed: &HashSet<String>,
+    installed: &InstalledFiles,
 ) -> Result<&'a CommunityVersion, String> {
     if let Some(id) = override_id.or(hint) {
         return versions
@@ -652,14 +648,92 @@ fn seed_dependencies(
     }
 }
 
-fn installed_filenames(mods_dir: &Path) -> HashSet<String> {
-    let Ok(entries) = std::fs::read_dir(mods_dir) else {
-        return HashSet::new();
-    };
-    entries
-        .flatten()
-        .filter_map(|entry| entry.file_name().to_str().map(str::to_string))
-        .collect()
+/// 已安装 Mod 文件名集合：跨源文件名可能仅分隔符不同（`fabric-api-0.166.2+26.3.jar` vs
+/// `fabric-api-0.166.2-26.3.jar`），归一化后仍视为已安装。
+struct InstalledFiles {
+    exact: HashSet<String>,
+    /// 归一化文件名 → 磁盘实际文件名（替换旧文件时使用磁盘名）
+    normalized: HashMap<String, String>,
+}
+
+impl InstalledFiles {
+    fn from_mods_dir(mods_dir: &Path) -> Self {
+        let mut exact = HashSet::new();
+        let mut normalized = HashMap::new();
+        let Ok(entries) = std::fs::read_dir(mods_dir) else {
+            return Self { exact, normalized };
+        };
+        for entry in entries.flatten() {
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
+            normalized
+                .entry(normalize_mod_filename(&name))
+                .or_insert_with(|| name.clone());
+            exact.insert(name);
+        }
+        Self { exact, normalized }
+    }
+
+    fn contains(&self, filename: &str) -> bool {
+        self.exact.contains(filename)
+            || self
+                .normalized
+                .contains_key(&normalize_mod_filename(filename))
+    }
+
+    /// 版本文件对应的磁盘实际文件名（精确或归一化命中）。
+    fn actual_name<'a>(&'a self, filename: &'a str) -> Option<&'a str> {
+        if self.exact.contains(filename) {
+            return Some(filename);
+        }
+        self.normalized
+            .get(&normalize_mod_filename(filename))
+            .map(String::as_str)
+    }
+
+    /// 版本列表中所有已安装文件对应的磁盘名（去重排序）。
+    fn installed_names(&self, versions: &[CommunityVersion]) -> Vec<String> {
+        let mut names: Vec<String> = versions
+            .iter()
+            .filter_map(|version| self.actual_name(&version.filename).map(str::to_string))
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    #[cfg(test)]
+    fn for_test(names: &[&str]) -> Self {
+        let exact: HashSet<String> = names.iter().map(|name| name.to_string()).collect();
+        let normalized = exact
+            .iter()
+            .map(|name| (normalize_mod_filename(name), name.clone()))
+            .collect();
+        Self { exact, normalized }
+    }
+}
+
+/// 文件名归一化：大小写、`+`/`_`/空格统一为 `-`，并合并连续分隔符；只用于跨源安装判定。
+fn normalize_mod_filename(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut prev_separator = false;
+    for ch in name.chars().map(|c| c.to_ascii_lowercase()) {
+        let mapped = match ch {
+            '+' | '_' | ' ' => '-',
+            c => c,
+        };
+        if mapped == '-' {
+            if prev_separator {
+                continue;
+            }
+            prev_separator = true;
+        } else {
+            prev_separator = false;
+        }
+        out.push(mapped);
+    }
+    out
 }
 
 fn missing_item(
@@ -863,18 +937,29 @@ mod tests {
         let versions = vec![beta, release];
 
         assert_eq!(
-            pick_version(&versions, None, Some("beta"), &HashSet::new())
-                .unwrap()
-                .version_id,
+            pick_version(
+                &versions,
+                None,
+                Some("beta"),
+                &InstalledFiles::for_test(&[])
+            )
+            .unwrap()
+            .version_id,
             "beta"
         );
         assert_eq!(
-            pick_version(&versions, None, None, &HashSet::new())
+            pick_version(&versions, None, None, &InstalledFiles::for_test(&[]))
                 .unwrap()
                 .version_id,
             "release"
         );
-        assert!(pick_version(&versions, None, Some("missing"), &HashSet::new()).is_err());
+        assert!(pick_version(
+            &versions,
+            None,
+            Some("missing"),
+            &InstalledFiles::for_test(&[])
+        )
+        .is_err());
     }
 
     #[test]
@@ -884,12 +969,23 @@ mod tests {
         let versions = vec![beta, release];
 
         assert_eq!(
-            pick_version(&versions, Some("beta"), Some("release"), &HashSet::new())
-                .unwrap()
-                .version_id,
+            pick_version(
+                &versions,
+                Some("beta"),
+                Some("release"),
+                &InstalledFiles::for_test(&[])
+            )
+            .unwrap()
+            .version_id,
             "beta"
         );
-        assert!(pick_version(&versions, Some("missing"), None, &HashSet::new()).is_err());
+        assert!(pick_version(
+            &versions,
+            Some("missing"),
+            None,
+            &InstalledFiles::for_test(&[])
+        )
+        .is_err());
     }
 
     #[test]
@@ -897,13 +993,45 @@ mod tests {
         let beta = version("beta", "beta", Vec::new());
         let release = version("release", "release", Vec::new());
         let versions = vec![beta, release];
-        let installed = HashSet::from(["beta.jar".to_string()]);
+        let installed = InstalledFiles::for_test(&["beta.jar"]);
 
         assert_eq!(
             pick_version(&versions, None, None, &installed)
                 .unwrap()
                 .version_id,
             "beta"
+        );
+    }
+
+    #[test]
+    fn pick_version_matches_cross_source_filename() {
+        let mut cf = version("cf", "release", Vec::new());
+        cf.filename = "fabric-api-0.166.2-26.3.jar".into();
+        let versions = vec![cf];
+        let installed = InstalledFiles::for_test(&["fabric-api-0.166.2+26.3.jar"]);
+
+        assert_eq!(
+            pick_version(&versions, None, None, &installed)
+                .unwrap()
+                .version_id,
+            "cf"
+        );
+    }
+
+    #[test]
+    fn pick_version_keeps_installed_older_version() {
+        let mut newer = version("newer", "release", Vec::new());
+        newer.filename = "fabric-api-0.166.2+26.3.jar".into();
+        let mut older = version("older", "release", Vec::new());
+        older.filename = "fabric-api-0.165.0+26.3.jar".into();
+        let installed = InstalledFiles::for_test(&["fabric-api-0.165.0+26.3.jar"]);
+
+        assert_eq!(
+            pick_version(&[newer, older], None, None, &installed)
+                .unwrap()
+                .version_id,
+            "older",
+            "不同版本按文件名区分；已安装的旧版本优先于最新版"
         );
     }
 
@@ -959,13 +1087,29 @@ mod tests {
     }
 
     #[test]
-    fn installed_filenames_reads_mods_dir() {
+    fn installed_files_reads_mods_dir_and_normalizes_separators() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.jar"), b"a").unwrap();
         std::fs::write(dir.path().join("b.jar.disabled"), b"b").unwrap();
-        let names = installed_filenames(dir.path());
-        assert!(names.contains("a.jar"));
-        assert!(names.contains("b.jar.disabled"));
+        std::fs::write(dir.path().join("fabric-api-0.166.2+26.3.jar"), b"c").unwrap();
+        let files = InstalledFiles::from_mods_dir(dir.path());
+        assert!(files.contains("a.jar"));
+        assert!(files.contains("b.jar.disabled"));
+        // 跨源文件名：Modrinth `+` vs CurseForge `-`
+        assert!(files.contains("fabric-api-0.166.2-26.3.jar"));
+        assert_eq!(
+            files.actual_name("fabric-api-0.166.2-26.3.jar"),
+            Some("fabric-api-0.166.2+26.3.jar")
+        );
+    }
+
+    #[test]
+    fn installed_files_keep_actual_disk_name_for_replacement() {
+        let installed = InstalledFiles::for_test(&["fabric-api-0.166.2+26.3.jar"]);
+        let mut old = version("old", "release", Vec::new());
+        old.filename = "fabric-api-0.166.2-26.3.jar".into();
+        let names = installed.installed_names(&[old]);
+        assert_eq!(names, vec!["fabric-api-0.166.2+26.3.jar".to_string()]);
     }
 }
 

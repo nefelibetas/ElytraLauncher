@@ -615,8 +615,11 @@ mod tests {
     use super::{is_mirror_url, sort_routes_with_probes};
     use crate::config::downloader::ResourceClass;
     use crate::constants;
+    use crate::constants::UA_DOWNLOAD;
     use crate::downloader::fetcher::fetch_verified;
     use crate::downloader::fetcher::routes::DownloadRoute;
+    use crate::downloader::fetcher::{fetch, fetch_fallback};
+    use crate::downloader::hash::{file_sha1_matches, sha1_hex};
     use crate::downloader::probe::ProbeResult;
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -649,8 +652,7 @@ mod tests {
         let (url, heads) = super::test_support::serve_recording_heads(b"ok".to_vec()).await;
         let dest = temp_dest("ua");
         let urls = vec![url.clone(), format!("{url}?alt=1")];
-        let _ =
-            crate::downloader::fetcher::fetch_fallback(&urls, &dest, None::<fn(u64, u64)>).await;
+        let _ = fetch_fallback(&urls, &dest, None::<fn(u64, u64)>).await;
         let heads = heads.lock();
         let gets: Vec<&String> = heads
             .iter()
@@ -663,10 +665,7 @@ mod tests {
         for head in gets {
             let lower = head.to_lowercase();
             assert!(
-                lower.contains(&format!(
-                    "user-agent: {}",
-                    crate::constants::UA_DOWNLOAD.to_lowercase()
-                )),
+                lower.contains(&format!("user-agent: {}", UA_DOWNLOAD.to_lowercase())),
                 "多源路径的下载请求必须带 UA，实收请求头:\n{head}"
             );
         }
@@ -837,16 +836,13 @@ mod tests {
         let body: Vec<u8> = (0..(12 * 1024 * 1024)).map(|i| (i % 251) as u8).collect();
         let url = serve_range(body.clone(), true).await;
         let dest = temp_dest("range_seg");
-        let out = crate::downloader::fetcher::fetch(&url, &dest, None::<fn(u64, u64)>)
+        let out = fetch(&url, &dest, None::<fn(u64, u64)>)
             .await
             .expect("分段下载应成功");
         assert_eq!(out.bytes as usize, body.len(), "分段的字节总量应完整");
         let got = std::fs::read(&dest).expect("目标应存在");
         assert_eq!(got, body, "分段内容应与服务端一致（段内 seek 定位正确）");
-        assert!(crate::downloader::hash::file_sha1_matches(
-            &dest,
-            &crate::downloader::hash::sha1_hex(&body)
-        ));
+        assert!(file_sha1_matches(&dest, &sha1_hex(&body)));
         let _ = std::fs::remove_file(&dest);
         let _ = std::fs::remove_file(dest.with_extension("jar.part"));
         let _ = std::fs::remove_file(dest.with_extension("jar.part.json"));
@@ -858,7 +854,7 @@ mod tests {
         let body: Vec<u8> = (0..(5 * 1024 * 1024)).map(|i| (i % 251) as u8).collect();
         let url = serve_range(body.clone(), false).await;
         let dest = temp_dest("no_range_seg");
-        let out = crate::downloader::fetcher::fetch(&url, &dest, None::<fn(u64, u64)>)
+        let out = fetch(&url, &dest, None::<fn(u64, u64)>)
             .await
             .expect("单流回退应成功");
         assert_eq!(out.bytes as usize, body.len(), "单流的字节总量应完整");

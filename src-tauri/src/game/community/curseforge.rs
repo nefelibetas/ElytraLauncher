@@ -121,12 +121,15 @@ fn curseforge_class_id(category: &str) -> Option<i64> {
     }
 }
 
-/// CF 项目 URL 段：worlds 分类用 /worlds/，其余（mod 等）用 /mc-mods/。
+/// CF 项目 URL 段：按 classId 对应的官网分类拼接；未知分类回退 mod。
 fn curseforge_url_segment(category: Option<&str>) -> &'static str {
-    if category == Some("worlds") {
-        "worlds"
-    } else {
-        "mc-mods"
+    match category {
+        Some("worlds") => "worlds",
+        Some("modpack") => "modpacks",
+        Some("resourcepack") => "texture-packs",
+        Some("shader") => "shaders",
+        Some("datapack") => "data-packs",
+        _ => "mc-mods",
     }
 }
 
@@ -717,6 +720,13 @@ mod tests {
     #[test]
     fn curseforge_url_segment_selects_category() {
         assert_eq!(curseforge_url_segment(Some("worlds")), "worlds");
+        assert_eq!(curseforge_url_segment(Some("modpack")), "modpacks");
+        assert_eq!(
+            curseforge_url_segment(Some("resourcepack")),
+            "texture-packs"
+        );
+        assert_eq!(curseforge_url_segment(Some("shader")), "shaders");
+        assert_eq!(curseforge_url_segment(Some("datapack")), "data-packs");
         assert_eq!(curseforge_url_segment(Some("mod")), "mc-mods");
         assert_eq!(curseforge_url_segment(None), "mc-mods");
     }

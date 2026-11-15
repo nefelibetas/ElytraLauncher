@@ -188,6 +188,7 @@ export default {
     refreshDependencies: "Refresh dependencies",
     versionsLoadFailed: "Failed to load versions",
     depsLoadFailed: "Failed to load dependencies",
+    depsPartial: "{count} dependencies could not be loaded. Click to retry.",
     clickToRetry: "Click to retry",
     noVersions: "No versions available",
     noMatchingVersions: "No matching versions. Try adjusting the filters.",

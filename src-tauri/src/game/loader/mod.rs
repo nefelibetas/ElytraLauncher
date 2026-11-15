@@ -41,6 +41,8 @@ mod matrix {
     use super::{install_loader, InstallCtx, VersionTarget};
     use crate::config::downloader::DownloaderConfig;
     use crate::config::game_dirs;
+    use crate::downloader::fetcher::{fetch_fallback, fetch_verified};
+    use crate::downloader::hash::file_sha1_matches;
     use crate::downloader::progress::ProgressCounters;
     use crate::game::loader::version_query;
     use crate::game::loader::LoaderKind;
@@ -162,7 +164,7 @@ mod matrix {
                 .to_string(),
         );
         if !jar_path.is_file() && !cu.is_empty() {
-            crate::downloader::fetcher::fetch_verified(&[cu], &jar_path, None::<fn(u64, u64)>, &cs)
+            fetch_verified(&[cu], &jar_path, None::<fn(u64, u64)>, &cs)
                 .await
                 .expect("下载原版 client.jar 失败");
         }
@@ -344,7 +346,7 @@ mod matrix {
         if !dest.is_file() {
             std::fs::create_dir_all(dest.parent().expect("缓存路径无父目录"))
                 .expect("创建 installer 缓存目录失败");
-            crate::downloader::fetcher::fetch_fallback(&urls, &dest, None::<fn(u64, u64)>)
+            fetch_fallback(&urls, &dest, None::<fn(u64, u64)>)
                 .await
                 .unwrap_or_else(|e| panic!("下载 {} installer 失败：{e}", case.kind));
         }
@@ -364,8 +366,7 @@ mod matrix {
             .filter_map(|lib| {
                 let artifact = lib.downloads?.artifact?;
                 let dest = lib_dir.join(&artifact.path);
-                let ok = !artifact.sha1.is_empty()
-                    && crate::downloader::hash::file_sha1_matches(&dest, &artifact.sha1);
+                let ok = !artifact.sha1.is_empty() && file_sha1_matches(&dest, &artifact.sha1);
                 (!ok).then_some(artifact.path)
             })
             .collect()

@@ -224,10 +224,11 @@ fn list_cache_set(url: String, val: String) {
 mod tests {
     use super::*;
     use crate::config::downloader::DownloadSource;
+    use crate::downloader::meta_cache;
 
     #[test]
     fn list_cache_roundtrip() {
-        crate::downloader::meta_cache::clear_all();
+        meta_cache::clear_all();
         list_cache().lock().clear();
         // 独立 key：磁盘层跨测试 run 持久，固定示例 URL 会命中上一轮的落盘条目
         let url = format!(

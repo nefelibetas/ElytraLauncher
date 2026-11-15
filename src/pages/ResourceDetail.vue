@@ -273,6 +273,13 @@ const incompatIdSet = computed(() => new Set(selectedIncompatIds.value));
 const requiredItems = computed(() => depItems.value.filter(d => requiredIdSet.value.has(d.id)));
 const incompatItems = computed(() => depItems.value.filter(d => incompatIdSet.value.has(d.id)));
 
+/** 请求的依赖项中未能取到详情的数量（项目被删/不可见时 API 会静默省略）。 */
+const missingDepDetailCount = computed(() => {
+  if (loadingDeps.value || depError.value) return 0;
+  const requested = new Set([...selectedDepIds.value, ...selectedIncompatIds.value]);
+  return Math.max(0, requested.size - depItems.value.length);
+});
+
 /** 依赖请求序号：自增；响应返回时与当前值不符即过期（选中版本已切换/返回）→ 丢弃。 */
 let depsSeq = 0;
 
@@ -428,11 +435,24 @@ function mainDownloadFile(
   return { kind: "mod", url: version.download_url, filename: version.filename, replace };
 }
 
-/** 主 Mod 同项目的旧文件：项目版本列表 ∩ 目标 mods 目录文件名。 */
+/** 与后端 InstalledFiles::normalize_mod_filename 保持一致：跨源文件名只差分隔符时仍能匹配。 */
+function normalizeModFilename(name: string): string {
+  return name.toLowerCase().replace(/[+_ ]/g, "-").replace(/-+/g, "-");
+}
+
+/** 主 Mod 同项目的旧文件：项目版本列表 ∩ 目标 mods 目录文件名（跨源分隔符归一化）。 */
 function mainReplacements(version: CommunityVersion): string[] {
-  const installed = new Set(depPlan.value?.installed_files ?? []);
+  const installed = new Map(
+    (depPlan.value?.installed_files ?? []).map(name => [normalizeModFilename(name), name]),
+  );
   const known = new Set(versions.value.map(item => item.filename));
-  return Array.from(known).filter(name => name !== version.filename && installed.has(name));
+  const replacements = new Set<string>();
+  for (const name of known) {
+    if (name === version.filename) continue;
+    const actual = installed.get(normalizeModFilename(name));
+    if (actual) replacements.add(actual);
+  }
+  return [...replacements];
 }
 
 /** 替换列表不能误删本批新文件（例如两个依赖恰好同名）。 */
@@ -861,6 +881,16 @@ async function copyName() {
                 <div v-for="d in incompatItems" :key="d.id" class="md-dep-warn-item">{{ d.title }}</div>
                 <div class="md-dep-warn-tip">{{ t("download.detail.incompatibleTip") }}</div>
               </div>
+              <button
+                v-if="missingDepDetailCount > 0"
+                type="button"
+                class="md-dep-partial"
+                v-tooltip="t('download.detail.clickToRetry')"
+                @click="loadDeps(true)"
+              >
+                <AlertCircle :size="14" />
+                <span>{{ t("download.detail.depsPartial", { count: missingDepDetailCount }) }}</span>
+              </button>
               <div v-if="loadingDeps" class="md-dep-state">
                 <div class="spinner"></div>
                 <p class="md-dep-state-text">{{ t("download.detail.loadingDependencies") }}</p>
@@ -882,7 +912,7 @@ async function copyName() {
               <div v-else class="md-dep-list">
                 <div v-for="d in requiredItems" :key="d.id" class="md-dep-item" @click="openResourceDetail(
                   depToItem(d),
-                  { loader: loaderFilter, gameVersion: gameVersionFilter, selectedVersion: selectedVersionId },
+                  { loader: loaderFilter, gameVersion: gameVersionFilter, selectedVersion: '' },
                   { versions, versionError, depItems, depError },
                 )">
                   <IconImage :src="d.icon_url" :size="28" />
@@ -1526,6 +1556,26 @@ async function copyName() {
   font-size: var(--fs-xs);
   color: var(--text-secondary);
   word-break: break-word;
+}
+
+.md-dep-partial {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.md-dep-partial > svg {
+  flex: none;
 }
 
 .md-dep-warn {

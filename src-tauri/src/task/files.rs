@@ -11,10 +11,12 @@ use tauri::AppHandle;
 use crate::config::downloader::DownloaderConfig;
 use crate::downloader::fetcher;
 use crate::downloader::path_lock::PathLock;
+use crate::events::TASK_WAITING_USER;
 use crate::game::resource::extract::extract_zip_safe;
 use crate::persist;
 use crate::task::model::{DownloadFileItem, DownloadFileKind, DownloadFilesTask, TaskText};
 use crate::task::{self, StepStatus, TaskProgress, TaskSpec, TaskStatus, WaitingDecision};
+use crate::util::{sanitize_fs_name, unique_child_dir};
 
 use super::progress::{
     cancelled, set_cancelled, set_error, set_phase, spawn_heartbeat, step_done, HeartbeatStats,
@@ -154,7 +156,7 @@ async fn download_with_decision(
                 let slot = task::global().begin_wait(task_id);
                 task::emit_event(
                     app,
-                    crate::events::TASK_WAITING_USER,
+                    TASK_WAITING_USER,
                     WaitingUserPayload {
                         task_id: task_id.to_string(),
                         file_name: filename.to_string(),
@@ -280,7 +282,7 @@ async fn install_world(
         );
         return None;
     }
-    let target = saves.join(crate::util::unique_child_dir(&saves, &name));
+    let target = saves.join(unique_child_dir(&saves, &name));
     if let Err(e) = std::fs::rename(&world_root, &target) {
         let _ = std::fs::remove_dir_all(&stage);
         emit_handle.abort();
@@ -298,7 +300,7 @@ fn locate_world_root(
     zip_filename: &str,
 ) -> Option<(std::path::PathBuf, String)> {
     if unpack_dir.join("level.dat").is_file() {
-        let name = crate::util::sanitize_fs_name(
+        let name = sanitize_fs_name(
             zip_filename.strip_suffix(".zip").unwrap_or(zip_filename),
             "world",
         );
@@ -308,8 +310,7 @@ fn locate_world_root(
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() && p.join("level.dat").is_file() {
-                let name =
-                    crate::util::sanitize_fs_name(&entry.file_name().to_string_lossy(), "world");
+                let name = sanitize_fs_name(&entry.file_name().to_string_lossy(), "world");
                 return Some((p, name));
             }
         }
@@ -772,14 +773,14 @@ mod tests {
         let saves = tmp.path().join("saves");
         std::fs::create_dir_all(&saves).unwrap();
         assert_eq!(
-            saves.join(crate::util::unique_child_dir(&saves, "bar")),
+            saves.join(unique_child_dir(&saves, "bar")),
             saves.join("bar"),
             "无冲突原名"
         );
         std::fs::create_dir_all(saves.join("foo")).unwrap();
         std::fs::create_dir_all(saves.join("foo_1")).unwrap();
         assert_eq!(
-            saves.join(crate::util::unique_child_dir(&saves, "foo")),
+            saves.join(unique_child_dir(&saves, "foo")),
             saves.join("foo_2"),
             "冲突递增到空位"
         );
@@ -787,7 +788,7 @@ mod tests {
 
     #[test]
     fn world_name_sanitizes_via_util() {
-        let clean = |s: &str| crate::util::sanitize_fs_name(s, "world");
+        let clean = |s: &str| sanitize_fs_name(s, "world");
         assert_eq!(clean("My:World?"), "My_World_");
         assert_eq!(clean("oneblock"), "oneblock", "合法名原样");
         assert_eq!(clean(""), "world", "空名回退");

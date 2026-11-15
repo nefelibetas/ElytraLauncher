@@ -21,8 +21,8 @@ pub use icon::{icon_payload, image_mime, is_supported_image, to_base64, IconData
 pub use log::init_file_logging;
 pub use net::community_download_urls;
 pub use path::{
-    dir_entries, is_simple_name, java_bin_path, safe_relative_path, sanitize_fs_name, sha1_sub_dir,
-    unique_child_dir, url_file_name,
+    dir_entries, is_safe_filename, is_simple_name, java_bin_path, safe_relative_path,
+    sanitize_fs_name, sha1_sub_dir, unique_child_dir, url_file_name,
 };
 #[cfg(target_os = "windows")]
 pub use process::CREATE_NO_WINDOW;

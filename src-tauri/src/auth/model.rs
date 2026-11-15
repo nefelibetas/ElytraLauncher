@@ -114,7 +114,7 @@ mod tests {
         remove("uuid-a").unwrap();
         assert!(read().is_none(), "列表清空后无当前账号");
         assert!(
-            crate::persist::secrets::read_secret(constants::SECT_MS_ACCOUNTS).is_none(),
+            persist::secrets::read_secret(constants::SECT_MS_ACCOUNTS).is_none(),
             "列表清空后存储键应删除"
         );
 

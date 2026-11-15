@@ -1,6 +1,7 @@
 //! 启动器自身更新检查：只读 GitHub Releases 的 latest，返回版本与下载页；不下载、不执行。
 
 use crate::constants::APP_VERSION;
+use crate::downloader::fetcher::http;
 
 const REPO: &str = "nefelibetas/ElytraLauncher";
 const RELEASE_MANIFEST_URL: &str =
@@ -36,7 +37,7 @@ pub async fn check() -> Result<Option<UpdateInfo>, String> {
 }
 
 async fn check_static_manifest() -> Result<Option<UpdateInfo>, String> {
-    let response = crate::downloader::fetcher::http()
+    let response = http()
         .get(RELEASE_MANIFEST_URL)
         .send()
         .await
@@ -78,7 +79,7 @@ fn manifest_to_info(manifest: ReleaseManifest) -> Result<UpdateInfo, String> {
 
 async fn check_github_api() -> Result<Option<UpdateInfo>, String> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
-    let response = crate::downloader::fetcher::http()
+    let response = http()
         .get(url)
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")

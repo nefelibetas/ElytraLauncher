@@ -147,6 +147,7 @@ pub fn save<T: Serialize>(key: &str, data: &T) -> Result<(), PersistError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{CONFIG_DIR, SETTINGS_FILE};
     use serde::{Deserialize, Serialize};
     use std::path::PathBuf;
 
@@ -162,8 +163,8 @@ mod tests {
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
             .unwrap()
-            .join(crate::constants::CONFIG_DIR)
-            .join(crate::constants::SETTINGS_FILE)
+            .join(CONFIG_DIR)
+            .join(SETTINGS_FILE)
     }
 
     #[test]
@@ -283,7 +284,7 @@ mod tests {
     /// 备份文件路径（与 `store::backup_corrupt` 命名一致）。
     fn bak_file() -> PathBuf {
         let mut p = test_file();
-        p.set_file_name(format!("{}.bak", crate::constants::SETTINGS_FILE));
+        p.set_file_name(format!("{}.bak", SETTINGS_FILE));
         p
     }
 

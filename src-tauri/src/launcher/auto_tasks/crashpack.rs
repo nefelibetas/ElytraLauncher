@@ -8,6 +8,8 @@ use zip::{CompressionMethod, ZipWriter};
 
 use super::ctx::{AutoTaskCtx, INSTANCE_FILE};
 use super::redact::redact;
+use crate::constants::{APP_NAME, APP_VERSION};
+use crate::util::utc_stamp;
 
 /// 打包输出目录：`{config_dir}/crash-packs/`。
 pub fn packs_dir(config_dir: &Path) -> PathBuf {
@@ -24,11 +26,7 @@ pub fn pack_crash_logs(ctx: &AutoTaskCtx<'_>) -> Result<PathBuf, String> {
         "errors.file.createDir",
         "创建崩溃包目录失败"
     ))?;
-    let out = dir.join(format!(
-        "crash-{}-{}.zip",
-        ctx.version_id,
-        crate::util::utc_stamp()
-    ));
+    let out = dir.join(format!("crash-{}-{}.zip", ctx.version_id, utc_stamp()));
     let file = std::fs::File::create(&out)
         .map_err(common_err_ctx_key!("errors.file.write", "创建崩溃包失败"))?;
     let mut zip = ZipWriter::new(file);
@@ -97,8 +95,8 @@ fn build_info(ctx: &AutoTaskCtx<'_>) -> String {
         ctx.crash_report.unwrap_or("none"),
         std::env::consts::OS,
         std::env::consts::ARCH,
-        crate::constants::APP_NAME,
-        crate::constants::APP_VERSION,
+        APP_NAME,
+        APP_VERSION,
     )
 }
 

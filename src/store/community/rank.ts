@@ -3,7 +3,7 @@ export type CommunitySource = "modrinth" | "curseforge";
 /** 排序口径：relevance（综合）/ downloads / updated。 */
 export type CommunitySort = "relevance" | "downloads" | "updated";
 
-/** scoreItem / identityKey 需要的最小字段；CommunityDisplayItem 结构满足。 */
+/** scoreItem 需要的最小字段；CommunityDisplayItem 结构满足。 */
 export interface RankableItem {
   title: string;
   title_zh: string | null;
@@ -12,7 +12,6 @@ export interface RankableItem {
   /** 最后更新时间 ISO 8601；缺失为 null/undefined。 */
   updated_at?: string | null;
   source: CommunitySource;
-  page_url: string;
 }
 
 /**
@@ -92,11 +91,4 @@ export function scoreItem(
     Math.log10(Math.max(weighted, 1)) / 10 +
     (item.mcmod_id == null ? 0 : 0.1)
   );
-}
-
-/** 跨源同一项目的去重键：百科条目 id 优先（wiki 表已映射两平台 slug），否则归一化标题。 */
-export function identityKey(item: RankableItem): string {
-  if (item.mcmod_id != null) return `m:${item.mcmod_id}`;
-  const title = normalizeText(item.title);
-  return title ? `t:${title}` : `u:${item.page_url}`;
 }

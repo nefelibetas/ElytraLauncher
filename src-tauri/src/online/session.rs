@@ -16,6 +16,7 @@ use easytier::instance::factory::{create_native_instance, NativeCoreInstance};
 use easytier_core::config::toml::{NetworkIdentity, PeerConfig};
 
 use super::scaffold::room::RoomCredential;
+use crate::util::config_dir;
 
 /// easytier 全局日志初始化锁（其 LOGGER 是进程级 OnceLock，重复 init 报错）。
 static EASYTIER_LOG_INIT: std::sync::Once = std::sync::Once::new();
@@ -35,7 +36,7 @@ fn install_rustls_provider() {
 /// 输出到 exe 旁 `Elytra/online-easytier.log`（debug 级，10MB × 3 轮转）。幂等（Once）；失败仅打印 stderr。
 pub(crate) fn init_easytier_logging() {
     EASYTIER_LOG_INIT.call_once(|| {
-        let dir = crate::util::config_dir();
+        let dir = config_dir();
         let _ = std::fs::create_dir_all(&dir);
         let cfg = LoggingConfig {
             file_logger: Some(FileLoggerConfig {
@@ -280,9 +281,10 @@ fn set_no_tun(cfg: &TomlConfigLoader, role: SessionRole, allow_relay: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::online::create_room;
 
     fn cfg(role: SessionRole, scaffold_port: Option<u16>, mc_port: Option<u16>) -> SessionConfig {
-        let room = crate::online::create_room().unwrap();
+        let room = create_room().unwrap();
         SessionConfig {
             role,
             room,

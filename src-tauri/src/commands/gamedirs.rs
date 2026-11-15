@@ -3,6 +3,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::commands::version::VersionServer;
 use crate::config::game_dirs::{self, GameDir};
 use crate::game::version::{dir, watch};
+use crate::persist::{read, remove, save};
 
 /// 游戏目录列表（空时自动生成默认目录）。
 #[tauri::command]
@@ -105,9 +106,9 @@ pub fn rename_version_dir(version_name: String, new_name: String) -> Result<(), 
         dir::version_server_section(&version_name),
         dir::version_server_section(&new_name),
     ) {
-        if let Ok(cfg) = crate::persist::read::<VersionServer>(&old_section) {
-            if crate::persist::save(&new_section, &cfg).is_ok() {
-                let _ = crate::persist::remove(&old_section);
+        if let Ok(cfg) = read::<VersionServer>(&old_section) {
+            if save(&new_section, &cfg).is_ok() {
+                let _ = remove(&old_section);
             }
         }
     }

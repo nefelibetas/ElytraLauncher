@@ -11,10 +11,13 @@ use std::time::SystemTime;
 
 use crate::auth::external::{ensure_jar, read};
 use crate::auth::microsoft::extract_xuid_from_jwt;
+use crate::game::resource::assets::ensure_index_visible;
 use crate::game::version::model::VersionJson;
 use crate::launcher::args::{ensure_old_style_natives, mc_version_of};
 use crate::launcher::env::{load_launch_config, pre_launch_check};
 use crate::launcher::model::{AuthMode, LaunchOptions, ProcessPriority};
+use crate::launcher::platform::set_process_priority;
+use crate::util::tail_lines as util_tail_lines;
 #[cfg(target_os = "windows")]
 use crate::util::NoWindow as _;
 
@@ -81,7 +84,7 @@ pub fn ensure_game_ready(
     version_dir_name: &str,
 ) -> Result<(), String> {
     pre_launch_check(version_json, mc_dir, version_dir_name)?;
-    crate::game::resource::assets::ensure_index_visible(
+    ensure_index_visible(
         mc_dir,
         &version_json.asset_index.id,
         &version_json.asset_index.sha1,
@@ -168,7 +171,7 @@ fn has_crash_signature(log: &Path, since: SystemTime) -> bool {
     let Ok(text) = std::fs::read_to_string(log) else {
         return false;
     };
-    let tail = crate::util::tail_lines(&text);
+    let tail = util_tail_lines(&text);
     tail.contains("---- Minecraft Crash Report ----")
         || tail.contains("OutOfMemoryError")
         || tail.contains("A fatal error has been detected")
@@ -439,7 +442,7 @@ where
         .stdin(std::process::Stdio::null());
     let mut child = spawn_game_child(&mut command)?;
     let pid = child.id();
-    crate::launcher::platform::set_process_priority(pid, process_priority);
+    set_process_priority(pid, process_priority);
     // 捕获子进程 stdout/stderr 写入日志文件（避免 GBK 乱码污染终端，同时保留诊断信息）
     if let Some(mut so) = child.stdout.take() {
         let lp = log_path.to_path_buf();
@@ -611,10 +614,10 @@ pub fn read_game_log(mc_dir: &Path, version_name: &str) -> String {
     let version_logs = mc_dir.join("versions").join(version_name).join("logs");
     let game_log = std::fs::read_to_string(version_logs.join("latest.log")).unwrap_or_default();
     if !game_log.trim().is_empty() {
-        return crate::util::tail_lines(&game_log);
+        return util_tail_lines(&game_log);
     }
     std::fs::read_to_string(mc_dir.join("logs").join("elytra-launch.log"))
-        .map(|text| crate::util::tail_lines(&text))
+        .map(|text| util_tail_lines(&text))
         .unwrap_or_default()
 }
 

@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 
 use super::ffi;
 use super::model::{SeedMapBlock, SeedMapSlimeChunk, SeedMapStructure};
+use crate::util::fnv1a64;
 
 const CELLS: usize = 128;
 const CELL_PX: usize = 4;
@@ -108,7 +109,7 @@ fn biome_color(raw: &str) -> [u8; 4] {
     if let Some(c) = PALETTE.get(alias) {
         return *c;
     }
-    let h = crate::util::fnv1a64(name);
+    let h = fnv1a64(name);
     let r = 80 + (h & 0x7f) as u8;
     let g = 90 + ((h >> 8) & 0x7f) as u8;
     let b = 80 + ((h >> 16) & 0x7f) as u8;

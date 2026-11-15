@@ -10,7 +10,7 @@ use super::model::{
 };
 use super::{backup, crashpack, record};
 use crate::events;
-use crate::task::EventSink;
+use crate::task::{emit_event, EventSink};
 #[cfg(target_os = "windows")]
 use crate::util::NoWindow as _;
 
@@ -28,7 +28,7 @@ struct Progress<'a> {
 impl Progress<'_> {
     /// 推进度帧（高频；派发端按「实例 + 阶段」合并为最新一帧）。
     fn emit(&self, step_index: u32, action: &str, message: &str, done: bool) {
-        crate::task::emit_event(
+        emit_event(
             self.sink,
             events::AUTO_TASK_PROGRESS,
             AutoTaskProgress {
@@ -77,7 +77,7 @@ pub fn run_auto_tasks(
             }
         }
     }
-    crate::task::emit_event(
+    emit_event(
         sink,
         events::AUTO_TASKS_FINISHED,
         AutoTasksFinished {

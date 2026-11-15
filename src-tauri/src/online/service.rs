@@ -7,6 +7,7 @@ use super::scaffold::profiles::ProfileTable;
 use super::scaffold::room::RoomCredential;
 use super::scaffold::server::InfoServer;
 use super::session::{EasyTierSession, SessionRole};
+use crate::constants::APP_VERSION;
 use crate::events::ONLINE_STATE;
 use crate::persist::online_config;
 use crate::task::{emit_event, EventSink};
@@ -200,7 +201,7 @@ pub(super) fn online_player_name() -> String {
 
 /// vendor 字符串：`Elytra {版本}`。
 pub(super) fn vendor_string() -> String {
-    format!("Elytra {}", crate::constants::APP_VERSION)
+    format!("Elytra {}", APP_VERSION)
 }
 
 #[cfg(test)]

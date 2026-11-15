@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use crate::game::community;
+use crate::game::modpack::resolve_version_meta;
+use crate::game::version::dir::version_dir_path;
 
 /// 搜索 Mod / 光影包等（按 `source` 分派 modrinth / curseforge；`query.category` 为项目类型过滤，`page_size` 为每源条数；`translate` 默认开启）。
 #[tauri::command]
@@ -55,9 +57,8 @@ pub async fn resolve_mod_dependencies(
     version_dir_name: String,
     version_overrides: Option<HashMap<String, String>>,
 ) -> Result<community::ModDependencyPlan, String> {
-    let vdir = crate::game::version::dir::version_dir_path(&version_dir_name)?;
-    let (mc_version, kind, _) =
-        crate::game::modpack::resolve_version_meta(&vdir, &version_dir_name);
+    let vdir = version_dir_path(&version_dir_name)?;
+    let (mc_version, kind, _) = resolve_version_meta(&vdir, &version_dir_name);
     if kind == "vanilla" || kind == "optifine" {
         bail_key!(
             "errors.community.instanceNoLoader",

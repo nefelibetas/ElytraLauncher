@@ -11,9 +11,12 @@ use super::{expand_inheritance, InstallCtx, LoaderEvent, LoaderHook, VersionTarg
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::endpoints;
 use crate::downloader::fetcher::{self, http};
+use crate::downloader::hash::file_sha1_matches;
+use crate::downloader::progress::ProgressCounters;
 use crate::game::resource::library;
 use crate::game::version::model;
 use crate::jdk;
+use crate::launcher::env::auto_pick_jdk;
 use crate::util::archive;
 use crate::util::java_bin_path;
 
@@ -165,7 +168,7 @@ struct LoaderFiles<'a> {
 async fn fetch_installer(
     installer_urls: &[String],
     mc_dir: &Path,
-    pc: &crate::downloader::progress::ProgressCounters,
+    pc: &ProgressCounters,
     cancel: &Arc<AtomicBool>,
 ) -> Result<(zip::ZipArchive<std::fs::File>, PathBuf), String> {
     let tmp = mc_dir.join(".elytra").join("tmp");
@@ -293,7 +296,7 @@ fn verify_profile_artifacts(profile: &serde_json::Value, lib_dir: &Path) -> Resu
         let ok = if sha1.is_empty() {
             dest.is_file()
         } else {
-            crate::downloader::hash::file_sha1_matches(&dest, sha1)
+            file_sha1_matches(&dest, sha1)
         };
         if !ok {
             missing.push(path.to_string());
@@ -331,7 +334,7 @@ async fn download_loader_libraries(
     lib_dir: &Path,
     dir_name: &str,
     config: &DownloaderConfig,
-    pc: &crate::downloader::progress::ProgressCounters,
+    pc: &ProgressCounters,
     cancel: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     let sources: Vec<&DownloadSource> = config.file_sources_list();
@@ -363,7 +366,7 @@ async fn install_neoforge_universal(
     installer_path: &Path,
     libraries: &[model::Library],
     files: &LoaderFiles<'_>,
-    pc: &crate::downloader::progress::ProgressCounters,
+    pc: &ProgressCounters,
     hook: Option<LoaderHook<'_>>,
 ) -> Result<(), String> {
     let LoaderFiles {
@@ -432,7 +435,7 @@ fn install_embedded_maven(
     for rel in entries {
         let dest = lib_dir.join(&rel);
         let sha1 = declared_sha1(profile, &rel);
-        if !sha1.is_empty() && crate::downloader::hash::file_sha1_matches(&dest, &sha1) {
+        if !sha1.is_empty() && file_sha1_matches(&dest, &sha1) {
             continue;
         }
         if sha1.is_empty() && dest.is_file() {
@@ -618,7 +621,7 @@ pub(super) async fn wait_for_vanilla_client(
 /// Auto 模式选 JDK 的纯决策：`required > 0` 走启动侧按需选择（精确/最低满足/最高），否则回退缓存首项。
 fn pick_auto_jdk(jdks: &[jdk::model::JdkInfo], required: u32) -> Option<jdk::model::JdkInfo> {
     let picked = if required > 0 {
-        crate::launcher::env::auto_pick_jdk(jdks, required)
+        auto_pick_jdk(jdks, required)
     } else {
         None
     };
@@ -909,6 +912,7 @@ async fn resolve_jar_from_manifest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::downloader::hash::sha1_hex;
 
     /// legacy 安装器内嵌构件：按 `maven/` 相对路径解到 `libraries/`，并按声明 sha1 幂等。
     #[test]
@@ -918,7 +922,7 @@ mod tests {
         std::fs::create_dir_all(&lib_dir).unwrap();
         let rel = "net/minecraftforge/forge/1.12.2-14.23.5.2864/forge-1.12.2-14.23.5.2864.jar";
         let content = b"legacy-universal-jar-bytes";
-        let sha1 = crate::downloader::hash::sha1_hex(content);
+        let sha1 = sha1_hex(content);
 
         // 假 installer：内嵌 maven/<rel> + profile 声明其 sha1
         let installer = dir.path().join("forge-installer.jar");
@@ -1122,7 +1126,7 @@ mod tests {
         let declared = declared_sha1(&profile, &rel);
         assert!(!declared.is_empty(), "profile 应声明该构件的 sha1");
         assert!(
-            crate::downloader::hash::file_sha1_matches(&dest, &declared),
+            file_sha1_matches(&dest, &declared),
             "解出的构件应匹配 profile 声明的 sha1"
         );
         eprintln!("✅ 1.12.2 legacy 内嵌构件已解出：{rel}（{size} 字节）");

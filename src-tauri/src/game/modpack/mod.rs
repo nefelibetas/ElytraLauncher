@@ -35,6 +35,7 @@ mod tests {
     use super::detect::detect_pack;
     use super::*;
     use crate::game::loader::LoaderKind;
+    use crate::persist::downloader_config;
     use std::io::Write as _;
     use std::path::Path;
 
@@ -660,7 +661,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("真实 MRPACK 应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::Modrinth));
@@ -711,7 +712,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("CF 直链包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::CurseForge));
@@ -750,7 +751,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("MultiMC 包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::MultiMc));
@@ -775,7 +776,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("真实 MultiMC 包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::MultiMc));
@@ -914,7 +915,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("目录包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::Directory));
@@ -952,7 +953,7 @@ mod tests {
                 path: outer.display().to_string(),
             },
         };
-        let plan = build_plan(&outer, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&outer, &request, &downloader_config())
             .await
             .expect("PCL 带启动器包应能递归构建计划");
         assert_eq!(
@@ -1126,7 +1127,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("HMCL 包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::Hmcl));
@@ -1162,7 +1163,7 @@ mod tests {
                 path: path.display().to_string(),
             },
         };
-        let plan = build_plan(&path, &request, &crate::persist::downloader_config())
+        let plan = build_plan(&path, &request, &downloader_config())
             .await
             .expect("MCBBS 包应能构建计划");
         assert_eq!(plan.kind, Some(PackKind::Mcbbs));

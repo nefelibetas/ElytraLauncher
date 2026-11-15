@@ -27,6 +27,8 @@ use parking_lot::Mutex;
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
+use crate::util::{is_simple_name, safe_relative_path};
+
 use super::chunk_pos::ChunkPos;
 use super::lru_cache::{CacheKey, LruCache};
 
@@ -308,12 +310,12 @@ impl CustomDecompression for JavaWrcDecompression {
 pub fn dimension_dir(world_path: &Path, dimension: &str) -> PathBuf {
     let base = world_path.to_path_buf();
     if let Some(rel) = dimension.strip_prefix("dimensions/") {
-        if let Ok(rel) = crate::util::safe_relative_path(rel) {
+        if let Ok(rel) = safe_relative_path(rel) {
             return base.join("dimensions").join(rel);
         }
     }
     if let Some((ns, path)) = dimension.split_once(':') {
-        if crate::util::is_simple_name(ns) && crate::util::is_simple_name(path) {
+        if is_simple_name(ns) && is_simple_name(path) {
             return base.join("dimensions").join(ns).join(path);
         }
     }
@@ -772,6 +774,7 @@ fn cached_region_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map::test_support;
 
     #[test]
     fn region_name_parses_negative_coords() {
@@ -940,7 +943,7 @@ mod tests {
     #[test]
     fn parse_region_keeps_raw_only_on_request() {
         let dir = tempfile::tempdir().unwrap();
-        let path = crate::map::test_support::write_synthetic_region(dir.path());
+        let path = test_support::write_synthetic_region(dir.path());
 
         let light = parse_region(&path);
         assert!(
@@ -1035,7 +1038,7 @@ mod tests {
     #[test]
     fn surface_info_reuses_parsed_chunk() {
         let dir = tempfile::tempdir().unwrap();
-        let path = crate::map::test_support::write_synthetic_region(dir.path());
+        let path = test_support::write_synthetic_region(dir.path());
         let before = parse_one_calls();
 
         let a = surface_info(&path, 0, 0, 319).expect("surface");
@@ -1060,7 +1063,7 @@ mod tests {
     #[test]
     fn surface_info_invalidates_on_mtime_change() {
         let dir = tempfile::tempdir().unwrap();
-        let path = crate::map::test_support::write_synthetic_region(dir.path());
+        let path = test_support::write_synthetic_region(dir.path());
         surface_info(&path, 0, 0, 319).expect("surface");
         let before = parse_one_calls();
 
@@ -1075,7 +1078,7 @@ mod tests {
     #[test]
     fn surface_info_misses_other_chunk() {
         let dir = tempfile::tempdir().unwrap();
-        let path = crate::map::test_support::write_synthetic_region(dir.path());
+        let path = test_support::write_synthetic_region(dir.path());
         surface_info(&path, 0, 0, 319).expect("surface");
         let before = parse_one_calls();
 

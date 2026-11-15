@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::game::version::dir::version_dir_path;
 use crate::map::folder::{discover_worlds, MapFolderEntry};
+use crate::map::mod_color::overlay_for_world;
 use crate::map::region_io::{
     dimension_dir, list_region_files, region_file_for, surface_info, MapRegionInfo,
 };
@@ -120,9 +121,7 @@ fn map_tile(
     let region_file = dimension_dir(world, dimension)
         .join("region")
         .join(format!("r.{rx}.{rz}.mca"));
-    let overlay = mod_colors
-        .then(|| crate::map::mod_color::overlay_for_world(world))
-        .flatten();
+    let overlay = mod_colors.then(|| overlay_for_world(world)).flatten();
     let png = render_region_tile_lod(
         &region_file,
         render_style,

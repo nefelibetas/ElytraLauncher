@@ -11,7 +11,8 @@ use super::{
 };
 use crate::downloader::fetcher::http;
 
-const KNOWN_LOADERS: [&str; 4] = ["fabric", "forge", "neoforge", "quilt"];
+/// 搜索命中 categories 中的加载器：四种游戏加载器 + 光影加载器（iris/optifine）。
+const KNOWN_LOADERS: [&str; 6] = ["fabric", "forge", "neoforge", "quilt", "iris", "optifine"];
 
 fn modrinth_loaders(categories: &serde_json::Value) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -422,11 +423,11 @@ mod tests {
 
     #[test]
     fn modrinth_loaders_filters_known_ones() {
-        let cats = serde_json::json!(["Fabric", "Mechanic", "fabric", "forge", "Adventure"]);
+        let cats = serde_json::json!(["Fabric", "Mechanic", "fabric", "forge", "Iris", "OptiFine"]);
         assert_eq!(
             modrinth_loaders(&cats),
-            vec!["fabric", "forge"],
-            "大小写不敏感且去重保序"
+            vec!["fabric", "forge", "iris", "optifine"],
+            "大小写不敏感且去重保序；光影加载器也纳入"
         );
         assert!(
             modrinth_loaders(&serde_json::json!(["Adventure"])).is_empty(),

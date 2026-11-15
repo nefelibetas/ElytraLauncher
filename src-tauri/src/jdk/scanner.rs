@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use crate::jdk::model::JdkInfo;
+use crate::persist::downloader_config;
 #[cfg(target_os = "windows")]
 use crate::util::exe_dir;
 use crate::util::java_bin_path;
@@ -37,9 +38,7 @@ pub fn auto_scan() -> Vec<JdkInfo> {
     let mut seen = HashSet::new();
     let mut dirs = candidate_dirs();
     // Elytra 自下载的 runtime 跟随激活游戏目录（<minecraft_dir>/runtime），exe 旁只是历史假定
-    let mc_runtime = crate::persist::downloader_config()
-        .minecraft_dir_abs()
-        .join("runtime");
+    let mc_runtime = downloader_config().minecraft_dir_abs().join("runtime");
     dirs.push(mc_runtime.to_string_lossy().to_string());
     for dir_str in dirs {
         let dir = Path::new(&dir_str);

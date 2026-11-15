@@ -2,6 +2,7 @@
 
 use crate::auth;
 use crate::constants;
+use crate::downloader::proxy::apply_system_proxy;
 use crate::events;
 use crate::task::{self, EventSink};
 
@@ -19,7 +20,7 @@ fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
     let builder = reqwest::Client::builder()
         .user_agent(constants::UA_MOJANG_API)
         .timeout(Duration::from_secs(timeout_secs));
-    crate::downloader::proxy::apply_system_proxy(builder)
+    apply_system_proxy(builder)
         .build()
         .map_err(common_err_ctx_key!(
             "errors.login.failed",
