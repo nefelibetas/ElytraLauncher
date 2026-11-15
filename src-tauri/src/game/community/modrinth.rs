@@ -94,10 +94,8 @@ pub(super) async fn search_modrinth(
         ))?;
         params.push(("facets", facets_json));
     }
-    // 空关键字时按下载量排（对齐 PCL2：不输入名称直接显示热门 Mod）
-    if query.is_empty() {
-        params.push(("index", "downloads".into()));
-    }
+    // 统一相关度序：空查询时 Modrinth 的 relevance 本身就是热门序；聚合层再做来源加权排序。
+    params.push(("index", "relevance".into()));
     let urls: Vec<String> = api_urls(ApiPlatform::Modrinth, "/v2/search", &params)?;
     let data = get_json_multi(&urls, |u| http().get(u.to_string())).await?;
 

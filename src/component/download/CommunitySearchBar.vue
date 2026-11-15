@@ -15,7 +15,7 @@ export interface CommunitySearchState {
   gameVersion: string;
   loader?: string;
   searching: boolean;
-  search(page?: number): Promise<void> | void;
+  search(page?: number, force?: boolean): Promise<void> | void;
   reset(): void;
 }
 
@@ -69,7 +69,7 @@ watch(
           :id="`${idPrefix}QueryInput`"
           class="cs-input"
           v-model="search.query"
-          @keydown.enter="search.search()"
+          @keydown.enter="search.search(1, true)"
           autocomplete="off"
         />
         <template v-if="showSource && showLoader">
@@ -115,7 +115,7 @@ watch(
       </div>
       <div class="cs-form-actions">
         <slot name="prepend-actions"></slot>
-        <button class="cs-btn cs-btn-primary" :disabled="search.searching" @click="search.search()">
+        <button class="cs-btn cs-btn-primary" :disabled="search.searching" @click="search.search(1, true)">
           <span v-if="search.searching" class="cs-spin"></span>{{ search.searching ? t("download.search.searching") : t("download.search.submit") }}
         </button>
         <button class="cs-btn" @click="search.reset()">{{ t("download.search.reset") }}</button>

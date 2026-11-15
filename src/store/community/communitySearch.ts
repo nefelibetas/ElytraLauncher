@@ -4,6 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { dlTranslateMode } from "../config/downloaderConfig";
 import { errMsg } from "../../utils/error";
 import { currentLocale, t } from "../../i18n";
+import {
+  AGG_PAGE_SIZE,
+  CommunityAggregator,
+  StaleSearchError,
+  type FetchPage,
+} from "./aggregator";
 
 export interface CommunitySearchResult {
   id: string;
@@ -76,8 +82,6 @@ export function fetchCommunityDetails(source: string, ids: string[]): Promise<Co
 }
 
 const MOD_PAGE_SIZE = 30;
-/** 聚合模式每源条数（页大小一半）：两源合并去重后展示 ≤15 条，每页图片请求量减半 */
-const AGG_PAGE_SIZE = 15;
 
 export const modLoaderOptions = computed<{ value: string; label: string }[]>(() => [
   { value: "", label: t("download.search.allLoaders") },
@@ -125,49 +129,30 @@ export function needsTranslation(): boolean {
   return communityTranslationEnabled.value;
 }
 
-/** 聚合搜索：两源并发，单源失败降级为空；按标题去重保留下载量高的一侧。`pageSize` 每源条数（聚合传 15）。
- *  返回 `maxKnownTotal` = 两源 total 较大值（已知总量下限，真实并集需拉全两源）；**勿改成 sum**（去重后会重复计数）。 */
-export async function searchAllSources(
-  query: string,
-  gameVersion: string,
-  loader: string,
-  category: string | null,
-  offset: number,
-  pageSize: number,
-): Promise<{ items: CommunityDisplayItem[]; maxKnownTotal: number; partial: boolean }> {
-  const queryParams = {
-    query,
-    gameVersion: gameVersion || null,
-    loader: loader || null,
-    category,
-    pageSize,
-    offset,
-  };
-  const [mr, cf] = await Promise.all([
-    invoke<CommunitySearchPage>("search_community", { source: "modrinth", query: queryParams, translate: needsTranslation() }).catch(() => null),
-    invoke<CommunitySearchPage>("search_community", { source: "curseforge", query: queryParams, translate: needsTranslation() }).catch(() => null),
-  ]);
-  if (mr === null && cf === null) {
-    throw new Error(t("download.search.allSourcesFailed"));
-  }
-  const merged = new Map<string, CommunityDisplayItem>();
-  const all: Array<[CommunitySearchResult, "modrinth" | "curseforge"]> = [
-    ...(cf?.items ?? []).map<[CommunitySearchResult, "curseforge"]>(h => [h, "curseforge"]),
-    ...(mr?.items ?? []).map<[CommunitySearchResult, "modrinth"]>(h => [h, "modrinth"]),
-  ];
-  for (const [h, src] of all) {
-    const key = cleanText(h.title).toLowerCase();
-    const prev = merged.get(key);
-    if (!prev || h.downloads > prev.downloads) {
-      merged.set(key, toDisplayItem(h, src));
-    }
-  }
-  return {
-    items: Array.from(merged.values()).sort((a, b) => b.downloads - a.downloads),
-    maxKnownTotal: Math.max(mr?.total ?? 0, cf?.total ?? 0),
-    partial: mr === null || cf === null,
-  };
+/** 拉取单源一页并转成展示项；聚合器只负责 offset/去重/排序。 */
+const fetchCommunitySource: FetchPage<CommunityDisplayItem> = async (source, params, offset, pageSize) => {
+  const page = await invoke<CommunitySearchPage>("search_community", {
+    source,
+    query: {
+      query: params.query,
+      gameVersion: params.gameVersion || null,
+      loader: params.loader || null,
+      category: params.category,
+      pageSize,
+      offset,
+    },
+    translate: needsTranslation(),
+  });
+  return { items: page.items.map(h => toDisplayItem(h, source)), total: page.total };
+};
+
+export function createCommunityAggregator(): CommunityAggregator<CommunityDisplayItem> {
+  return new CommunityAggregator(fetchCommunitySource, () => t("download.search.allSourcesFailed"));
 }
+
+const allAggregator = createCommunityAggregator();
+/** 记录上一次搜索的来源：从单源切回“全部”时强制重拉，避免展示切源前的旧聚合列表。 */
+let lastSource = "";
 
 export const communitySearch = reactive({
   source: "all" as "all" | "modrinth" | "curseforge",
@@ -181,22 +166,32 @@ export const communitySearch = reactive({
   results: [] as CommunityDisplayItem[],
   /** 结果总数：单源为平台精确命中数；聚合（source="all"）为两源较大值＝已知总量下限（非精确），UI 文案须标「至少」。 */
   total: 0,
+  /** 聚合模式已累积的结果数（单源为当前页末端位置）；用于推算页码下限。 */
+  loaded: 0,
+  /** 是否还有可加载结果（聚合模式两源未耗尽或已累积结果未展示完）。 */
+  hasMore: false,
   page: 1,
   /** 请求序号：筛选快速连切时只应用最后一次发起的结果（防过期响应覆盖） */
   searchSeq: 0,
 
-  async search(page = 1) {
+  async search(page = 1, force = false) {
     const seq = ++this.searchSeq;
     this.searching = true;
     this.error = "";
     try {
-      const pageSize = this.source === "all" ? AGG_PAGE_SIZE : MOD_PAGE_SIZE;
-      const offset = (page - 1) * pageSize;
+      const resetAll = force || lastSource !== "all";
+      lastSource = this.source;
       if (this.source === "all") {
-        const res = await searchAllSources(this.query.trim(), this.gameVersion, this.loader, null, offset, pageSize);
+        const res = await allAggregator.page(
+          page,
+          { query: this.query.trim(), gameVersion: this.gameVersion, loader: this.loader, category: null },
+          resetAll,
+        );
         if (seq !== this.searchSeq) return;
         this.results = res.items;
-        this.total = res.maxKnownTotal;
+        this.loaded = res.loaded;
+        this.total = res.total;
+        this.hasMore = res.hasMore;
         this.partialError = res.partial ? t("download.search.partialSource") : "";
       } else {
         const res = await invoke<CommunitySearchPage>("search_community", {
@@ -205,24 +200,28 @@ export const communitySearch = reactive({
             query: this.query.trim(),
             gameVersion: this.gameVersion || null,
             loader: this.loader || null,
-            pageSize,
-            offset,
+            pageSize: MOD_PAGE_SIZE,
+            offset: (page - 1) * MOD_PAGE_SIZE,
           },
           translate: needsTranslation(),
         });
         if (seq !== this.searchSeq) return;
         this.results = res.items.map(h => toDisplayItem(h, this.source as "modrinth" | "curseforge"));
         this.total = res.total;
+        this.loaded = Math.min(res.total, page * MOD_PAGE_SIZE);
+        this.hasMore = page * MOD_PAGE_SIZE < res.total;
         this.partialError = "";
       }
       this.page = page;
       this.searched = true;
     } catch (e) {
-      if (seq !== this.searchSeq) return;
+      if (seq !== this.searchSeq || e instanceof StaleSearchError) return;
       this.error = errMsg(e);
       this.searched = true;
       this.results = [];
       this.total = 0;
+      this.loaded = 0;
+      this.hasMore = false;
       this.partialError = "";
     } finally {
       if (seq === this.searchSeq) this.searching = false;
@@ -236,20 +235,25 @@ export const communitySearch = reactive({
     this.loader = "";
     this.results = [];
     this.total = 0;
+    this.loaded = 0;
+    this.hasMore = false;
     this.page = 1;
     this.searched = false;
     this.error = "";
-    this.search();
+    this.search(1, true);
   },
 
   ensureAutoSearch() {
     if (autoSearched || this.searching) return;
     autoSearched = true;
-    this.search();
+    this.search(1, true);
   },
 });
 
 export const communityTotalPages = computed(() => {
-  const pageSize = communitySearch.source === "all" ? AGG_PAGE_SIZE : MOD_PAGE_SIZE;
-  return Math.max(1, Math.ceil(communitySearch.total / pageSize));
+  if (communitySearch.source === "all") {
+    // 并集总量未知：本值只供 pager 可见性/兜底，UI 不展示分母（分母随加载增长会误导）。
+    return Math.max(1, Math.ceil(communitySearch.loaded / AGG_PAGE_SIZE), communitySearch.page);
+  }
+  return Math.max(1, Math.ceil(communitySearch.total / MOD_PAGE_SIZE));
 });

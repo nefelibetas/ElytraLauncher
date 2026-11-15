@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Component } from "vue";
+import { computed, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { communityTranslationEnabled, type CommunityDisplayItem } from "../../store/community/communitySearch";
 import { openResourceDetail } from "../../store/community/resourceDetail";
@@ -20,8 +20,10 @@ export interface CommunityResultState {
   searched: boolean;
   results: CommunityDisplayItem[];
   total: number;
+  /** 聚合模式：已加载列表之外是否还有结果（决定“下一页”是否可点） */
+  hasMore?: boolean;
   page: number;
-  search(page?: number): Promise<void> | void;
+  search(page?: number, force?: boolean): Promise<void> | void;
 }
 
 const props = withDefaults(
@@ -40,6 +42,11 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
+
+/** 聚合模式的并集总量未知，hasMore 才是权威；totalPages 仅作单源/兜底。 */
+const canNext = computed(
+  () => props.search.hasMore ?? (props.search.page < props.totalPages),
+);
 </script>
 
 <template>
@@ -79,13 +86,17 @@ const { t } = useI18n();
         </div>
       </div>
       <div class="cs-footer">
-        <div v-if="totalPages > 1" class="cs-pager">
+        <div v-if="totalPages > 1 || search.hasMore" class="cs-pager">
           <button class="cs-pager-btn" :disabled="search.page <= 1" @click="search.search(search.page - 1)">{{ t("download.search.prev") }}</button>
-          <span class="cs-pager-info">{{ search.page }} / {{ totalPages }}</span>
-          <button class="cs-pager-btn" :disabled="search.page >= totalPages" @click="search.search(search.page + 1)">{{ t("download.search.next") }}</button>
+          <span v-if="search.source === 'all'" class="cs-pager-info">{{ t("download.search.pageLabel", { page: search.page }) }}</span>
+          <span v-else class="cs-pager-info">{{ search.page }} / {{ totalPages }}</span>
+          <button class="cs-pager-btn" :disabled="!canNext" @click="search.search(search.page + 1)">{{ t("download.search.next") }}</button>
         </div>
         <!-- 聚合 all 的 total 是去重后下限，故用「至少」；单源精确用「共」 -->
-        <span class="cs-result-count">{{ t(search.source === "all" ? "download.search.resultCountAtLeast" : "download.search.resultCountExact", { count: search.total }, search.total) }}</span>
+        <span
+          class="cs-result-count"
+          :title="search.source === 'all' ? t('download.search.rankHint') : undefined"
+        >{{ t(search.source === "all" ? "download.search.resultCountAtLeast" : "download.search.resultCountExact", { count: search.total }, search.total) }}</span>
       </div>
     </template>
     <EmptyState v-else>

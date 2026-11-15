@@ -111,7 +111,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **错误提示两级**：toast（`showToast`，默认 4000ms、同屏 5 条、hover 暂停）vs AlertDialog（复杂错误，带复制）；均经 `errMsg()` 取首行
 - **键盘与焦点**：Tab/Shift+Tab 走 `utils/focusNav.ts` 自管遍历（文档序；弹窗内收窄成焦点陷阱，`data-tabskip` 跳过），不用浏览器原生遍历；焦点环由该模块**内联写入内描边**，不要再加 `:focus-visible` 外轮廓；弹窗需 `role="dialog" aria-modal="true"` + `focusDialog`/`restoreFocus`，提示通道用 `role="status"`
 - **展开/收起动画**：`<Transition name="expand">` + `.expand-enter-to/.expand-leave-from { max-height: 1000px }` 显式目标值（写在 active 类上会因同特异性覆盖 from 而无动画）
-- **社区资源搜索**：搜索表单 + 结果列表组件成对复制（绑各自 store）；聚合模式每源取 `AGG_PAGE_SIZE=15` 按标题去重；进入下载页并发预加载各 tab 热门（`ensureAutoSearch` 幂等）；刷新按钮 = 各 store 的 `reset()`
+- **社区资源搜索**：搜索表单 + 结果列表组件成对复制（绑各自 store）；聚合模式按源累积（每批 40 条），`mcmod_id` 优先、标题兜底去重，按标题相关度 + 平台加权下载量排序，页内从累积列表切片；进入下载页并发预加载各 tab 热门（`ensureAutoSearch` 幂等）；刷新按钮 = 各 store 的 `reset()`
 - **路由**：hash 路由，`RouteMeta.transition` + `routeLevel`/`tabOrder` 驱动动画；DownloadDetail 为顶级 tab（routeLevel 0）
 
 ### 注释规范（Rust / TS / Vue 通用）

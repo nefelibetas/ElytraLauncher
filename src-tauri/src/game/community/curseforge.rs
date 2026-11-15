@@ -270,11 +270,15 @@ pub(super) async fn search_curseforge(
     if let Some(page) = cache::get_search("curseforge", &cache_query) {
         return Ok(page);
     }
+    // sortField=2（Popularity）必须显式传：默认 Featured 与名称序接近，首条可能只有几百下载量。
+    // 只传 sortField 不够，API 默认 sortOrder=asc，会返回下载量最低的条目。
     let mut params: Vec<(&str, String)> = vec![
         ("pageSize", page_size.to_string()),
         ("index", offset.to_string()),
+        ("sortField", "2".into()),
+        ("sortOrder", "desc".into()),
     ];
-    // 空关键字不传 searchFilter（API 无热门概念，返回按名称序列表——API 限制）
+    // 空关键字不传 searchFilter：Popularity 负责热门列表
     if !query.is_empty() {
         params.push(("searchFilter", query.to_string()));
     }
@@ -514,6 +518,26 @@ mod tests {
             !first.title.is_empty() && !first.author.is_empty() && !first.id.is_empty(),
             "结果结构应完整: {:?}",
             first
+        );
+    }
+
+    /// 空关键字必须走 Popularity；默认 Featured 会返回只有几百下载量的条目（用户可见的乱序）。
+    #[tokio::test]
+    async fn curseforge_empty_query_returns_popular() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        let page = search_curseforge("", None, None, None, 0, 30)
+            .await
+            .unwrap();
+        assert!(!page.items.is_empty(), "空关键字应返回热门 Mod");
+        assert!(
+            page.items[0].downloads > 1_000_000,
+            "空关键字首条应按 Popularity，实际: {} ({})",
+            page.items[0].title,
+            page.items[0].downloads
         );
     }
 
