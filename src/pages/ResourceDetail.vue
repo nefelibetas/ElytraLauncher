@@ -3,6 +3,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { AlertCircle, RefreshCw } from "@lucide/vue";
 import { showToast } from "../utils/toast";
 import { errMsg } from "../utils/error";
 import { resourceDetail, openResourceDetail } from "../store/community/resourceDetail";
@@ -185,7 +186,7 @@ const selectedWithoutDownload = computed(
 /** 版本请求序号：自增；响应返回时与当前值不符即过期（项目已切换/返回/重试）→ 丢弃。 */
 let versionsSeq = 0;
 
-async function loadVersions() {
+async function loadVersions(refresh = false) {
   const seq = ++versionsSeq;
   const it = item.value;
   if (!it) return;
@@ -194,7 +195,7 @@ async function loadVersions() {
   loadingVersions.value = true;
   versionError.value = "";
   try {
-    const all = await fetchVersions(it.source, it.id);
+    const all = await fetchVersions(it.source, it.id, refresh);
     if (seq !== versionsSeq) return; // 过期响应丢弃
     // 仅显示正式版：剔除所有支持版本均为快照/预发布的文件（混版保留）
     versions.value = dlShowReleaseOnly.value
@@ -275,7 +276,7 @@ const incompatItems = computed(() => depItems.value.filter(d => incompatIdSet.va
 /** 依赖请求序号：自增；响应返回时与当前值不符即过期（选中版本已切换/返回）→ 丢弃。 */
 let depsSeq = 0;
 
-async function loadDeps() {
+async function loadDeps(force = false) {
   const seq = ++depsSeq;
   const it = item.value;
   const reqIds = selectedDepIds.value;
@@ -285,8 +286,8 @@ async function loadDeps() {
     depError.value = "";
     return;
   }
-  // 返回还原：恢复依赖快照，不重新请求（seq 已自增，在飞请求随之过期）
-  if (resourceDetail.pendingDepItems !== null) {
+  // 返回还原：恢复依赖快照，不重新请求（手动刷新时跳过快照强制回源）
+  if (!force && resourceDetail.pendingDepItems !== null) {
     depItems.value = resourceDetail.pendingDepItems;
     depError.value = resourceDetail.pendingDepError;
     loadingDeps.value = false;
@@ -294,10 +295,16 @@ async function loadDeps() {
     resourceDetail.pendingDepError = "";
     return;
   }
+  resourceDetail.pendingDepItems = null;
+  resourceDetail.pendingDepError = "";
   loadingDeps.value = true;
   depError.value = "";
   try {
-    const items = await fetchCommunityDetails(it.source, Array.from(new Set([...reqIds, ...incIds])));
+    const items = await fetchCommunityDetails(
+      it.source,
+      Array.from(new Set([...reqIds, ...incIds])),
+      force,
+    );
     if (seq !== depsSeq) return; // 过期响应丢弃
     depItems.value = items;
   } catch (e) {
@@ -308,7 +315,7 @@ async function loadDeps() {
   }
 }
 
-watch(selectedDepIds, loadDeps);
+watch(selectedDepIds, () => void loadDeps());
 
 function pickVersion(v: CommunityVersion) {
   selectedVersionId.value = v.version_id;
@@ -524,6 +531,12 @@ async function resolveDependencyPlan(initial: boolean) {
   }
 }
 
+/** 前置解析失败后手动重试；保留已选版本覆盖。 */
+function retryDependencyPlan() {
+  if (depDialogLoading.value || depDialogUpdating.value || !depDialogOpen.value) return;
+  void resolveDependencyPlan(true);
+}
+
 /** 解析前置并打开确认框；无前置则直接提交主 Mod。 */
 async function openModDownload(version: CommunityVersion, target: string) {
   if (depDisposed) return;
@@ -733,6 +746,16 @@ async function copyName() {
               <span class="mv-spacer"></span>
 
               <button
+                type="button"
+                class="mv-icon-btn"
+                :disabled="loadingVersions"
+                v-tooltip="t('download.detail.refreshVersions')"
+                @click="loadVersions(true)"
+              >
+                <RefreshCw :size="14" :class="{ 'mv-spin': loadingVersions }" />
+              </button>
+
+              <button
                 v-if="fileKind || isModpack"
                 class="mv-dl"
                 :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload }"
@@ -773,10 +796,19 @@ async function copyName() {
               <div class="spinner"></div>
               <p class="mv-state-text">{{ t("download.detail.loadingVersions") }}</p>
             </div>
-            <div v-else-if="versionError" class="mv-state err">
-              <p>{{ versionError }}</p>
-              <button class="md-btn mv-retry" @click="loadVersions">{{ t("download.detail.retry") }}</button>
-            </div>
+            <button
+              v-else-if="versionError"
+              type="button"
+              class="md-load-error"
+              v-tooltip="t('download.detail.clickToRetry')"
+              @click="loadVersions(true)"
+            >
+              <AlertCircle :size="20" />
+              <span class="md-load-error-info">
+                <span class="md-load-error-title">{{ t("download.detail.versionsLoadFailed") }}</span>
+                <span class="md-load-error-desc">{{ versionError }}</span>
+              </span>
+            </button>
             <div v-else-if="versions.length === 0" class="mv-state">{{ t("download.detail.noVersions") }}</div>
             <div v-else class="mv-list">
               <div v-if="filteredVersions.length === 0" class="mv-state">{{ t("download.detail.noMatchingVersions") }}</div>
@@ -813,6 +845,16 @@ async function copyName() {
             <div v-if="selectedVersionId && (selectedDepIds.length > 0 || selectedIncompatIds.length > 0)" class="md-card md-deps-card">
               <div class="mv-head">
                 <span class="mv-title">{{ t("download.detail.dependencies") }}<span v-if="!loadingDeps" class="mv-count"> | {{ t("download.detail.dependencyCount", { count: selectedDepIds.length }, selectedDepIds.length) }}</span></span>
+                <span class="mv-spacer"></span>
+                <button
+                  type="button"
+                  class="mv-icon-btn"
+                  :disabled="loadingDeps"
+                  v-tooltip="t('download.detail.refreshDependencies')"
+                  @click="loadDeps(true)"
+                >
+                  <RefreshCw :size="13" :class="{ 'mv-spin': loadingDeps }" />
+                </button>
               </div>
               <div v-if="!loadingDeps && incompatItems.length > 0" class="md-dep-warn">
                 <div class="md-dep-warn-title">{{ t("download.detail.incompatibleTitle", { count: incompatItems.length }) }}</div>
@@ -823,7 +865,19 @@ async function copyName() {
                 <div class="spinner"></div>
                 <p class="md-dep-state-text">{{ t("download.detail.loadingDependencies") }}</p>
               </div>
-              <div v-else-if="depError" class="md-dep-state err">{{ depError }}</div>
+              <button
+                v-else-if="depError"
+                type="button"
+                class="md-dep-error"
+                v-tooltip="t('download.detail.clickToRetry')"
+                @click="loadDeps(true)"
+              >
+                <AlertCircle :size="18" />
+                <span class="md-dep-error-info">
+                  <span class="md-dep-error-title">{{ t("download.detail.depsLoadFailed") }}</span>
+                  <span class="md-dep-error-desc">{{ depError }}</span>
+                </span>
+              </button>
               <div v-else-if="depItems.length === 0" class="md-dep-empty">{{ t("download.detail.noDependencies") }}</div>
               <div v-else class="md-dep-list">
                 <div v-for="d in requiredItems" :key="d.id" class="md-dep-item" @click="openResourceDetail(
@@ -861,6 +915,7 @@ async function copyName() {
       @confirm="onDependencyConfirm"
       @main-only="onDependencyMainOnly"
       @version-change="onDependencyVersionChange"
+      @retry="retryDependencyPlan"
     />
   </Teleport>
   </div>
@@ -1174,6 +1229,37 @@ async function copyName() {
   cursor: not-allowed;
 }
 
+.mv-icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.mv-icon-btn:hover:not(:disabled) {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+  background: var(--color-brand-bg);
+}
+
+.mv-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.mv-spin {
+  animation: spin 0.7s linear infinite;
+}
+
 .mv-dl-note {
   flex-shrink: 0;
   display: flex;
@@ -1225,9 +1311,53 @@ async function copyName() {
   font-size: var(--fs-base);
   color: var(--text-tertiary);
 }
-.mv-state.err { color: var(--color-danger); }
 .mv-state-text { font-size: var(--fs-base); color: var(--text-tertiary); }
-.mv-retry { flex: 0 0 auto; padding: 5px 20px; font-size: var(--fs-sm); }
+
+.md-load-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 20px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-page);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.md-load-error:hover {
+  border-color: var(--color-brand);
+  background: var(--color-brand-bg);
+}
+
+.md-load-error > svg {
+  flex: none;
+  color: var(--color-danger);
+}
+
+.md-load-error-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.md-load-error-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.md-load-error-desc {
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
+  word-break: break-word;
+}
 
 .spinner {
   width: 32px; height: 32px;
@@ -1349,6 +1479,53 @@ async function copyName() {
 .md-dep-state.err {
   color: var(--color-danger);
   font-size: var(--fs-sm);
+}
+
+.md-dep-error {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow-y: auto;
+  transition: filter var(--dur-fast);
+}
+
+.md-dep-error:hover {
+  filter: brightness(1.04);
+}
+
+.md-dep-error > svg {
+  flex: none;
+  color: var(--color-danger);
+  margin-top: 1px;
+}
+
+.md-dep-error-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.md-dep-error-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.md-dep-error-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  word-break: break-word;
 }
 
 .md-dep-warn {

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, type Component } from "vue";
 import { useI18n } from "vue-i18n";
+import { AlertCircle } from "@lucide/vue";
 import { communityTranslationEnabled, type CommunityDisplayItem } from "../../store/community/communitySearch";
 import { openResourceDetail } from "../../store/community/resourceDetail";
 import { fmtCount } from "../../utils/format";
 import IconImage from "../common/IconImage.vue";
 import LoadingSpinner from "../common/LoadingSpinner.vue";
 import EmptyState from "../common/EmptyState.vue";
-import ErrorState from "../common/ErrorState.vue";
 
 /** 搜索状态实例的最小结构（communitySearch 与 createCategorySearch 单例均满足）。 */
 export interface CommunityResultState {
@@ -54,7 +54,19 @@ const canNext = computed(
 <template>
   <div class="cs-result-card">
     <div v-if="search.partialError" class="cs-partial">{{ search.partialError }}</div>
-    <ErrorState v-if="search.error" :text="search.error" />
+    <button
+      v-if="search.error"
+      type="button"
+      class="cs-load-error"
+      :title="t('download.search.clickToRetry')"
+      @click="search.search(1, true)"
+    >
+      <AlertCircle :size="36" :stroke-width="1.5" />
+      <span class="cs-load-error-info">
+        <span class="cs-load-error-title">{{ t("download.search.loadFailed") }}</span>
+        <span class="cs-load-error-desc">{{ search.error }}</span>
+      </span>
+    </button>
     <LoadingSpinner
       v-else-if="search.searching"
       :text="search.query.trim() ? t('download.search.searchingHint', { category: label }) : t('download.search.loadingPopular', { category: label })"
@@ -123,6 +135,50 @@ const canNext = computed(
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.cs-load-error {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 20px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+
+.cs-load-error:hover { background: var(--surface-hover); }
+
+.cs-load-error > svg {
+  flex: none;
+  color: var(--color-danger);
+}
+
+.cs-load-error-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.cs-load-error-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cs-load-error-desc {
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
+  word-break: break-word;
 }
 
 .cs-list { display: flex; flex-direction: column; padding: 6px 8px; }

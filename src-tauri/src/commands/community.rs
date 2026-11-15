@@ -18,12 +18,14 @@ pub async fn get_community_versions(
     project_id: String,
     game_version: Option<String>,
     loader: Option<String>,
+    refresh: Option<bool>,
 ) -> Result<Vec<community::CommunityVersion>, String> {
     community::get_community_versions(
         &source,
         &project_id,
         game_version.as_deref(),
         loader.as_deref(),
+        refresh.unwrap_or(false),
     )
     .await
 }
@@ -33,8 +35,15 @@ pub async fn get_community_details(
     source: String,
     ids: Vec<String>,
     translate: Option<bool>,
+    refresh: Option<bool>,
 ) -> Result<Vec<community::CommunityDependencyItem>, String> {
-    community::get_community_details(&source, &ids, translate.unwrap_or(true)).await
+    community::get_community_details(
+        &source,
+        &ids,
+        translate.unwrap_or(true),
+        refresh.unwrap_or(false),
+    )
+    .await
 }
 
 /// 解析主 Mod 的前置依赖（required + optional），按目标实例的 MC/loader 选兼容版本。

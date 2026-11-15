@@ -168,10 +168,13 @@ pub async fn get_community_versions(
     project_id: &str,
     game_version: Option<&str>,
     loader: Option<&str>,
+    refresh: bool,
 ) -> Result<Vec<CommunityVersion>, String> {
     match source {
-        "modrinth" => modrinth::modrinth_versions(project_id, game_version, loader).await,
-        "curseforge" => curseforge::curseforge_versions(project_id, game_version, loader).await,
+        "modrinth" => modrinth::modrinth_versions(project_id, game_version, loader, refresh).await,
+        "curseforge" => {
+            curseforge::curseforge_versions(project_id, game_version, loader, refresh).await
+        }
         other => Err(keyed_msg!(
             "errors.community.unknownSource",
             "未知 Mod 来源\n{other}"
@@ -184,13 +187,14 @@ pub async fn get_community_details(
     source: &str,
     ids: &[String],
     translate: bool,
+    refresh: bool,
 ) -> Result<Vec<CommunityDependencyItem>, String> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
     let mut items = match source {
-        "modrinth" => modrinth::modrinth_details(ids).await?,
-        "curseforge" => curseforge::curseforge_details(ids).await?,
+        "modrinth" => modrinth::modrinth_details(ids, refresh).await?,
+        "curseforge" => curseforge::curseforge_details(ids, refresh).await?,
         other => bail_key!("errors.community.unknownSource", "未知 Mod 来源\n{other}"),
     };
     if translate {

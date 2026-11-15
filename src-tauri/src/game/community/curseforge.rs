@@ -5,6 +5,7 @@ use serde::Serialize;
 use super::cache;
 use super::shared::{
     api_routes, api_urls, get_json_multi, post_json_multi, split_tag, version_range, ApiPlatform,
+    QUERY_TIMEOUT_SECS,
 };
 use super::wiki_entry;
 use super::{
@@ -391,9 +392,12 @@ pub(super) async fn curseforge_versions(
     project_id: &str,
     game_version: Option<&str>,
     loader: Option<&str>,
+    refresh: bool,
 ) -> Result<Vec<CommunityVersion>, String> {
-    if let Some(hit) = cache::get_version("curseforge", project_id, game_version, loader) {
-        return Ok(hit);
+    if !refresh {
+        if let Some(hit) = cache::get_version("curseforge", project_id, game_version, loader) {
+            return Ok(hit);
+        }
     }
     let mut params: Vec<(&str, String)> = vec![("pageSize", "30".into())];
     if let Some(gv) = game_version {
@@ -480,13 +484,32 @@ pub(super) async fn curseforge_versions(
 
 pub(super) async fn curseforge_details(
     ids: &[String],
+    refresh: bool,
 ) -> Result<Vec<CommunityDependencyItem>, String> {
-    let (cached, missing) = cache::get_details("curseforge", ids);
+    let (cached, missing) = if refresh {
+        (Vec::new(), ids.to_vec())
+    } else {
+        cache::get_details("curseforge", ids)
+    };
     if missing.is_empty() {
         return Ok(cache::merge_details(ids, cached, Vec::new()));
     }
-    let joined = missing.join(",");
-    let data = curseforge_get("/mods", &[("modIds", joined)]).await?;
+    // CF 批量详情只支持 POST /v1/mods + {"modIds":[...]}；GET ?modIds= 返回 404
+    let mod_ids: Vec<u64> = missing.iter().filter_map(|id| id.parse().ok()).collect();
+    if mod_ids.is_empty() {
+        return Ok(cache::merge_details(ids, cached, Vec::new()));
+    }
+    let key = api_key()?;
+    let body = serde_json::json!({ "modIds": mod_ids });
+    let urls = api_routes(ApiPlatform::CurseForge, "/mods");
+    let data = post_json_multi(
+        &urls,
+        &body,
+        |u| http().post(u).header("x-api-key", key.as_str()),
+        QUERY_TIMEOUT_SECS,
+        QUERY_TIMEOUT_SECS,
+    )
+    .await?;
     let arr = data["data"].as_array().ok_or_else(|| {
         keyed_msg!(
             "errors.community.curseforgeDetailsDataMissing",
@@ -662,6 +685,25 @@ mod tests {
                 .iter()
                 .any(|h| h.id == "238222" || h.title.contains("Just Enough Items (JEI)")),
             "搜全名应命中 JEI"
+        );
+    }
+
+    /// CF 批量详情必须走 POST /v1/mods；GET ?modIds= 返回 404（前置依赖面板依赖此接口）。
+    #[tokio::test]
+    async fn curseforge_batch_details_fetches_jei() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        let items = curseforge_details(&["238222".to_string()], true)
+            .await
+            .expect("批量详情请求应成功");
+        assert_eq!(items.len(), 1);
+        assert!(
+            items[0].title.contains("Just Enough Items"),
+            "应返回 JEI 详情: {}",
+            items[0].title
         );
     }
 

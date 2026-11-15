@@ -2,7 +2,7 @@
 // 下载确认弹窗：主 Mod + 必装/可选前置；分类折叠、整体滚动、单分类渲染上限 200。
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown, CircleCheck, Info, LoaderCircle } from "@lucide/vue";
+import { AlertCircle, ChevronDown, CircleCheck, Info, LoaderCircle } from "@lucide/vue";
 import { focusDialog, restoreFocus } from "../../utils/focusNav";
 import { formatError } from "../../utils/error";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
@@ -30,6 +30,7 @@ const emit = defineEmits<{
   confirm: [selectedOptional: string[]];
   mainOnly: [];
   versionChange: [projectId: string, versionId: string];
+  retry: [];
 }>();
 
 const { t } = useI18n();
@@ -241,7 +242,19 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
           </div>
 
           <div v-if="loading" class="dep-state">{{ t("download.detail.modDepsLoading") }}</div>
-          <div v-else-if="error" class="dep-state dep-error-text">{{ error }}</div>
+          <button
+            v-else-if="error"
+            type="button"
+            class="dep-load-error"
+            :title="t('download.detail.clickToRetry')"
+            @click="emit('retry')"
+          >
+            <AlertCircle :size="18" />
+            <span class="dep-load-error-info">
+              <span class="dep-load-error-title">{{ t("download.detail.depsLoadFailed") }}</span>
+              <span class="dep-load-error-desc">{{ errorText(error) }}</span>
+            </span>
+          </button>
           <template v-else-if="plan">
             <div
               v-if="requiredRows.length || optionalRows.length"
@@ -633,6 +646,50 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   color: var(--color-danger);
   font-size: var(--fs-base);
   line-height: 1.6;
+  word-break: break-word;
+}
+
+.dep-load-error {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--surface-page);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+
+.dep-load-error:hover {
+  background: var(--color-danger-bg);
+}
+
+.dep-load-error > svg {
+  flex: none;
+  color: var(--color-danger);
+  margin-top: 1px;
+}
+
+.dep-load-error-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dep-load-error-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dep-load-error-desc {
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
   word-break: break-word;
 }
 

@@ -79,12 +79,25 @@ export interface CommunityDependencyItem {
   translated: string | null;
 }
 
-export function fetchVersions(source: string, projectId: string): Promise<CommunityVersion[]> {
-  return invoke<CommunityVersion[]>("get_community_versions", { source, projectId });
+export function fetchVersions(
+  source: string,
+  projectId: string,
+  refresh = false,
+): Promise<CommunityVersion[]> {
+  return invoke<CommunityVersion[]>("get_community_versions", { source, projectId, refresh });
 }
 
-export function fetchCommunityDetails(source: string, ids: string[]): Promise<CommunityDependencyItem[]> {
-  return invoke<CommunityDependencyItem[]>("get_community_details", { source, ids, translate: needsTranslation() });
+export function fetchCommunityDetails(
+  source: string,
+  ids: string[],
+  refresh = false,
+): Promise<CommunityDependencyItem[]> {
+  return invoke<CommunityDependencyItem[]>("get_community_details", {
+    source,
+    ids,
+    translate: needsTranslation(),
+    refresh,
+  });
 }
 
 const MOD_PAGE_SIZE = 30;

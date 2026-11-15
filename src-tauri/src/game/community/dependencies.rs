@@ -517,9 +517,11 @@ async fn fetch_versions(
     loader: &str,
 ) -> Result<Vec<CommunityVersion>, String> {
     let versions = match source {
-        "modrinth" => modrinth::modrinth_versions(project_id, Some(mc_version), Some(loader)).await,
+        "modrinth" => {
+            modrinth::modrinth_versions(project_id, Some(mc_version), Some(loader), false).await
+        }
         "curseforge" => {
-            curseforge::curseforge_versions(project_id, Some(mc_version), Some(loader)).await
+            curseforge::curseforge_versions(project_id, Some(mc_version), Some(loader), false).await
         }
         other => {
             return Err(keyed_msg!(
@@ -700,7 +702,7 @@ async fn fill_names(source: &str, items: &mut [ModDependencyItem]) {
         return;
     }
     let names: HashMap<String, String> = match source {
-        "modrinth" => modrinth::modrinth_details(&ids)
+        "modrinth" => modrinth::modrinth_details(&ids, false)
             .await
             .map(|items| {
                 items
@@ -709,7 +711,7 @@ async fn fill_names(source: &str, items: &mut [ModDependencyItem]) {
                     .collect()
             })
             .unwrap_or_default(),
-        "curseforge" => curseforge::curseforge_details(&ids)
+        "curseforge" => curseforge::curseforge_details(&ids, false)
             .await
             .map(|details| {
                 details
@@ -977,7 +979,7 @@ mod real_tests {
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "需要真实 Modrinth API"]
     async fn resolves_real_modrinth_dependencies() {
-        let versions = modrinth_versions("YL57xq9U", Some("1.20.1"), Some("fabric"))
+        let versions = modrinth_versions("YL57xq9U", Some("1.20.1"), Some("fabric"), false)
             .await
             .expect("拉取 Iris 版本");
         let version = versions

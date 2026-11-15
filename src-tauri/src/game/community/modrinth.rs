@@ -167,9 +167,12 @@ pub(super) async fn modrinth_versions(
     project_id: &str,
     game_version: Option<&str>,
     loader: Option<&str>,
+    refresh: bool,
 ) -> Result<Vec<CommunityVersion>, String> {
-    if let Some(hit) = cache::get_version("modrinth", project_id, game_version, loader) {
-        return Ok(hit);
+    if !refresh {
+        if let Some(hit) = cache::get_version("modrinth", project_id, game_version, loader) {
+            return Ok(hit);
+        }
     }
     let mut params: Vec<(&str, String)> = Vec::new();
     if let Some(gv) = game_version {
@@ -301,8 +304,13 @@ pub(crate) async fn modrinth_projects_raw(
 
 pub(super) async fn modrinth_details(
     ids: &[String],
+    refresh: bool,
 ) -> Result<Vec<CommunityDependencyItem>, String> {
-    let (cached, missing) = cache::get_details("modrinth", ids);
+    let (cached, missing) = if refresh {
+        (Vec::new(), ids.to_vec())
+    } else {
+        cache::get_details("modrinth", ids)
+    };
     if missing.is_empty() {
         return Ok(cache::merge_details(ids, cached, Vec::new()));
     }
