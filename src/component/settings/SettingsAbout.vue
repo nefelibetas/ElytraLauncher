@@ -194,9 +194,21 @@ async function copyVersionInfo() {
         <div class="ab-title-row">
           <h2>Elytra Launcher</h2>
           <span class="ab-version" :class="{ 'has-update': updateAvailable }">{{ t("settings.about.version", { version }) }}</span>
-          <span v-if="updateState === 'latest'" class="ab-latest">
+          <span v-if="updateState === 'available' && updateInfo" class="ab-update-summary">
+            <span class="ab-update-new">{{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}</span>
+            <button type="button" class="ab-update-download" @click="openUpdatePage">
+              {{ t("settings.about.downloadUpdate") }}
+            </button>
+          </span>
+          <span v-else-if="updateState === 'latest'" class="ab-latest">
             <Check :size="13" />
             {{ t("settings.about.upToDate") }}
+          </span>
+          <span v-else-if="updateState === 'none'" class="ab-update-note">
+            {{ t("settings.about.noRelease") }}
+          </span>
+          <span v-else-if="updateState === 'error'" class="ab-update-note is-error" :title="updateError">
+            {{ t("settings.about.checkFailed") }}
           </span>
           <span class="ab-dot-toggle">
             <CheckToggle v-model="dotEnabled">{{ t("settings.about.updateNotifications") }}</CheckToggle>
@@ -216,27 +228,7 @@ async function copyVersionInfo() {
             {{ updateState === "checking" ? t("settings.about.checkingUpdate") : t("settings.about.checkUpdate") }}
           </button>
         </div>
-        <!-- 常驻固定高度状态槽：检查结果只替换内容，不参与卡片高度计算，避免点击后整块下移。 -->
-        <div class="ab-update-slot" role="status" aria-live="polite">
-          <template v-if="updateState === 'available' && updateInfo">
-            <span class="ab-update-new">
-              {{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}
-            </span>
-            <button type="button" class="ab-update-download" @click="openUpdatePage">
-              {{ t("settings.about.downloadUpdate") }}
-            </button>
-          </template>
-          <span v-else-if="updateState === 'checking'" class="ab-update-muted">
-            <RefreshCw :size="13" class="ab-spin" />
-            {{ t("settings.about.checkingUpdate") }}
-          </span>
-          <span v-else-if="updateState === 'none'" class="ab-update-muted">
-            {{ t("settings.about.noRelease") }}
-          </span>
-          <span v-else-if="updateState === 'error'" class="ab-update-error" :title="updateError">
-            {{ updateError }}
-          </span>
-        </div>
+        <!-- 更新检查结果已并入标题行，避免在卡片内再占一行。 -->
       </div>
     </header>
 
@@ -406,16 +398,18 @@ async function copyVersionInfo() {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .ab-title-row h2 {
+  flex: none;
   margin: 0;
   font-size: var(--fs-3xl);
   color: var(--text-primary);
 }
 
 .ab-version {
+  flex: none;
   padding: 2px 8px;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
@@ -479,43 +473,49 @@ async function copyVersionInfo() {
   cursor: not-allowed;
 }
 
-.ab-update-slot {
-  display: flex;
+.ab-update-summary {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 26px;
-  margin-top: 6px;
+  gap: 8px;
+  min-width: 0;
   font-size: var(--fs-sm);
-  white-space: nowrap;
 }
 
 .ab-update-new {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
-  color: var(--color-brand);
+  color: var(--color-error);
 }
 
 .ab-update-download {
-  height: 26px;
-  padding: 0 10px;
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
   font-size: var(--fs-sm);
-  color: var(--color-brand);
+  color: var(--color-error);
   background: var(--surface-elevated);
-  border: 1px solid var(--color-brand);
+  border: 1px solid var(--color-error);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
-.ab-update-muted {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-tertiary);
+.ab-update-download:hover {
+  background: var(--surface-hover);
 }
 
-.ab-update-error {
+.ab-update-note {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.ab-update-note.is-error {
   color: var(--color-error);
 }
 
@@ -523,6 +523,7 @@ async function copyVersionInfo() {
   display: inline-flex;
   align-items: center;
   align-self: center;
+  flex: none;
   gap: 4px;
   font-size: var(--fs-sm);
   color: var(--color-success);
