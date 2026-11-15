@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { modpackSearch } from "../../store/community/categorySearch";
+import { modpackSearch, modpackTagOptions } from "../../store/community/categorySearch";
 import { importLocalModpack } from "../../store/task/modpack";
 import CommunitySearchBar from "./CommunitySearchBar.vue";
 
@@ -23,6 +23,8 @@ async function importLocal() {
   <CommunitySearchBar
     :search="modpackSearch"
     :title="t('download.search.title', { category: t('download.categories.modpack') })"
+    show-tag
+    :tag-options="modpackTagOptions"
     id-prefix="modpack"
   >
     <template #prepend-actions>

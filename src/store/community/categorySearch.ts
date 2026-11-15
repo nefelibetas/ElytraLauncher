@@ -9,6 +9,7 @@ import {
   type CommunitySearchPage,
 } from "../community/communitySearch";
 import { AGG_PAGE_SIZE, StaleSearchError } from "./aggregator";
+import { modpackTags } from "./tags";
 import { errMsg } from "../../utils/error";
 import { t } from "../../i18n";
 
@@ -139,6 +140,10 @@ export const datapackSearch = createCategorySearch("datapack");
 export const modpackSearch = createCategorySearch("modpack");
 /** worlds（地图存档）：CurseForge 单源（Modrinth 无 worlds project_type，锁定 source 防无效请求） */
 export const worldsSearch = createCategorySearch("worlds", "curseforge");
+
+export const modpackTagOptions = computed<{ value: string; label: string }[]>(() =>
+  modpackTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
 
 export const shaderTotalPages = computed(() => totalPages(shaderSearch));
 export const resourcepackTotalPages = computed(() => totalPages(resourcepackSearch));

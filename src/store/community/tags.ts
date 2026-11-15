@@ -37,6 +37,32 @@ export const modTags: CommunityTag[] = [
   { value: "421/library", labelKey: "download.tags.library" },
 ];
 
+/** 整合包内容分类；CF 侧按 classId=4471 的 categoryId，MR 侧按 modpack 的 categories。 */
+export const modpackTags: CommunityTag[] = [
+  { value: "", labelKey: "download.search.all" },
+  { value: "4472/technology", labelKey: "download.tags.technology" },
+  { value: "4473/magic", labelKey: "download.tags.magic" },
+  { value: "4475/adventure", labelKey: "download.tags.adventure" },
+  { value: "4484/multiplayer", labelKey: "download.tags.multiplayer" },
+  { value: "/optimization", labelKey: "download.tags.optimization" },
+  { value: "4479/challenging", labelKey: "download.tags.hardcore" },
+  { value: "4483/combat", labelKey: "download.tags.combat" },
+  { value: "4478/quests", labelKey: "download.tags.quests" },
+  { value: "/kitchen-sink", labelKey: "download.tags.kitchenSink" },
+  { value: "4476/", labelKey: "download.tags.exploration" },
+  { value: "4477/", labelKey: "download.tags.minigame" },
+  { value: "4474/", labelKey: "download.tags.scifi" },
+  { value: "4736/", labelKey: "download.tags.skyblock" },
+  { value: "5128/", labelKey: "download.tags.vanillaPlus" },
+  { value: "4487/", labelKey: "download.tags.ftb" },
+  { value: "4480/", labelKey: "download.tags.mapBased" },
+  { value: "4481/lightweight", labelKey: "download.tags.lightweight" },
+  { value: "4482/", labelKey: "download.tags.large" },
+  { value: "7418/", labelKey: "download.tags.horror" },
+  { value: "9243/", labelKey: "download.tags.expert" },
+  { value: "10683/", labelKey: "download.tags.rlcraft" },
+];
+
 /** 当前分类是否被指定来源支持；无斜杠的异常值按“全部”处理。 */
 export function tagSupports(tag: string, source: CommunitySource): boolean {
   if (!tag || !tag.includes("/")) return true;

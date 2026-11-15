@@ -585,6 +585,27 @@ mod tests {
         assert_eq!(page.total, 0);
     }
 
+    #[tokio::test]
+    async fn curseforge_modpack_category_filter_works() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        let page = search_curseforge(
+            "",
+            None,
+            None,
+            Some("modpack"),
+            Some("4472/technology"),
+            0,
+            30,
+        )
+        .await
+        .unwrap();
+        assert!(!page.items.is_empty(), "整合包分类过滤应返回结果");
+    }
+
     /// CF 搜索不匹配名称括号内缩写（"JEI" 搜不到）；搜全名命中 JEI（id 238222）。
     #[tokio::test]
     async fn curseforge_full_name_finds_jei() {
