@@ -208,14 +208,17 @@ pub(super) async fn modrinth_versions(
                 .find(|f| f["primary"].as_bool() == Some(true))
                 .or_else(|| files.first())?;
             let hashes = file["hashes"].as_object();
+            let game_versions: Vec<String> = v["game_versions"]
+                .as_array()?
+                .iter()
+                .filter_map(|g| g.as_str().map(str::to_string))
+                .collect();
+            let game_version_range = version_range(&game_versions);
             Some(CommunityVersion {
                 version_id: v["id"].as_str()?.to_string(),
                 version_number: v["version_number"].as_str()?.to_string(),
-                game_versions: v["game_versions"]
-                    .as_array()?
-                    .iter()
-                    .filter_map(|g| g.as_str().map(str::to_string))
-                    .collect(),
+                game_versions,
+                game_version_range,
                 loaders: v["loaders"]
                     .as_array()?
                     .iter()

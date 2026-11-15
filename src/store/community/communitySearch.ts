@@ -49,6 +49,8 @@ export interface CommunityVersion {
   version_id: string;
   version_number: string;
   game_versions: string[];
+  /** 该文件支持的 MC 版本范围（"最低 ~ 最高"，仅数值版本）；无法解析为 null */
+  game_version_range: string | null;
   loaders: string[];
   filename: string;
   download_url: string;

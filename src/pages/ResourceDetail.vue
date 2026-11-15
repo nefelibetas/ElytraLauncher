@@ -69,6 +69,15 @@ function majorVersion(gv: string): string {
   return m ? m[0] : gv;
 }
 
+/** 快照/预发布/候选等非正式版本标记（26w14a、26.3-snapshot-8、-pre1、-rc1、candidate） */
+const SNAPSHOT_RE = /\d{2}w\d{2}|snapshot|pre\d*|rc\d*|candidate/i;
+const isSnapshot = (gv: string): boolean => SNAPSHOT_RE.test(gv);
+
+/** 参与筛选/展示的 MC 版本：开启“仅正式版”时剔除快照/预发布，与项目级版本范围口径一致。 */
+function shownGameVersions(gvs: string[]): string[] {
+  return dlShowReleaseOnly.value ? gvs.filter(gv => !isSnapshot(gv)) : gvs;
+}
+
 const loaderScopedVersions = computed(() =>
   loaderFilter.value
     ? versions.value.filter(v => v.loaders.includes(loaderFilter.value))
@@ -76,7 +85,7 @@ const loaderScopedVersions = computed(() =>
 );
 
 const gameVersionOptions = computed(() =>
-  Array.from(new Set(loaderScopedVersions.value.flatMap(v => v.game_versions).map(majorVersion))).sort((a, b) =>
+  Array.from(new Set(loaderScopedVersions.value.flatMap(v => shownGameVersions(v.game_versions).map(majorVersion)))).sort((a, b) =>
     new Intl.Collator(undefined, { numeric: true }).compare(b, a),
   ),
 );
@@ -99,7 +108,7 @@ const filteredVersions = computed(() =>
     .filter(
       v =>
         (!loaderFilter.value || v.loaders.includes(loaderFilter.value)) &&
-        (!gameVersionFilter.value || v.game_versions.some(gv => majorVersion(gv) === gameVersionFilter.value)),
+        (!gameVersionFilter.value || shownGameVersions(v.game_versions).some(gv => majorVersion(gv) === gameVersionFilter.value)),
     )
     .sort((a, b) => {
       const t = (TYPE_ORDER[a.version_type] ?? 3) - (TYPE_ORDER[b.version_type] ?? 3);
@@ -159,10 +168,6 @@ onBeforeUnmount(() => {
   depSubmitting.value = false;
   pendingMain = null;
 });
-
-/** 快照/预发布/候选等非正式版本标记（26w14a、26.3-snapshot-8、-pre1、-rc1、candidate） */
-const SNAPSHOT_RE = /\d{2}w\d{2}|snapshot|pre\d*|rc\d*|candidate/i;
-const isSnapshot = (gv: string): boolean => SNAPSHOT_RE.test(gv);
 
 /** 当前选中版本文件 id（切换项目/重新加载时重置）；须在 loadVersions 前声明：immediate watch 在 setup 期即调用。 */
 const selectedVersionId = ref("");
@@ -759,7 +764,10 @@ async function copyName() {
                     <span v-else-if="v.version_type === 'beta'" class="mv-type beta">beta</span>
                   </span>
                   <span class="mv-tags">
-                    <span v-for="gv in v.game_versions.slice(0, 3)" :key="gv" class="mv-tag gv">{{ gv }}</span>
+                    <span v-if="v.game_version_range" class="mv-tag gv">{{ v.game_version_range }}</span>
+                    <template v-else>
+                      <span v-for="gv in v.game_versions.slice(0, 3)" :key="gv" class="mv-tag gv">{{ gv }}</span>
+                    </template>
                   </span>
                 </div>
                 <span class="mv-meta">

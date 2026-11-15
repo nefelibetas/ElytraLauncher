@@ -55,7 +55,10 @@ pub struct CommunityDependency {
 pub struct CommunityVersion {
     pub version_id: String,
     pub version_number: String,
+    /// 该文件声明的 MC 版本（原始标签，可能含快照/预发布）
     pub game_versions: Vec<String>,
+    /// 该文件的 MC 版本范围（"最低 ~ 最高"，仅数值版本；无法解析为 None）
+    pub game_version_range: Option<String>,
     pub loaders: Vec<String>,
     pub filename: String,
     pub download_url: String,

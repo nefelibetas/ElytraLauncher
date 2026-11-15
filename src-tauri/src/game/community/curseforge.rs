@@ -129,18 +129,27 @@ fn curseforge_url_segment(category: Option<&str>) -> &'static str {
     }
 }
 
-/// 从 gameVersions（如 "NeoForge"）提取已知 loader 名。
-fn curseforge_loaders(game_versions: &[String]) -> Vec<String> {
-    game_versions
-        .iter()
+/// CF `gameVersions` 是混合标签（MC 版本 + 加载器 + Client/Server）；提取已知加载器名。
+fn curseforge_loaders(tags: &[String]) -> Vec<String> {
+    tags.iter()
         .filter_map(|v| match v.as_str() {
             "Forge" => Some("forge"),
             "Fabric" => Some("fabric"),
             "NeoForge" => Some("neoforge"),
             "Quilt" => Some("quilt"),
+            "Iris" => Some("iris"),
+            "OptiFine" => Some("optifine"),
             _ => None,
         })
         .map(str::to_string)
+        .collect()
+}
+
+/// CF `gameVersions` 里只有 MC 版本号以数字开头（快照/预发布同样），其余是加载器或环境标签。
+fn curseforge_game_versions(tags: &[String]) -> Vec<String> {
+    tags.iter()
+        .filter(|v| matches!(v.as_bytes().first(), Some(b) if b.is_ascii_digit()))
+        .cloned()
         .collect()
 }
 
@@ -406,12 +415,14 @@ pub(super) async fn curseforge_versions(
     let versions: Vec<CommunityVersion> = arr
         .iter()
         .filter_map(|f| {
-            let game_versions: Vec<String> = f["gameVersions"]
+            let tags: Vec<String> = f["gameVersions"]
                 .as_array()?
                 .iter()
                 .filter_map(|g| g.as_str().map(str::to_string))
                 .collect();
-            let loaders = curseforge_loaders(&game_versions);
+            let loaders = curseforge_loaders(&tags);
+            let game_versions = curseforge_game_versions(&tags);
+            let game_version_range = version_range(&game_versions);
             let sha1 = f["hashes"]
                 .as_array()?
                 .iter()
@@ -427,6 +438,7 @@ pub(super) async fn curseforge_versions(
                 version_id: f["id"].as_u64()?.to_string(),
                 version_number: f["fileName"].as_str()?.to_string(),
                 game_versions,
+                game_version_range,
                 loaders,
                 filename: f["fileName"].as_str()?.to_string(),
                 download_url: f["downloadUrl"].as_str().unwrap_or("").to_string(),
@@ -674,8 +686,35 @@ mod tests {
             "NeoForge".to_string(),
             "Server".to_string(),
             "26.2".to_string(),
+            "Iris".to_string(),
+            "OptiFine".to_string(),
         ];
-        assert_eq!(curseforge_loaders(&gv), vec!["neoforge"]);
+        assert_eq!(
+            curseforge_loaders(&gv),
+            vec!["neoforge", "iris", "optifine"]
+        );
+    }
+
+    #[test]
+    fn curseforge_game_versions_drops_mixed_tags() {
+        let tags = vec![
+            "1.21.2-Snapshot".to_string(),
+            "1.20.1".to_string(),
+            "OptiFine".to_string(),
+            "Iris".to_string(),
+            "Client".to_string(),
+            "Server".to_string(),
+            "Forge".to_string(),
+        ];
+        assert_eq!(
+            curseforge_game_versions(&tags),
+            vec!["1.21.2-Snapshot", "1.20.1"]
+        );
+        assert_eq!(
+            version_range(&curseforge_game_versions(&tags)),
+            Some("1.20.1".to_string()),
+            "快照不参与范围，加载器标签不参与版本范围"
+        );
     }
 
     #[test]

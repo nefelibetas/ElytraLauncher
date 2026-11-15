@@ -104,6 +104,7 @@ mod tests {
             version_id: id.into(),
             version_number: id.into(),
             game_versions: vec!["1.20.1".into()],
+            game_version_range: Some("1.20.1".into()),
             loaders: vec!["fabric".into()],
             filename: format!("{id}.jar"),
             download_url: String::new(),
