@@ -159,7 +159,8 @@ async function copyRoomCode() {
       </button>
     </div>
 
-    <div v-show="onlinePanelTab === 'host'" class="online-sec">
+    <Transition name="online-tab" mode="out-in">
+    <div v-if="onlinePanelTab === 'host'" key="host" class="online-sec">
       <p class="online-desc">{{ t("tools.online.hostDesc1") }}</p>
       <div class="online-hint-row">
         <p class="online-desc online-hint-row-text">{{ t("tools.online.hostDesc2") }}</p>
@@ -210,7 +211,7 @@ async function copyRoomCode() {
       </div>
     </div>
 
-    <div v-show="onlinePanelTab === 'join'" class="online-sec">
+    <div v-else key="join" class="online-sec">
       <p class="online-desc">{{ t("tools.online.joinDesc") }}</p>
 
       <div v-if="joinBlocked()" class="online-sec-note">{{ t("tools.online.joiningInProgress") }}</div>
@@ -254,6 +255,7 @@ async function copyRoomCode() {
         </button>
       </div>
     </div>
+    </Transition>
 
     <div v-if="onlinePlayers.length > 0" class="online-sec">
       <div class="online-sec-title">{{ t("tools.online.players", { count: onlinePlayers.length }, onlinePlayers.length) }}</div>
@@ -344,6 +346,28 @@ async function copyRoomCode() {
   color: var(--color-brand);
   background: var(--surface-card);
   box-shadow: var(--shadow-sm);
+}
+
+.online-tab-enter-active,
+.online-tab-leave-active {
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+}
+
+.online-tab-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.online-tab-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .online-tab-enter-active,
+  .online-tab-leave-active {
+    transition: none;
+  }
 }
 
 .online-sec {

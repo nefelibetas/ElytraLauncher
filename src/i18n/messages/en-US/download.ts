@@ -194,6 +194,7 @@ export default {
     notFound: "Resource not found",
     selectFileFirst: "Select a version file first",
     selectedFileMissing: "The selected version file no longer exists. Please select another.",
+    noDirectDownload: "The author disabled third-party downloads. Get it from the source page.",
     unsupportedType: "This resource type cannot be downloaded yet",
     noTargetVersion: "Select an instance on the Instance Management page first (it is selected automatically after the version download completes)",
     modLoaderRequired: "{loader} has no ModLoader; this mod cannot be installed",

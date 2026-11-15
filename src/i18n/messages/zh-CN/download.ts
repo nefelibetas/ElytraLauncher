@@ -194,6 +194,7 @@ export default {
     notFound: "未找到资源信息",
     selectFileFirst: "请先选择一个版本文件",
     selectedFileMissing: "所选版本文件不存在，请重新选择",
+    noDirectDownload: "作者未开放第三方下载，请前往来源页面获取",
     unsupportedType: "该资源类型暂不支持下载",
     noTargetVersion: "请先在实例管理页选择实例（版本下载完成后会自动选中）",
     modLoaderRequired: "当前实例为{loader}，没有可用的 ModLoader，无法下载 Mod",

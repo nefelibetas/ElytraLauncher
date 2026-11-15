@@ -241,8 +241,11 @@ fn classify(
     let mut kinds: HashSet<String> = HashSet::new();
     let mut need_retarget = false;
     for res in batch {
-        // 监听错误（目标被删/后端异常）：等下一轮重定向自愈，不推送
-        let Ok(event) = res else { continue };
+        // 监听错误（目标被删/后端异常）：立即请求重定向，避免失效 watch 留在集合里
+        let Ok(event) = res else {
+            need_retarget = true;
+            continue;
+        };
         for path in &event.paths {
             let Some((base, target)) = longest_match(watched, path) else {
                 continue;
@@ -267,6 +270,8 @@ fn classify(
                             .unwrap_or_default();
                         if RESOURCE_KINDS.contains(&name.as_str()) {
                             kinds.insert(name);
+                            // 资源目录新建/删除后监听集合过期：重定向补挂或摘除该目录
+                            need_retarget = true;
                         } else if name.ends_with(".json") {
                             // 版本 json 落盘/改写：loader 推断结果可能变化，重推列表
                             versions_changed = true;
@@ -276,6 +281,10 @@ fn classify(
                 },
                 Target::VersionResource(_, kind) => {
                     kinds.insert(kind.clone());
+                    // 监听目录本身被删除/改名：摘除失效 watch，重建时才能重新挂上
+                    if path.as_path() == base {
+                        need_retarget = true;
+                    }
                 }
             }
         }
@@ -385,6 +394,14 @@ mod tests {
     }
 
     #[test]
+    fn classify_requests_retarget_on_watch_error() {
+        let watched = targets();
+        let err = Err(notify::Error::generic("watch lost"));
+        let (versions, kinds, retarget) = classify(&watched, &[err]);
+        assert!(!versions && kinds.is_empty() && retarget);
+    }
+
+    #[test]
     fn classify_routes_paths_to_changes() {
         let versions_dir = root().join("versions");
         let watched = vec![
@@ -405,13 +422,19 @@ mod tests {
         assert!(!versions && !retarget);
         assert_eq!(kinds, HashSet::from(["mods".to_string()]));
 
+        // 被监听的资源目录本身被删除/改名 → 报 mods 并重定向摘除失效 watch
+        let (_, kinds, retarget) = classify(&watched, &[event(&["versions/1.20.1/mods"])]);
+        assert_eq!(kinds, HashSet::from(["mods".to_string()]));
+        assert!(retarget);
+
         // versions/ 一级条目（新增/删除版本目录）→ 列表变化
         let (versions, kinds, _) = classify(&watched, &[event(&["versions/1.21"])]);
         assert!(versions && kinds.is_empty());
 
-        // 聚焦版本的一级资源子目录被创建/删除 → 资源变化
-        let (_, kinds, _) = classify(&watched, &[event(&["versions/1.20.1/saves"])]);
+        // 聚焦版本的一级资源子目录被创建/删除 → 资源变化，且需重定向更新监听集合
+        let (_, kinds, retarget) = classify(&watched, &[event(&["versions/1.20.1/saves"])]);
         assert_eq!(kinds, HashSet::from(["saves".to_string()]));
+        assert!(retarget);
 
         // 版本 json 落盘/改写 → loader 推断可能变化，重推列表
         let (versions, _, _) = classify(&watched, &[event(&["versions/1.20.1/1.20.1.json"])]);

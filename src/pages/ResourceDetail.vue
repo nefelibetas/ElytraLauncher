@@ -169,8 +169,18 @@ onBeforeUnmount(() => {
   pendingMain = null;
 });
 
-/** 当前选中版本文件 id（切换项目/重新加载时重置）；须在 loadVersions 前声明：immediate watch 在 setup 期即调用。 */
+/** 当前选中的版本文件 id（切换项目/重新加载时重置）；须在 loadVersions 前声明：immediate watch 在 setup 期即调用。 */
 const selectedVersionId = ref("");
+
+/** 当前选中的版本文件（过滤/重新加载后可能为 null）。 */
+const selectedFile = computed(() =>
+  versions.value.find(v => v.version_id === selectedVersionId.value) ?? null,
+);
+
+/** 作者禁止第三方分发时 CurseForge 不返回 downloadUrl：只能去来源页面手动下载。 */
+const selectedWithoutDownload = computed(
+  () => !!selectedFile.value && !selectedFile.value.download_url,
+);
 
 /** 版本请求序号：自增；响应返回时与当前值不符即过期（项目已切换/返回/重试）→ 丢弃。 */
 let versionsSeq = 0;
@@ -343,6 +353,15 @@ const fileKind = computed<DownloadFileKind | null>(() => {
 });
 
 const isModpack = computed(() => resourceDetail.backTab === "modpack");
+
+/** 下载按钮提示：未选版本 > 无直链 > 正常下载/安装。 */
+const downloadButtonTooltip = computed(() => {
+  if (!selectedVersionId.value) return t("download.detail.selectVersionTooltip");
+  if (selectedWithoutDownload.value) return t("download.detail.noDirectDownload");
+  return isModpack.value
+    ? t("download.detail.installTooltip")
+    : t("download.detail.downloadTooltip");
+});
 
 async function submitModpackInstall() {
   if (!selectedVersionId.value) {
@@ -559,6 +578,11 @@ async function submitDownload() {
 
 async function submitDownloadInner() {
   if (depDisposed) return;
+  // 作者禁止第三方分发时文件无直链：modpack 安装与普通下载都不能走任务，提前给出明确提示
+  if (selectedFile.value && !selectedFile.value.download_url) {
+    showToast(t("download.detail.noDirectDownload"));
+    return;
+  }
   // modpack 分流：不要求已选启动版本（安装器自建版本目录）
   if (isModpack.value) {
     await submitModpackInstall();
@@ -711,8 +735,8 @@ async function copyName() {
               <button
                 v-if="fileKind || isModpack"
                 class="mv-dl"
-                :class="{ 'mv-dl-disabled': !selectedVersionId }"
-                v-tooltip="selectedVersionId ? (isModpack ? t('download.detail.installTooltip') : t('download.detail.downloadTooltip')) : t('download.detail.selectVersionTooltip')"
+                :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload }"
+                v-tooltip="downloadButtonTooltip"
                 @click="submitDownload"
               >{{ isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
 
@@ -736,6 +760,13 @@ async function copyName() {
                 @update:open="openFilter = $event ? 'game' : ''"
                 @select="pickGame"
               />
+            </div>
+
+            <div v-if="selectedWithoutDownload" class="mv-dl-note">
+              <span>{{ t("download.detail.noDirectDownload") }}</span>
+              <button type="button" class="mv-dl-note-btn" @click="gotoSource">
+                {{ t("download.detail.gotoSource", { source: sourceLabel }) }}
+              </button>
             </div>
 
             <div v-if="loadingVersions" class="mv-state">
@@ -1141,6 +1172,42 @@ async function copyName() {
   border-color: var(--border-default);
   color: var(--text-tertiary);
   cursor: not-allowed;
+}
+
+.mv-dl-note {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--fs-sm);
+}
+
+.mv-dl-note span {
+  flex: 1;
+  min-width: 0;
+}
+
+.mv-dl-note-btn {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-warning);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+
+.mv-dl-note-btn:hover {
+  background: var(--color-warning-bg);
 }
 
 /* ── 自定义下拉 ── */

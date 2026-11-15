@@ -146,23 +146,32 @@ export function ensureVersionDirEvents() {
 	if (dirEventsReady) return;
 	dirEventsReady = true;
 	void listen<VersionDirChanged>(VERSION_DIR_CHANGED, (ev) => {
+		const version = ev.payload.version;
 		const savesMatch =
-			ev.payload.kinds.includes("saves") && ev.payload.version === worldsLoadedFor.value;
+			ev.payload.kinds.includes("saves") && version === worldsLoadedFor.value;
 		const modsMatch =
-			ev.payload.kinds.includes("mods") && ev.payload.version === modsLoadedFor.value;
-		if (!savesMatch && !modsMatch) return;
+			ev.payload.kinds.includes("mods") && version === modsLoadedFor.value;
+		const resourceKinds = RESOURCE_KINDS.filter(
+			kind => ev.payload.kinds.includes(kind) && version === resourceRefs(kind).loadedFor.value,
+		);
+		if (!savesMatch && !modsMatch && resourceKinds.length === 0) return;
 		if (document.visibilityState !== "visible") {
 			dirEventsStale = true;
 			return;
 		}
-		if (savesMatch) void refreshWorldsSilent(ev.payload.version);
-		if (modsMatch) void loadMods(ev.payload.version);
+		if (savesMatch) void refreshWorldsSilent(version);
+		if (modsMatch) void loadMods(version);
+		for (const kind of resourceKinds) void refreshResourceSilent(version, kind);
 	});
 	document.addEventListener("visibilitychange", () => {
 		if (document.visibilityState !== "visible" || !dirEventsStale) return;
 		dirEventsStale = false;
 		if (worldsLoadedFor.value) void refreshWorldsSilent(worldsLoadedFor.value);
 		if (modsLoadedFor.value) void loadMods(modsLoadedFor.value);
+		for (const kind of RESOURCE_KINDS) {
+			const version = resourceRefs(kind).loadedFor.value;
+			if (version) void refreshResourceSilent(version, kind);
+		}
 	});
 }
 
@@ -463,6 +472,26 @@ export function loadResourceLists(versionName: string) {
   for (const k of RESOURCE_KINDS) {
     void loadResourceQuick(versionName, k);
     void loadResourceDetailed(versionName, k);
+  }
+}
+
+/** 静默刷新资源列表：本地扫描立即反映外部增删；同文件（大小/修改时间一致）保留 Modrinth 识别结果。 */
+async function refreshResourceSilent(versionName: string, kind: ResourceKind) {
+  const { list, quick, loadedFor } = resourceRefs(kind);
+  try {
+    const files = await invoke<ResourceFile[]>("list_resource_files", {
+      versionName,
+      kind,
+    });
+    quick.value = files;
+    const prev = new Map(list.value.map(file => [file.file_name, file]));
+    list.value = quickToDetail(files).map(file => {
+      const hit = prev.get(file.file_name);
+      return hit && hit.size === file.size && hit.last_modified === file.last_modified ? hit : file;
+    });
+    loadedFor.value = versionName;
+  } catch {
+    // 静默失败：保留旧列表，等下一次事件或重载
   }
 }
 
