@@ -20,11 +20,11 @@ export default {
     releases: "Releases",
     checkUpdate: "Check for updates",
     checkingUpdate: "Checking...",
+    updateNotifications: "New version alerts",
     newVersion: "New version {version}",
     downloadUpdate: "Download",
     upToDate: "You're up to date",
     noRelease: "No published release yet",
-    updateHint: "Check GitHub Releases for the latest version",
     specialThanks: "Special Thanks",
     specialThanksNote:
       "Different focuses, not a feature-completeness ranking. Only projects we actually referenced or used are listed; other excellent launchers are omitted, not judged. Pick what fits you.",

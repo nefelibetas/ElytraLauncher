@@ -13,3 +13,12 @@
     // localStorage 不可用时交给应用启动流程
   }
 })();
+
+// 骨架屏阶段也屏蔽原生右键；App 挂载后由其接管自定义文本菜单。
+document.addEventListener(
+  "contextmenu",
+  function (event) {
+    event.preventDefault();
+  },
+  true
+);

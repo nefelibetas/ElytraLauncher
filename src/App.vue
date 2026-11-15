@@ -12,6 +12,7 @@ import CheckToggle from "./component/common/CheckToggle.vue";
 import { dlState, ensureListen, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
 import { ensureAutoTasksListen, lastAutoTasksFinished } from "./store/config/autoTasks";
 import { setSelected } from "./store/app/selectedVersion";
+import { checkLauncherUpdate } from "./store/app/update";
 import { alertState, type AlertAction } from "./store/app/alert";
 import { toasts, dismissToast, pauseToast, resumeToast, showToast } from "./utils/toast";
 import { moveFocus, clearFocusRing, focusDialog, restoreFocus } from "./utils/focusNav";
@@ -335,6 +336,8 @@ onMounted(async () => {
       .catch(() => {});
     // 顶级 tab 页面在首帧后预取：保持启动包精简，点击设置/资源中心/任务中心时不再等 chunk。
     prefetchTabPages();
+    // 启动后静默检查一次更新；失败只在「关于」内展示，不弹 toast。
+    void checkLauncherUpdate();
   });
   // 崩溃恢复横幅与内存监控分别由 DownloadDetail / 设置页按需启动。
 });

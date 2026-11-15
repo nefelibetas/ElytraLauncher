@@ -1,13 +1,21 @@
 <script setup lang="ts">
 // 设置 → 关于：应用信息、同类项目推荐、数据与镜像、ModLoader、许可与声明。
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Check, Copy, ExternalLink, RefreshCw, Waypoints } from "@lucide/vue";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
-import { checkLauncherUpdate, updateState, updateInfo } from "../../store/app/update";
+import {
+  checkLauncherUpdate,
+  setShowUpdateDot,
+  showUpdateDot,
+  updateError,
+  updateInfo,
+  updateState,
+} from "../../store/app/update";
+import CheckToggle from "../common/CheckToggle.vue";
 import pcl2Icon from "../../assets/thanks/pcl2.png";
 import hmclIcon from "../../assets/thanks/hmcl.png";
 import mcimIcon from "../../assets/thanks/mcim.png";
@@ -117,6 +125,12 @@ const runtimeCredits: Credit[] = [
 
 const version = ref("—");
 
+const dotEnabled = computed({
+  get: () => showUpdateDot.value,
+  set: (v: boolean) => setShowUpdateDot(v),
+});
+const updateAvailable = computed(() => updateState.value === "available" && updateInfo.value !== null);
+
 onMounted(async () => {
   try {
     version.value = await getVersion();
@@ -130,11 +144,8 @@ function open(url: string) {
 }
 
 async function handleCheckUpdate() {
-  try {
-    await checkLauncherUpdate();
-  } catch (e) {
-    showToast(errMsg(e));
-  }
+  // 失败在状态槽内展示，不再额外弹 toast。
+  await checkLauncherUpdate();
 }
 
 function openUpdatePage() {
@@ -182,7 +193,14 @@ async function copyVersionInfo() {
       <div class="ab-hero-main">
         <div class="ab-title-row">
           <h2>Elytra Launcher</h2>
-          <span class="ab-version">{{ t("settings.about.version", { version }) }}</span>
+          <span class="ab-version" :class="{ 'has-update': updateAvailable }">{{ t("settings.about.version", { version }) }}</span>
+          <span v-if="updateState === 'latest'" class="ab-latest">
+            <Check :size="13" />
+            {{ t("settings.about.upToDate") }}
+          </span>
+          <span class="ab-dot-toggle">
+            <CheckToggle v-model="dotEnabled">{{ t("settings.about.updateNotifications") }}</CheckToggle>
+          </span>
         </div>
         <p class="ab-tagline">{{ t("settings.about.tagline") }}</p>
         <div class="ab-quick">
@@ -208,14 +226,16 @@ async function copyVersionInfo() {
               {{ t("settings.about.downloadUpdate") }}
             </button>
           </template>
-          <span v-else-if="updateState === 'latest'" class="ab-update-ok">
-            <Check :size="13" />
-            {{ t("settings.about.upToDate") }}
+          <span v-else-if="updateState === 'checking'" class="ab-update-muted">
+            <RefreshCw :size="13" class="ab-spin" />
+            {{ t("settings.about.checkingUpdate") }}
           </span>
           <span v-else-if="updateState === 'none'" class="ab-update-muted">
             {{ t("settings.about.noRelease") }}
           </span>
-          <span v-else class="ab-update-hint">{{ t("settings.about.updateHint") }}</span>
+          <span v-else-if="updateState === 'error'" class="ab-update-error" :title="updateError">
+            {{ updateError }}
+          </span>
         </div>
       </div>
     </header>
@@ -379,11 +399,12 @@ async function copyVersionInfo() {
 
 .ab-hero-main {
   min-width: 0;
+  flex: 1;
 }
 
 .ab-title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -399,7 +420,27 @@ async function copyVersionInfo() {
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   background: var(--surface-hover);
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
+}
+
+.ab-version.has-update {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+@supports (color-mix(in srgb, red 12%, transparent)) {
+  .ab-version.has-update {
+    background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  }
+}
+
+.ab-dot-toggle {
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
 }
 
 .ab-tagline {
@@ -464,16 +505,28 @@ async function copyVersionInfo() {
   cursor: pointer;
 }
 
-.ab-update-hint,
 .ab-update-muted {
-  color: var(--text-tertiary);
-}
-
-.ab-update-ok {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  color: var(--text-tertiary);
+}
+
+.ab-update-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-error);
+}
+
+.ab-latest {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
   color: var(--color-success);
+  white-space: nowrap;
 }
 
 .ab-spin {

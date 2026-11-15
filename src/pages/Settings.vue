@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // 页面容器：SideNav + 各 tab 编排。
+import { computed } from "vue";
 import { SlidersHorizontal, Download, Palette, Link2, FileText, KeyRound, Info } from "@lucide/vue";
 import SettingsLaunchOptions from "../component/settings/SettingsLaunchOptions.vue";
 import SettingsJdk from "../component/settings/SettingsJdk.vue";
@@ -12,9 +13,11 @@ import SettingsAbout from "../component/settings/SettingsAbout.vue";
 import ScrollTopFab from "../component/common/ScrollTopFab.vue";
 import SideNav from "../component/common/SideNav.vue";
 import { settingsTab } from "../store/app/settingsTab";
+import { showUpdateDot, updateState } from "../store/app/update";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
+const showAboutDot = computed(() => showUpdateDot.value && updateState.value === "available");
 </script>
 
 <template>
@@ -29,7 +32,7 @@ const { t } = useI18n();
         { key: 'appearance', label: t('settings.tabs.appearance'), icon: Palette },
         { key: 'online', label: t('settings.tabs.online'), icon: Link2 },
         { key: 'log', label: t('settings.tabs.log'), icon: FileText },
-        { key: 'about', label: t('settings.tabs.about'), icon: Info },
+        { key: 'about', label: t('settings.tabs.about'), icon: Info, dot: showAboutDot },
       ]"
     >
       <div v-if="settingsTab === 'launch'" key="launch" class="stg-page">

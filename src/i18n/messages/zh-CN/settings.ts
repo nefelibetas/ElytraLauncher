@@ -20,11 +20,11 @@ export default {
     releases: "版本发布",
     checkUpdate: "检查更新",
     checkingUpdate: "检查中...",
+    updateNotifications: "新版本提醒",
     newVersion: "发现新版本 {version}",
     downloadUpdate: "前往下载",
     upToDate: "已是最新版本",
     noRelease: "暂无已发布版本",
-    updateHint: "检查 GitHub Releases 获取最新版本",
     specialThanks: "特别感谢",
     specialThanksNote:
       "不同取向，不是功能完整度比较。这里只列实际参考或使用较多的项目，不是完整榜单；其他优秀启动器未列出，不代表不好，选顺手的即可。",

@@ -10,6 +10,8 @@ export interface NavTab {
   key: string;
   label: string;
   icon: Component;
+  /** 红点提示（如关于页发现新版本）。 */
+  dot?: boolean;
 }
 
 const props = withDefaults(
@@ -70,6 +72,7 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
       >
         <component :is="tab.icon" :size="16" />
         <span>{{ tab.label }}</span>
+        <span v-if="tab.dot" class="sn-dot" aria-hidden="true" />
         <button
           v-if="refreshable && !noRefreshKeys.includes(tab.key)"
           class="sn-refresh"
@@ -136,6 +139,15 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
   transition: all var(--dur-fast);
   user-select: none;
   text-align: left;
+}
+
+.sn-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-error);
 }
 
 .sn-tab:hover {

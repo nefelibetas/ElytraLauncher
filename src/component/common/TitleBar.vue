@@ -8,6 +8,7 @@ import { ArrowLeft, Play, Download, ListChecks, Settings, Minus, X, Feather, Squ
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { detailTitle } from "../../store/community/resourceDetail";
 import { dlState } from "../../store/task/download";
+import { showUpdateDot, updateState } from "../../store/app/update";
 
 const route = useRoute();
 const appWindow = getCurrentWindow();
@@ -65,6 +66,8 @@ const items = [
 
 /** 任务中心导航项：有活动任务时显示进行中徽标。 */
 const activeTasks = computed(() => dlState.tasks.filter(t => t.status === "running" || t.status === "pending").length);
+/** 设置入口红点：发现新版本且用户未关闭提示时显示。 */
+const showUpdateBadge = computed(() => showUpdateDot.value && updateState.value === "available");
 
 function isActive(p: string) { return route.path === p; }
 const maximized = ref(false);
@@ -141,6 +144,11 @@ onUnmounted(() => unlistenResize?.());
             <ListChecks v-if="item.icon === 'list'" :size="16" />
             <Settings v-if="item.icon === 'settings'" :size="16" />
             <span class="label">{{ t(item.labelKey) }}</span>
+            <span
+              v-if="item.path === '/settings' && showUpdateBadge"
+              class="nav-dot"
+              aria-hidden="true"
+            />
             <span
               v-if="item.path === '/download-detail' && activeTasks > 0"
               class="nav-badge"
@@ -226,6 +234,7 @@ onUnmounted(() => unlistenResize?.());
 }
 
 .nav {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -260,6 +269,18 @@ onUnmounted(() => unlistenResize?.());
 }
 
 .label { font-size: var(--fs-base); }
+
+.nav-dot {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-error);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
 
 .nav-badge {
   min-width: 16px;
