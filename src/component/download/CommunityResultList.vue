@@ -51,6 +51,7 @@ const canNext = computed(
 
 <template>
   <div class="cs-result-card">
+    <div v-if="search.partialError" class="cs-partial">{{ search.partialError }}</div>
     <ErrorState v-if="search.error" :text="search.error" />
     <LoadingSpinner
       v-else-if="search.searching"
@@ -61,7 +62,6 @@ const canNext = computed(
       <p>{{ t("download.search.emptyHint", { category: label }) }}</p>
     </EmptyState>
     <template v-else-if="search.searched">
-      <div v-if="search.partialError" class="cs-partial">{{ search.partialError }}</div>
       <div class="cs-list">
         <div v-for="m in search.results" :key="m.key" class="cs-card">
           <div

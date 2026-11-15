@@ -1,4 +1,4 @@
-//! 社区资源搜索 / 版本查询（Modrinth + CurseForge 官方 API，类别由 category 区分）。
+//! 社区资源搜索 / 版本查询（Modrinth + CurseForge 官方 API；资源类型由 category 区分，内容分类由 tag 区分）。
 //! 两平台 ID 体系/鉴权/返回结构不同，分开实现、统一出参：CurseForge 需 x-api-key
 //! （用户 key 优先，其次 constants.rs 经 .env 注入），Modrinth 无需 key。简介翻译来自 MCIM 镜像，失败降级英文。
 //! 模块布局：[`api`]/[`shared`]/[`modrinth`]/[`curseforge`]/[`translation`]/[`wiki_entry`]。

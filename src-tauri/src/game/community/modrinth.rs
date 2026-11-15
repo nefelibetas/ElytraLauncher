@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use super::cache;
-use super::shared::{api_urls, get_json_multi, version_range, ApiPlatform};
+use super::shared::{api_urls, get_json_multi, split_tag, version_range, ApiPlatform};
 use super::wiki_entry;
 use super::{
     CommunityDependency, CommunityDependencyItem, CommunitySearchPage, CommunitySearchResult,
@@ -50,11 +50,30 @@ pub(super) async fn search_modrinth(
     game_version: Option<&str>,
     loader: Option<&str>,
     category: Option<&str>,
+    tag: Option<&str>,
     offset: u64,
     page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
-    let cache_query = SearchQuery::new(query, game_version, loader, category, offset, page_size);
+    let cache_query = SearchQuery::new(
+        query,
+        game_version,
+        loader,
+        category,
+        tag,
+        offset,
+        page_size,
+    );
     if let Some(page) = cache::get_search("modrinth", &cache_query) {
+        return Ok(page);
+    }
+    let (_, mr_tag) = split_tag(tag);
+    // 只有 CurseForge 侧的组合（"407/"）：MR 无对应分类，返回空页并缓存，避免退化成未过滤全量。
+    if tag.is_some_and(|t| t.contains('/')) && mr_tag.is_none() {
+        let page = CommunitySearchPage {
+            items: Vec::new(),
+            total: 0,
+        };
+        cache::put_search("modrinth", &cache_query, &page);
         return Ok(page);
     }
     let mut facets: Vec<Vec<String>> = Vec::new();
@@ -81,6 +100,9 @@ pub(super) async fn search_modrinth(
             return Ok(page);
         }
         _ => facets.push(vec![format!("project_type:{}", category.unwrap_or("mod"))]),
+    }
+    if let Some(slug) = mr_tag {
+        facets.push(vec![format!("categories:{slug}")]);
     }
     let mut params: Vec<(&str, String)> = vec![
         ("query", query.to_string()),
@@ -304,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn search_modrinth_works() {
-        let page = search_modrinth("jei", Some("1.21.1"), Some("fabric"), None, 0, 30).await;
+        let page = search_modrinth("jei", Some("1.21.1"), Some("fabric"), None, None, 0, 30).await;
         assert!(page.is_ok(), "Modrinth 搜索应成功: {:?}", page.err());
         let page = page.unwrap();
         assert!(!page.items.is_empty(), "搜 jei 应返回结果");
@@ -318,7 +340,9 @@ mod tests {
 
     #[tokio::test]
     async fn modrinth_empty_query_returns_popular() {
-        let page = search_modrinth("", None, None, None, 0, 30).await.unwrap();
+        let page = search_modrinth("", None, None, None, None, 0, 30)
+            .await
+            .unwrap();
         assert!(!page.items.is_empty(), "空关键字应返回热门 Mod");
         let first = &page.items[0];
         assert!(
@@ -329,6 +353,23 @@ mod tests {
             first.title,
             first.downloads
         );
+    }
+
+    #[tokio::test]
+    async fn modrinth_category_filter_works() {
+        let page = search_modrinth("", None, None, None, Some("6814/optimization"), 0, 30)
+            .await
+            .unwrap();
+        assert!(!page.items.is_empty(), "分类过滤应返回结果");
+    }
+
+    #[tokio::test]
+    async fn modrinth_skips_curseforge_only_tag() {
+        let page = search_modrinth("", None, None, None, Some("407/"), 0, 30)
+            .await
+            .unwrap();
+        assert!(page.items.is_empty(), "MR 无对应分类时应返回空页");
+        assert_eq!(page.total, 0);
     }
 
     #[test]

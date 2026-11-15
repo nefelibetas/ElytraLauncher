@@ -138,6 +138,7 @@ mod tests {
             game_version: Some("1.21.1".into()),
             loader: Some("fabric".into()),
             category: None,
+            tag: None,
             offset: 0,
             page_size: 30,
         };
@@ -148,6 +149,14 @@ mod tests {
             ..q.clone()
         };
         assert!(get_search(&source, &other_version).is_none());
+        let other_tag = SearchQuery {
+            tag: Some("412/technology".into()),
+            ..q.clone()
+        };
+        assert!(
+            get_search(&source, &other_tag).is_none(),
+            "内容分类必须参与缓存键"
+        );
         let other_offset = SearchQuery {
             offset: 30,
             ..q.clone()
@@ -275,7 +284,7 @@ pub(crate) fn merge_details(
     ids.iter().filter_map(|id| by_id.remove(id)).collect()
 }
 
-type SearchKey = (String, String, String, String, String, u64, u32);
+type SearchKey = (String, String, String, String, String, String, u64, u32);
 type SearchEntry = (Instant, CommunitySearchPage);
 
 static SEARCH_CACHE: LazyLock<Mutex<HashMap<SearchKey, SearchEntry>>> =
@@ -290,6 +299,7 @@ fn search_key(source: &str, q: &SearchQuery) -> SearchKey {
         q.game_version.clone().unwrap_or_default(),
         q.loader.clone().unwrap_or_default(),
         q.category.clone().unwrap_or_default(),
+        q.tag.clone().unwrap_or_default(),
         q.offset,
         q.page_size,
     )

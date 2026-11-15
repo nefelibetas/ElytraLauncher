@@ -10,6 +10,7 @@ import {
   StaleSearchError,
   type FetchPage,
 } from "./aggregator";
+import { modTags, tagSupports } from "./tags";
 
 export interface CommunitySearchResult {
   id: string;
@@ -91,6 +92,10 @@ export const modLoaderOptions = computed<{ value: string; label: string }[]>(() 
   { value: "quilt", label: "Quilt" },
 ]);
 
+export const modTagOptions = computed<{ value: string; label: string }[]>(() =>
+  modTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
+
 let autoSearched = false;
 
 /** 剥离 markdown/KaTeX 标记（Modrinth 描述支持 KaTeX，标记会原样返回，UI 纯文本需清洗） */
@@ -138,6 +143,7 @@ const fetchCommunitySource: FetchPage<CommunityDisplayItem> = async (source, par
       gameVersion: params.gameVersion || null,
       loader: params.loader || null,
       category: params.category,
+      tag: params.tag || null,
       pageSize,
       offset,
     },
@@ -159,6 +165,8 @@ export const communitySearch = reactive({
   query: "",
   gameVersion: "",
   loader: "",
+  /** 内容分类 "CFID/MRslug"；空串为全部。 */
+  tag: "",
   searching: false,
   error: "",
   partialError: "",
@@ -178,13 +186,32 @@ export const communitySearch = reactive({
     const seq = ++this.searchSeq;
     this.searching = true;
     this.error = "";
+    this.partialError = "";
     try {
       const resetAll = force || lastSource !== "all";
       lastSource = this.source;
+      if (this.source !== "all" && this.tag && !tagSupports(this.tag, this.source)) {
+        this.results = [];
+        this.total = 0;
+        this.loaded = 0;
+        this.hasMore = false;
+        this.page = 1;
+        this.searched = true;
+        this.partialError = t("download.search.tagUnavailable", {
+          source: this.source === "curseforge" ? "CurseForge" : "Modrinth",
+        });
+        return;
+      }
       if (this.source === "all") {
         const res = await allAggregator.page(
           page,
-          { query: this.query.trim(), gameVersion: this.gameVersion, loader: this.loader, category: null },
+          {
+            query: this.query.trim(),
+            gameVersion: this.gameVersion,
+            loader: this.loader,
+            category: null,
+            tag: this.tag,
+          },
           resetAll,
         );
         if (seq !== this.searchSeq) return;
@@ -200,6 +227,7 @@ export const communitySearch = reactive({
             query: this.query.trim(),
             gameVersion: this.gameVersion || null,
             loader: this.loader || null,
+            tag: this.tag || null,
             pageSize: MOD_PAGE_SIZE,
             offset: (page - 1) * MOD_PAGE_SIZE,
           },
@@ -233,6 +261,7 @@ export const communitySearch = reactive({
     this.source = "all";
     this.gameVersion = "";
     this.loader = "";
+    this.tag = "";
     this.results = [];
     this.total = 0;
     this.loaded = 0;

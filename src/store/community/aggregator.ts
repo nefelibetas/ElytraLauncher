@@ -11,6 +11,8 @@ export interface AggParams {
   gameVersion: string;
   loader: string;
   category: string | null;
+  /** 内容分类 "CFID/MRslug"；空串为全部。 */
+  tag: string;
 }
 
 /** 聚合器需要的最小字段；CommunityDisplayItem 结构满足。 */
@@ -87,7 +89,13 @@ export class CommunityAggregator<T extends AggregatorItem> {
   }
 
   page(page: number, params: AggParams, force: boolean): Promise<AggPage<T>> {
-    const signature = JSON.stringify([params.query, params.gameVersion, params.loader, params.category]);
+    const signature = JSON.stringify([
+      params.query,
+      params.gameVersion,
+      params.loader,
+      params.category,
+      params.tag,
+    ]);
     if (force || signature !== this.signature) {
       this.reset(signature);
       // 新查询不必等旧请求结束；旧请求在下一次 generation 检查时丢弃。

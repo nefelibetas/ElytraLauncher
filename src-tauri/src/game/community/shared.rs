@@ -152,6 +152,19 @@ where
     Err(last_err)
 }
 
+/// 拆分前端内容分类值 "CFID/MRslug"：任一侧为空表示该源无对应分类；无 "/" 视为未选择。
+pub(super) fn split_tag(tag: Option<&str>) -> (Option<&str>, Option<&str>) {
+    let Some(tag) = tag.map(str::trim).filter(|t| !t.is_empty()) else {
+        return (None, None);
+    };
+    let Some((cf, mr)) = tag.split_once('/') else {
+        return (None, None);
+    };
+    let cf = cf.parse::<u32>().ok().map(|_| cf);
+    let mr = (!mr.is_empty()).then_some(mr);
+    (cf, mr)
+}
+
 /// 解析 MC 版本号为数值段（"1.21.1" → [1,21,1]）；含非数字段（snapshot 如 "24w14a"）返回 None。
 fn parse_game_version(v: &str) -> Option<Vec<u64>> {
     v.split('.').map(|seg| seg.parse::<u64>().ok()).collect()
@@ -225,6 +238,27 @@ mod tests {
         assert_eq!(
             compare_game_versions("1.21.1", "1.21.1"),
             Some(Ordering::Equal)
+        );
+    }
+
+    #[test]
+    fn split_tag_handles_sides_and_invalid_values() {
+        assert_eq!(split_tag(None), (None, None));
+        assert_eq!(split_tag(Some("")), (None, None));
+        assert_eq!(split_tag(Some("412")), (None, None), "无斜杠视为未选择");
+        assert_eq!(
+            split_tag(Some("abc/technology")),
+            (None, Some("technology")),
+            "CF ID 非数字时只保留 MR 侧"
+        );
+        assert_eq!(
+            split_tag(Some("412/technology")),
+            (Some("412"), Some("technology"))
+        );
+        assert_eq!(split_tag(Some("407/")), (Some("407"), None));
+        assert_eq!(
+            split_tag(Some("/game-mechanics")),
+            (None, Some("game-mechanics"))
         );
     }
 }

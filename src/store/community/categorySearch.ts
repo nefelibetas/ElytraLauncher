@@ -28,6 +28,8 @@ export function createCategorySearch(
     source: initialSource,
     query: "",
     gameVersion: "",
+    /** 内容分类 "CFID/MRslug"；当前分类页未开放，保留字段供后续标签表复用。 */
+    tag: "",
     searching: false,
     error: "",
     partialError: "",
@@ -47,13 +49,14 @@ export function createCategorySearch(
       const seq = ++this.searchSeq;
       this.searching = true;
       this.error = "";
+      this.partialError = "";
       try {
         const resetAll = force || lastSource !== "all";
         lastSource = this.source;
         if (this.source === "all") {
           const res = await aggregator.page(
             page,
-            { query: this.query.trim(), gameVersion: this.gameVersion, loader: "", category },
+            { query: this.query.trim(), gameVersion: this.gameVersion, loader: "", category, tag: this.tag },
             resetAll,
           );
           if (seq !== this.searchSeq) return;
@@ -70,6 +73,7 @@ export function createCategorySearch(
               gameVersion: this.gameVersion || null,
               loader: null,
               category,
+              tag: this.tag || null,
               pageSize: PAGE_SIZE,
               offset: (page - 1) * PAGE_SIZE,
             },
@@ -102,6 +106,7 @@ export function createCategorySearch(
       this.query = "";
       this.source = initialSource;
       this.gameVersion = "";
+      this.tag = "";
       this.results = [];
       this.total = 0;
       this.loaded = 0;

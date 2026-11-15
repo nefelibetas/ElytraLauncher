@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use super::cache;
 use super::shared::{
-    api_routes, api_urls, get_json_multi, post_json_multi, version_range, ApiPlatform,
+    api_routes, api_urls, get_json_multi, post_json_multi, split_tag, version_range, ApiPlatform,
 };
 use super::wiki_entry;
 use super::{
@@ -263,11 +263,30 @@ pub(super) async fn search_curseforge(
     game_version: Option<&str>,
     loader: Option<&str>,
     category: Option<&str>,
+    tag: Option<&str>,
     offset: u64,
     page_size: u32,
 ) -> Result<CommunitySearchPage, String> {
-    let cache_query = SearchQuery::new(query, game_version, loader, category, offset, page_size);
+    let cache_query = SearchQuery::new(
+        query,
+        game_version,
+        loader,
+        category,
+        tag,
+        offset,
+        page_size,
+    );
     if let Some(page) = cache::get_search("curseforge", &cache_query) {
+        return Ok(page);
+    }
+    let (cf_tag, _) = split_tag(tag);
+    // 只有 Modrinth 侧的组合（"/game-mechanics"）：CF 无对应分类，返回空页并缓存。
+    if tag.is_some_and(|t| t.contains('/')) && cf_tag.is_none() {
+        let page = CommunitySearchPage {
+            items: Vec::new(),
+            total: 0,
+        };
+        cache::put_search("curseforge", &cache_query, &page);
         return Ok(page);
     }
     // sortField=2（Popularity）必须显式传：默认 Featured 与名称序接近，首条可能只有几百下载量。
@@ -296,6 +315,9 @@ pub(super) async fn search_curseforge(
         Some(cat) => curseforge_class_id(cat).unwrap_or(6),
     };
     params.push(("classId", class_id.to_string()));
+    if let Some(cf) = cf_tag {
+        params.push(("categoryId", cf.to_string()));
+    }
     let data = curseforge_get("/mods/search", &params).await?;
 
     let arr = data["data"].as_array().ok_or_else(|| {
@@ -509,7 +531,7 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("jei", Some("1.21.1"), None, None, 0, 30).await;
+        let page = search_curseforge("jei", Some("1.21.1"), None, None, None, 0, 30).await;
         assert!(page.is_ok(), "CurseForge 搜索应成功: {:?}", page.err());
         let page = page.unwrap();
         assert!(!page.items.is_empty(), "搜 jei 应返回结果");
@@ -529,7 +551,7 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("", None, None, None, 0, 30)
+        let page = search_curseforge("", None, None, None, None, 0, 30)
             .await
             .unwrap();
         assert!(!page.items.is_empty(), "空关键字应返回热门 Mod");
@@ -541,6 +563,28 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn curseforge_category_filter_works() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        let page = search_curseforge("", None, None, None, Some("6814/optimization"), 0, 30)
+            .await
+            .unwrap();
+        assert!(!page.items.is_empty(), "分类过滤应返回结果");
+    }
+
+    #[tokio::test]
+    async fn curseforge_skips_modrinth_only_tag() {
+        let page = search_curseforge("", None, None, None, Some("/game-mechanics"), 0, 30)
+            .await
+            .unwrap();
+        assert!(page.items.is_empty(), "CF 无对应分类时应返回空页");
+        assert_eq!(page.total, 0);
+    }
+
     /// CF 搜索不匹配名称括号内缩写（"JEI" 搜不到）；搜全名命中 JEI（id 238222）。
     #[tokio::test]
     async fn curseforge_full_name_finds_jei() {
@@ -549,7 +593,7 @@ mod tests {
             eprintln!("跳过: 未配置 CurseForge API Key");
             return;
         }
-        let page = search_curseforge("just enough items", Some("1.21.1"), None, None, 0, 30)
+        let page = search_curseforge("just enough items", Some("1.21.1"), None, None, None, 0, 30)
             .await
             .unwrap();
         assert!(

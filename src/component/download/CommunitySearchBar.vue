@@ -14,6 +14,8 @@ export interface CommunitySearchState {
   query: string;
   gameVersion: string;
   loader?: string;
+  /** 内容分类 "CFID/MRslug"；空串为全部。 */
+  tag?: string;
   searching: boolean;
   search(page?: number, force?: boolean): Promise<void> | void;
   reset(): void;
@@ -27,12 +29,17 @@ const props = withDefaults(
     /** 是否显示来源筛选（worlds 为 CurseForge 单源，不显示） */
     showSource?: boolean;
     showLoader?: boolean;
+    /** 是否显示内容分类（仅部分资源类型提供标签表） */
+    showTag?: boolean;
+    tagOptions?: { value: string; label: string }[];
     /** 表单控件 id 前缀（同页多实例防 id 冲突；当前 tab 互斥） */
     idPrefix?: string;
   }>(),
   {
     showSource: true,
     showLoader: false,
+    showTag: false,
+    tagOptions: () => [],
     idPrefix: "cs",
   },
 );
@@ -54,6 +61,7 @@ watch(
     props.showSource ? props.search.source : "",
     props.search.gameVersion,
     props.search.loader ?? "",
+    props.showTag ? (props.search.tag ?? "") : "",
   ],
   () => props.search.search(),
 );
@@ -83,7 +91,7 @@ watch(
           />
         </template>
       </div>
-      <div v-if="showSource || showLoader" class="cs-form-row">
+      <div v-if="showSource || showLoader || (showTag && tagOptions.length)" class="cs-form-row">
         <template v-if="showSource && !showLoader">
           <label class="cs-form-label" :for="`${idPrefix}SourceSelect`">{{ t("download.search.source") }}</label>
           <DropSelect
@@ -110,6 +118,16 @@ watch(
             :options="modLoaderOptions"
             class="cs-fill"
             @update:model-value="search.loader = $event"
+          />
+        </template>
+        <template v-if="showTag && tagOptions.length">
+          <label class="cs-form-label" :for="`${idPrefix}TagSelect`">{{ t("download.search.tag") }}</label>
+          <DropSelect
+            :id="`${idPrefix}TagSelect`"
+            :model-value="search.tag ?? ''"
+            :options="tagOptions"
+            class="cs-fill"
+            @update:model-value="search.tag = $event"
           />
         </template>
       </div>

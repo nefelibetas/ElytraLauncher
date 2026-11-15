@@ -86,7 +86,10 @@ pub struct SearchQuery {
     pub query: String,
     pub game_version: Option<String>,
     pub loader: Option<String>,
+    /// 资源类型（mod/modpack/...）；与内容分类 `tag` 不同。
     pub category: Option<String>,
+    /// 内容分类，格式 "CurseForge 分类 ID/Modrinth 分类 slug"；空侧表示该源无对应分类。
+    pub tag: Option<String>,
     pub offset: u64,
     pub page_size: u32,
 }
@@ -98,6 +101,7 @@ impl SearchQuery {
         game_version: Option<&str>,
         loader: Option<&str>,
         category: Option<&str>,
+        tag: Option<&str>,
         offset: u64,
         page_size: u32,
     ) -> Self {
@@ -106,6 +110,7 @@ impl SearchQuery {
             game_version: game_version.map(str::to_string),
             loader: loader.map(str::to_string),
             category: category.map(str::to_string),
+            tag: tag.map(str::to_string),
             offset,
             page_size,
         }
@@ -131,6 +136,7 @@ pub async fn search_community(
                 q.game_version.as_deref(),
                 q.loader.as_deref(),
                 q.category.as_deref(),
+                q.tag.as_deref(),
                 q.offset,
                 q.page_size,
             )
@@ -142,6 +148,7 @@ pub async fn search_community(
                 q.game_version.as_deref(),
                 q.loader.as_deref(),
                 q.category.as_deref(),
+                q.tag.as_deref(),
                 q.offset,
                 q.page_size,
             )
