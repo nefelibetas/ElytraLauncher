@@ -78,6 +78,8 @@ export const loDisableWrapper = ref(false);
 export const loDisableAgent = ref(false);
 export const loHighGpu = ref(false);
 export const loVerifySsl = ref(true);
+/** 启动选项是否已从配置读取完成；设置页据此避免先渲染默认值再跳变。 */
+export const launchOptionsLoaded = ref(false);
 
 export const gcOptions: { value: string; labelKey: string }[] = [
   { value: "PreferZgc", labelKey: "settings.jdk.gc.preferZgc" },
@@ -106,8 +108,8 @@ export function ensureGameLanguageDetected(): Promise<void> {
 }
 
 export async function loadLaunchOptions() {
-  await ensureGameLanguageDetected();
   try {
+    await ensureGameLanguageDetected();
     const cfg = await invoke<LaunchOptions>("get_launch_options");
     loWindowTitle.value = cfg.window_title ?? "";
     loPriority.value = cfg.process_priority;
@@ -148,6 +150,9 @@ export async function loadLaunchOptions() {
       }
     }
   } catch {
+    // 配置读取失败：保留默认值
+  } finally {
+    launchOptionsLoaded.value = true;
   }
 }
 

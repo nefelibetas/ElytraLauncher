@@ -6,6 +6,7 @@ import { startMemoryMonitor } from "../../store/app/memory";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import AutoTasksEditor from "./AutoTasksEditor.vue";
 import CheckToggle from "../common/CheckToggle.vue";
+import LoadingSpinner from "../common/LoadingSpinner.vue";
 import RangeSlider from "../common/RangeSlider.vue";
 import { MEM_FLOOR_MB, MEM_STEP_MB } from "../../utils/memory";
 import {
@@ -15,7 +16,7 @@ import {
   loWindowTitle, loPriority, loWinMode, loWinW, loWinH, loGameLang,
   loMemAuto, loMemMb, loMinMem, loMemOptimize, loVerifySsl, launchError,
   memLimitMb, memAutoMb, memLowerMb, memUpperMb,
-  saveLaunchOptions, loadLaunchOptions,
+  saveLaunchOptions, loadLaunchOptions, launchOptionsLoaded,
 } from "../../store/config/launchOptions";
 import { fmtGb } from "../../utils/format";
 import MemoryUsageBar from "../launch/MemoryUsageBar.vue";
@@ -81,6 +82,16 @@ const closeOptions = computed<SelOption[]>(() => [
 </script>
 
 <template>
+  <div v-if="!launchOptionsLoaded" class="stg-card">
+    <div class="stg-card-hdr">
+      <h3>{{ t("settings.launch.title") }}</h3>
+      <div class="stg-card-sub">{{ t("settings.launch.subtitle") }}</div>
+    </div>
+    <div class="launch-opts">
+      <LoadingSpinner :text="t('common.loading')" />
+    </div>
+  </div>
+  <template v-else>
   <div class="stg-card">
     <div class="stg-card-hdr">
       <h3>{{ t("settings.launch.title") }}</h3>
@@ -210,6 +221,7 @@ const closeOptions = computed<SelOption[]>(() => [
   </div>
 
   <AutoTasksEditor mode="global" />
+  </template>
 </template>
 
 <style>
