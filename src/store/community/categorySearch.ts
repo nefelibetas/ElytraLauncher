@@ -9,7 +9,14 @@ import {
   type CommunitySearchPage,
 } from "../community/communitySearch";
 import { AGG_PAGE_SIZE, StaleSearchError } from "./aggregator";
-import { modpackTags } from "./tags";
+import {
+  datapackTags,
+  modpackTags,
+  resourcepackTags,
+  shaderTags,
+  tagSupports,
+  worldTags,
+} from "./tags";
 import { errMsg } from "../../utils/error";
 import { t } from "../../i18n";
 
@@ -54,6 +61,18 @@ export function createCategorySearch(
       try {
         const resetAll = force || lastSource !== "all";
         lastSource = this.source;
+        if (this.source !== "all" && this.tag && !tagSupports(this.tag, this.source)) {
+          this.results = [];
+          this.total = 0;
+          this.loaded = 0;
+          this.hasMore = false;
+          this.page = 1;
+          this.searched = true;
+          this.partialError = t("download.search.tagUnavailable", {
+            source: this.source === "curseforge" ? "CurseForge" : "Modrinth",
+          });
+          return;
+        }
         if (this.source === "all") {
           const res = await aggregator.page(
             page,
@@ -143,6 +162,18 @@ export const worldsSearch = createCategorySearch("worlds", "curseforge");
 
 export const modpackTagOptions = computed<{ value: string; label: string }[]>(() =>
   modpackTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
+export const resourcepackTagOptions = computed<{ value: string; label: string }[]>(() =>
+  resourcepackTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
+export const shaderTagOptions = computed<{ value: string; label: string }[]>(() =>
+  shaderTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
+export const datapackTagOptions = computed<{ value: string; label: string }[]>(() =>
+  datapackTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
+);
+export const worldsTagOptions = computed<{ value: string; label: string }[]>(() =>
+  worldTags.map(tag => ({ value: tag.value, label: t(tag.labelKey) })),
 );
 
 export const shaderTotalPages = computed(() => totalPages(shaderSearch));

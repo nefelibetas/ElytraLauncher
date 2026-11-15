@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { datapackSearch } from "../../store/community/categorySearch";
+import { datapackSearch, datapackTagOptions } from "../../store/community/categorySearch";
 import CommunitySearchBar from "./CommunitySearchBar.vue";
 
 const { t } = useI18n();
@@ -10,6 +10,8 @@ const { t } = useI18n();
   <CommunitySearchBar
     :search="datapackSearch"
     :title="t('download.search.title', { category: t('download.categories.datapack') })"
+    show-tag
+    :tag-options="datapackTagOptions"
     id-prefix="da"
   />
 </template>

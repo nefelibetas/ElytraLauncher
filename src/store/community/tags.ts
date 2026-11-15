@@ -63,6 +63,94 @@ export const modpackTags: CommunityTag[] = [
   { value: "10683/", labelKey: "download.tags.rlcraft" },
 ];
 
+/** 资源包分类；CF classId=12，MR project_type=resourcepack。 */
+export const resourcepackTags: CommunityTag[] = [
+  { value: "", labelKey: "download.search.all" },
+  { value: "403/vanilla-like", labelKey: "download.tags.vanillaLike" },
+  { value: "400/realistic", labelKey: "download.tags.realistic" },
+  { value: "401/", labelKey: "download.tags.modern" },
+  { value: "402/", labelKey: "download.tags.medieval" },
+  { value: "399/", labelKey: "download.tags.steampunk" },
+  { value: "/themed", labelKey: "download.tags.themed" },
+  { value: "/simplistic", labelKey: "download.tags.simplistic" },
+  { value: "/decoration", labelKey: "download.tags.decoration" },
+  { value: "/combat", labelKey: "download.tags.combat" },
+  { value: "/utility", labelKey: "download.tags.utility" },
+  { value: "/tweaks", labelKey: "download.tags.tweaks" },
+  { value: "/cursed", labelKey: "download.tags.cursed" },
+  { value: "/entities", labelKey: "download.tags.entities" },
+  { value: "/audio", labelKey: "download.tags.audio" },
+  { value: "5244/fonts", labelKey: "download.tags.fonts" },
+  { value: "/models", labelKey: "download.tags.models" },
+  { value: "/locale", labelKey: "download.tags.locale" },
+  { value: "/gui", labelKey: "download.tags.gui" },
+  { value: "/core-shaders", labelKey: "download.tags.coreShaders" },
+  { value: "404/", labelKey: "download.tags.animated" },
+  { value: "4465/modded", labelKey: "download.tags.modded" },
+  { value: "/8x-", labelKey: "download.tags.res8x" },
+  { value: "393/16x", labelKey: "download.tags.res16x" },
+  { value: "394/32x", labelKey: "download.tags.res32x" },
+  { value: "/48x", labelKey: "download.tags.res48x" },
+  { value: "395/64x", labelKey: "download.tags.res64x" },
+  { value: "396/128x", labelKey: "download.tags.res128x" },
+  { value: "397/256x", labelKey: "download.tags.res256x" },
+  { value: "398/512x+", labelKey: "download.tags.res512x" },
+];
+
+/** 光影分类；CF classId=6552，MR project_type=shader。 */
+export const shaderTags: CommunityTag[] = [
+  { value: "", labelKey: "download.search.all" },
+  { value: "6555/vanilla-like", labelKey: "download.tags.vanillaLike" },
+  { value: "6554/fantasy", labelKey: "download.tags.fantasy" },
+  { value: "6553/realistic", labelKey: "download.tags.realistic" },
+  { value: "/semi-realistic", labelKey: "download.tags.semiRealistic" },
+  { value: "/cartoon", labelKey: "download.tags.cartoon" },
+  { value: "/colored-lighting", labelKey: "download.tags.coloredLighting" },
+  { value: "/path-tracing", labelKey: "download.tags.pathTracing" },
+  { value: "/pbr", labelKey: "download.tags.pbr" },
+  { value: "/reflections", labelKey: "download.tags.reflections" },
+  { value: "/potato", labelKey: "download.tags.potato" },
+  { value: "/low", labelKey: "download.tags.low" },
+  { value: "/medium", labelKey: "download.tags.medium" },
+  { value: "/high", labelKey: "download.tags.high" },
+  { value: "/vanilla", labelKey: "download.tags.vanillaShader" },
+  { value: "/iris", labelKey: "download.tags.iris" },
+  { value: "/optifine", labelKey: "download.tags.optifine" },
+];
+
+/** 数据包分类；CF classId=6945，MR 为 project_type=mod + categories=datapack。 */
+export const datapackTags: CommunityTag[] = [
+  { value: "", labelKey: "download.search.all" },
+  { value: "/worldgen", labelKey: "download.tags.worldgen" },
+  { value: "6951/technology", labelKey: "download.tags.technology" },
+  { value: "/game-mechanics", labelKey: "download.tags.gameMechanics" },
+  { value: "/transportation", labelKey: "download.tags.transportation" },
+  { value: "/storage", labelKey: "download.tags.storage" },
+  { value: "6952/magic", labelKey: "download.tags.magic" },
+  { value: "6948/adventure", labelKey: "download.tags.adventure" },
+  { value: "6949/", labelKey: "download.tags.fantasy" },
+  { value: "/decoration", labelKey: "download.tags.decoration" },
+  { value: "/mobs", labelKey: "download.tags.mobs" },
+  { value: "6953/utility", labelKey: "download.tags.utility" },
+  { value: "/equipment", labelKey: "download.tags.equipment" },
+  { value: "/optimization", labelKey: "download.tags.optimization" },
+  { value: "/social", labelKey: "download.tags.server" },
+  { value: "6950/library", labelKey: "download.tags.library" },
+  { value: "6946/", labelKey: "download.tags.modRelated" },
+];
+
+/** 地图存档分类；仅 CurseForge（classId=17）。 */
+export const worldTags: CommunityTag[] = [
+  { value: "", labelKey: "download.search.all" },
+  { value: "253/", labelKey: "download.tags.survival" },
+  { value: "249/", labelKey: "download.tags.creation" },
+  { value: "250/", labelKey: "download.tags.gameMap" },
+  { value: "251/", labelKey: "download.tags.parkour" },
+  { value: "4464/", labelKey: "download.tags.moddedWorld" },
+  { value: "252/", labelKey: "download.tags.puzzle" },
+  { value: "248/", labelKey: "download.tags.adventure" },
+];
+
 /** 当前分类是否被指定来源支持；无斜杠的异常值按“全部”处理。 */
 export function tagSupports(tag: string, source: CommunitySource): boolean {
   if (!tag || !tag.includes("/")) return true;

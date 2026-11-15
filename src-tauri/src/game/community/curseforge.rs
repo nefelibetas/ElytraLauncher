@@ -606,6 +606,21 @@ mod tests {
         assert!(!page.items.is_empty(), "整合包分类过滤应返回结果");
     }
 
+    #[tokio::test]
+    async fn curseforge_extra_type_category_filters_work() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        for (category, tag) in [("shader", "6553/realistic"), ("worlds", "251/")] {
+            let page = search_curseforge("", None, None, Some(category), Some(tag), 0, 30)
+                .await
+                .unwrap();
+            assert!(!page.items.is_empty(), "{category} 分类过滤应返回结果");
+        }
+    }
+
     /// CF 搜索不匹配名称括号内缩写（"JEI" 搜不到）；搜全名命中 JEI（id 238222）。
     #[tokio::test]
     async fn curseforge_full_name_finds_jei() {

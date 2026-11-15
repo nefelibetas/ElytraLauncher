@@ -388,6 +388,20 @@ mod tests {
         assert!(!page.items.is_empty(), "整合包分类过滤应返回结果");
     }
 
+    #[tokio::test]
+    async fn modrinth_extra_type_category_filters_work() {
+        for (category, tag) in [
+            ("resourcepack", "403/vanilla-like"),
+            ("shader", "6553/realistic"),
+            ("datapack", "6951/technology"),
+        ] {
+            let page = search_modrinth("", None, None, Some(category), Some(tag), 0, 30)
+                .await
+                .unwrap();
+            assert!(!page.items.is_empty(), "{category} 分类过滤应返回结果");
+        }
+    }
+
     #[test]
     fn modrinth_loaders_filters_known_ones() {
         let cats = serde_json::json!(["Fabric", "Mechanic", "fabric", "forge", "Adventure"]);
