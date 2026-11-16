@@ -394,6 +394,7 @@ export default {
     notPng: "皮肤文件不是 PNG 格式"
   },
   loader: {
+    versionList: "获取 ModLoader 版本列表失败",
     profileFetchFailed: "获取 profile 失败（所有下载源均不可用）",
     serializeVersionJson: "序列化版本 JSON 失败",
     versionJsonMissing: "未找到 version.json",

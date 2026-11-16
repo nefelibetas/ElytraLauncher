@@ -394,6 +394,7 @@ export default {
     notPng: "The skin file is not a PNG"
   },
   loader: {
+    versionList: "Failed to fetch the ModLoader version list",
     profileFetchFailed: "Failed to fetch the loader profile (all download sources are unavailable)",
     serializeVersionJson: "Failed to serialize the version JSON",
     versionJsonMissing: "version.json not found",

@@ -7,6 +7,7 @@ use crate::game::version::source;
 use crate::persist::downloader_config;
 use serde::Deserialize;
 use std::cmp::Ordering;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 struct FabricEntry {
@@ -25,6 +26,11 @@ struct QuiltEntry {
 
 #[derive(Deserialize)]
 struct QuiltLoader {
+    version: String,
+}
+
+#[derive(Deserialize)]
+struct QuiltAllEntry {
     version: String,
 }
 
@@ -171,11 +177,92 @@ pub async fn fabric_versions(mc_version: &str) -> Result<Vec<String>, String> {
 
 pub async fn quilt_versions(mc_version: &str) -> Result<Vec<String>, String> {
     // Quilt meta 实测乱序（0.20.0-beta.7 排在 beta.8 前、0.24.0 混在中间），必须显式排序
-    let data =
-        fetch_versions::<QuiltEntry>(|s| s.url(&s.quilt_list_url, &[("mc", mc_version)])).await?;
-    Ok(sort_versions_desc(
-        data.into_iter().map(|e| e.loader.version).collect(),
-    ))
+    match fetch_versions::<QuiltEntry>(|s| s.url(&s.quilt_list_url, &[("mc", mc_version)])).await {
+        Ok(data) => Ok(sort_versions_desc(
+            data.into_iter().map(|e| e.loader.version).collect(),
+        )),
+        Err(primary) => {
+            eprintln!("[loader] Quilt 按 MC 查询失败，回退全量列表: {primary}");
+            match fetch_quilt_all_versions().await {
+                Ok(versions) => Ok(sort_versions_desc(versions)),
+                Err(fallback) => Err(keyed_msg!(
+                    "errors.loader.versionList",
+                    "获取 Quilt 版本列表失败\n按 MC 查询: {}\n全量列表: {}",
+                    primary,
+                    fallback
+                )),
+            }
+        }
+    }
+}
+
+/// Quilt 全量 loader 版本：BMCLAPI / 官方全量列表 → Quilt maven-metadata。
+/// 按 MC 查询端点失败时使用；列表不按 MC 过滤，兼容性由 loader 自身保证。
+async fn fetch_quilt_all_versions() -> Result<Vec<String>, String> {
+    let urls = [
+        format!(
+            "{}{}",
+            endpoints::BMCLAPI_QUILT_META,
+            endpoints::QUILT_ALL_LOADER_PATH
+        ),
+        format!(
+            "{}{}",
+            endpoints::QUILT_META,
+            endpoints::QUILT_ALL_LOADER_PATH
+        ),
+    ];
+    let mut last_err = String::new();
+    for url in urls {
+        let req = fetcher::http().get(&url).timeout(Duration::from_secs(8));
+        let resp = match req.send().await {
+            Ok(resp) => resp,
+            Err(e) => {
+                last_err = format!("{url} 请求失败: {e}");
+                continue;
+            }
+        };
+        if !resp.status().is_success() {
+            last_err = format!("{url} HTTP {}", resp.status());
+            continue;
+        }
+        match resp.json::<Vec<QuiltAllEntry>>().await {
+            Ok(list) => {
+                let mut versions: Vec<String> = list
+                    .into_iter()
+                    .map(|entry| entry.version)
+                    .filter(|version| !version.is_empty())
+                    .collect();
+                versions.sort();
+                versions.dedup();
+                if !versions.is_empty() {
+                    return Ok(versions);
+                }
+                last_err = format!("{url} 返回空版本列表");
+            }
+            Err(e) => last_err = format!("{url} 解析失败: {e}"),
+        }
+    }
+
+    match fetcher::http()
+        .get(endpoints::QUILT_MAVEN_METADATA)
+        .timeout(Duration::from_secs(12))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => match resp.text().await {
+            Ok(text) => {
+                let versions = parse_maven_versions(&text);
+                if !versions.is_empty() {
+                    return Ok(versions);
+                }
+                last_err = format!("Quilt maven 返回空版本列表\n{last_err}");
+            }
+            Err(e) => last_err = format!("Quilt maven 读取失败: {e}\n{last_err}"),
+        },
+        Ok(resp) => last_err = format!("Quilt maven HTTP {}\n{last_err}", resp.status()),
+        Err(e) => last_err = format!("Quilt maven 请求失败: {e}\n{last_err}"),
+    }
+    Err(last_err)
 }
 
 /// NeoForge 版本列表：版本号内嵌 MC 版本（"26.2" → "26.2.x"）；maven-metadata 里的快照自然排除。
@@ -350,6 +437,39 @@ mod tests {
                 "pre10".into()
             ]),
             vec!["J1", "pre15", "pre10", "pre9"]
+        );
+    }
+
+    #[test]
+    fn mirror_source_forge_metadata_uses_bmclapi() {
+        assert!(
+            endpoints::mirror_source()
+                .forge_list_url
+                .starts_with(endpoints::BMCLAPI_MAVEN),
+            "Forge 元数据必须能回退到 BMCLAPI /maven"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "真实网络：Forge 版本列表"]
+    async fn forge_versions_network() {
+        let versions = forge_versions("1.20.1").await.expect("Forge 版本列表");
+        assert!(
+            versions.iter().any(|version| version.starts_with("47.")),
+            "应返回 1.20.1 的 Forge 47.x 版本: {versions:?}"
+        );
+    }
+
+    /// 真实网络：按 MC 查询失败时的 Quilt 全量版本兜底（BMCLAPI / 官方 / maven）。
+    #[tokio::test]
+    #[ignore = "真实网络：Quilt 全量版本兜底"]
+    async fn quilt_all_versions_fallback_network() {
+        let versions = fetch_quilt_all_versions()
+            .await
+            .expect("Quilt 全量版本列表");
+        assert!(
+            versions.len() > 10,
+            "应返回可用的 Quilt loader 版本: {versions:?}"
         );
     }
 }

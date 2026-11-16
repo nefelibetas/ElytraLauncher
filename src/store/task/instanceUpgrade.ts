@@ -48,6 +48,48 @@ function prepareInstanceUpgrade(
   });
 }
 
+const LOADER_COMMANDS: Record<string, string> = {
+  fabric: "get_fabric_versions",
+  forge: "get_forge_versions",
+  neoforge: "get_neoforge_versions",
+  quilt: "get_quilt_versions",
+};
+const loaderVersionCache = new Map<string, string[]>();
+const loaderVersionInflight = new Map<string, Promise<string[]>>();
+
+/** 目标 MC 的 Loader 版本列表：同键缓存 + 在途去重；首次失败后短延迟重试一次。 */
+export async function fetchUpgradeLoaderVersions(
+  loader: string,
+  mcVersion: string,
+): Promise<string[]> {
+  if (loader === "vanilla" || !mcVersion) return [];
+  const key = `${loader}_${mcVersion}`;
+  const cached = loaderVersionCache.get(key);
+  if (cached) return cached;
+  const inflight = loaderVersionInflight.get(key);
+  if (inflight) return inflight;
+  const command = LOADER_COMMANDS[loader];
+  if (!command) return [];
+  const promise = (async () => {
+    try {
+      let versions: string[];
+      try {
+        versions = await invoke<string[]>(command, { mcVersion });
+      } catch {
+        // 官方 maven / meta 偶发超时；第二次通常命中镜像或元数据缓存。
+        await new Promise(resolve => setTimeout(resolve, 300));
+        versions = await invoke<string[]>(command, { mcVersion });
+      }
+      loaderVersionCache.set(key, versions);
+      return versions;
+    } finally {
+      loaderVersionInflight.delete(key);
+    }
+  })();
+  loaderVersionInflight.set(key, promise);
+  return promise;
+}
+
 export function markInstanceUpgradeReady(versionName: string): Promise<void> {
   return invoke("mark_instance_upgrade_ready", { versionDirName: versionName });
 }

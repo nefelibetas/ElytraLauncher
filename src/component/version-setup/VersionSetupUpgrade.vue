@@ -3,19 +3,18 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { invoke } from "@tauri-apps/api/core";
-import { AlertCircle, ArrowUpCircle, LoaderCircle } from "@lucide/vue";
-import SetupCard from "../common/SetupCard.vue";
+import { AlertCircle, ArrowUpCircle, Box, CircleCheck, LoaderCircle, Puzzle, Rocket, X } from "@lucide/vue";
 import DropSelect, { type SelOption } from "../common/DropSelect.vue";
 import CheckToggle from "../common/CheckToggle.vue";
-import LoadingSpinner from "../common/LoadingSpinner.vue";
 import { showToast } from "../../utils/toast";
 import { errMsg } from "../../utils/error";
-import { LOADER_MIN_VERSION, LOADER_TITLES } from "../../utils/versionMeta";
+import { LOADER_ICONS, LOADER_MIN_VERSION, LOADER_TITLES } from "../../utils/versionMeta";
 import { releases, vdState } from "../../store/task/versionDownload";
 import { dlState } from "../../store/task/download";
+import { loadVersionIcon, versionIcons } from "../../store/task/versionIcon";
 import {
   checkInstanceUpgrade,
+  fetchUpgradeLoaderVersions,
   finishInstanceUpgrade,
   getInstanceUpgradeInfo,
   rollbackAndRefresh,
@@ -73,6 +72,25 @@ const currentLoaderLabel = computed(() =>
 const currentLoaderVersionLabel = computed(() =>
   info.value?.loader_version ?? t("settings.version.setup.upgrade.unknown"),
 );
+const currentLoaderIcon = computed(
+  () => LOADER_ICONS[currentLoader.value] ?? LOADER_ICONS.vanilla,
+);
+const currentInstanceIcon = computed(
+  () => versionIcons[versionName.value] ?? currentLoaderIcon.value,
+);
+
+const loaderTiles = computed(() => [
+  {
+    value: "vanilla",
+    label: t("settings.version.setup.upgrade.noLoader"),
+    icon: LOADER_ICONS.vanilla,
+  },
+  ...MAIN_LOADERS.map(loader => ({
+    value: loader,
+    label: LOADER_TITLES[loader],
+    icon: LOADER_ICONS[loader],
+  })),
+]);
 
 const mcOptions = computed<SelOption[]>(() => {
   const list = releases.value.map(version => ({ value: version.id, label: version.id }));
@@ -86,13 +104,6 @@ const mcOptions = computed<SelOption[]>(() => {
   }
   return list;
 });
-const loaderOptions = computed<SelOption[]>(() => [
-  {
-    value: "vanilla",
-    label: t("settings.version.setup.upgrade.loaderVanilla"),
-  },
-  ...MAIN_LOADERS.map(loader => ({ value: loader, label: LOADER_TITLES[loader] })),
-]);
 const loaderVersionOptions = computed<SelOption[]>(() =>
   loaderVersions.value.map(version => ({ value: version, label: version })),
 );
@@ -173,6 +184,13 @@ const pendingTo = computed(() => {
 const pendingBusy = computed(
   () => !!info.value?.busy || upgradeTaskActive.value || pendingAction.value !== "" || starting.value,
 );
+const targetSummary = computed(() => {
+  if (!targetMc.value) return t("settings.version.setup.upgrade.unknown");
+  const loader = targetLoader.value === "vanilla"
+    ? t("settings.version.setup.upgrade.noLoader")
+    : `${LOADER_TITLES[targetLoader.value] ?? targetLoader.value} ${targetLoaderVersion.value}`.trim();
+  return `${targetMc.value} · ${loader}`;
+});
 
 const canCheck = computed(
   () =>
@@ -196,6 +214,18 @@ const canStart = computed(() => {
 const statusClass = (status: UpgradeModStatus) => `upg-status--${status}`;
 const statusLabel = (status: UpgradeModStatus) =>
   t(`settings.version.setup.upgrade.status.${status}`);
+function statusIcon(status: UpgradeModStatus) {
+  switch (status) {
+    case "compatible":
+      return CircleCheck;
+    case "update":
+      return ArrowUpCircle;
+    case "incompatible":
+      return X;
+    default:
+      return AlertCircle;
+  }
+}
 
 function reasonText(mod: UpgradeModReport): string {
   if (mod.status === "update" && mod.compatible_version) {
@@ -232,6 +262,7 @@ async function loadInfo() {
     loadingInfo.value = false;
     return;
   }
+  void loadVersionIcon(versionName.value);
   const seq = ++infoSeq;
   loadingInfo.value = true;
   infoError.value = "";
@@ -273,16 +304,8 @@ async function loadLoaderVersions() {
   loaderLoading.value = true;
   loaderError.value = "";
   loaderVersions.value = [];
-  const command = {
-    fabric: "get_fabric_versions",
-    forge: "get_forge_versions",
-    neoforge: "get_neoforge_versions",
-    quilt: "get_quilt_versions",
-  }[targetLoader.value];
   try {
-    const versions = command
-      ? await invoke<string[]>(command, { mcVersion: targetMc.value })
-      : [];
+    const versions = await fetchUpgradeLoaderVersions(targetLoader.value, targetMc.value);
     if (seq !== loaderSeq) return;
     loaderVersions.value = versions;
     if (versions.length === 0) {
@@ -441,10 +464,17 @@ onMounted(async () => {
 
 <template>
   <div class="vs-page upg-page">
-    <SetupCard
-      :title="t('settings.version.setup.upgrade.currentTitle')"
-      :desc="t('settings.version.setup.upgrade.currentDesc')"
-    >
+    <section class="upg-card">
+      <header class="upg-card-head">
+        <span class="upg-card-icon">
+          <Box :size="18" :stroke-width="1.8" />
+        </span>
+        <span class="upg-card-titles">
+          <span class="upg-card-title">{{ t("settings.version.setup.upgrade.currentTitle") }}</span>
+          <span class="upg-card-desc">{{ t("settings.version.setup.upgrade.currentDesc") }}</span>
+        </span>
+      </header>
+
       <div v-if="loadingInfo" class="upg-state">
         <LoaderCircle :size="16" class="upg-spin" />
         <span>{{ t("settings.version.setup.upgrade.loadingInfo") }}</span>
@@ -454,23 +484,28 @@ onMounted(async () => {
         <span>{{ infoError }}</span>
       </button>
       <template v-else-if="info">
-        <div class="upg-grid">
-          <div class="upg-kv">
-            <span class="upg-k">{{ t("settings.version.setup.upgrade.currentMc") }}</span>
-            <span class="upg-v">{{ info.mc_version }}</span>
-          </div>
-          <div class="upg-kv">
-            <span class="upg-k">{{ t("settings.version.setup.upgrade.currentLoader") }}</span>
-            <span class="upg-v">{{ currentLoaderLabel }}</span>
-          </div>
-          <div class="upg-kv">
-            <span class="upg-k">{{ t("settings.version.setup.upgrade.currentLoaderVersion") }}</span>
-            <span class="upg-v">{{ currentLoaderVersionLabel }}</span>
-          </div>
-          <div class="upg-kv">
-            <span class="upg-k">{{ t("settings.version.setup.upgrade.currentMods") }}</span>
-            <span class="upg-v">{{ t("settings.version.setup.upgrade.modCount", { count: info.mod_count }) }}</span>
-          </div>
+        <div class="upg-instance">
+          <span class="upg-instance-icon">
+            <img :src="currentInstanceIcon" :alt="versionName" />
+          </span>
+          <span class="upg-instance-body">
+            <span class="upg-instance-name">{{ versionName }}</span>
+            <span class="upg-chips">
+              <span class="upg-chip">
+                <Box :size="13" />
+                {{ info.mc_version }}
+              </span>
+              <span class="upg-chip">
+                <img class="upg-chip-icon" :src="currentLoaderIcon" alt="" />
+                {{ currentLoaderLabel }}
+                <span class="upg-chip-dim">{{ currentLoaderVersionLabel }}</span>
+              </span>
+              <span class="upg-chip">
+                <Puzzle :size="13" />
+                {{ t("settings.version.setup.upgrade.modCount", { count: info.mod_count }) }}
+              </span>
+            </span>
+          </span>
         </div>
         <div v-if="info.loader === 'optifine'" class="upg-note">
           {{ t("settings.version.setup.upgrade.optifineHint") }}
@@ -479,14 +514,19 @@ onMounted(async () => {
           {{ t("settings.version.setup.upgrade.pendingInProgress") }}
         </div>
       </template>
-    </SetupCard>
+    </section>
 
-    <SetupCard
-      v-if="pending"
-      :title="t('settings.version.setup.upgrade.pendingTitle')"
-      :desc="t('settings.version.setup.upgrade.pendingTarget', { from: pending.from_version, to: pendingTo })"
-    >
-      <div class="upg-pending">
+    <section v-if="pending" class="upg-card upg-card--warning">
+      <header class="upg-card-head">
+        <span class="upg-card-icon upg-card-icon--warning">
+          <AlertCircle :size="18" :stroke-width="1.8" />
+        </span>
+        <span class="upg-card-titles">
+          <span class="upg-card-title">{{ t("settings.version.setup.upgrade.pendingTitle") }}</span>
+          <span class="upg-card-desc">{{ t("settings.version.setup.upgrade.pendingTarget", { from: pending.from_version, to: pendingTo }) }}</span>
+        </span>
+      </header>
+      <div class="upg-pending-row">
         <span class="upg-note" :class="{ 'upg-warn': !pending.install_done }">
           {{
             upgradeTaskActive || info?.busy
@@ -496,10 +536,10 @@ onMounted(async () => {
                 : t("settings.version.setup.upgrade.pendingRollbackOnly")
           }}
         </span>
-        <div class="upg-actions">
+        <span class="upg-card-actions">
           <button
             type="button"
-            class="setup-btn"
+            class="upg-btn upg-btn--primary"
             :disabled="pendingBusy || !pending.install_done"
             @click="completePending"
           >
@@ -507,23 +547,33 @@ onMounted(async () => {
           </button>
           <button
             type="button"
-            class="setup-btn upg-danger"
+            class="upg-btn upg-btn--danger"
             :disabled="pendingBusy"
             @click="rollbackPending"
           >
             {{ pendingAction === "rollback" ? t("settings.version.setup.upgrade.starting") : t("settings.version.setup.upgrade.rollback") }}
           </button>
-        </div>
+        </span>
       </div>
-    </SetupCard>
+    </section>
 
-    <SetupCard
-      :title="t('settings.version.setup.upgrade.targetTitle')"
-      :desc="t('settings.version.setup.upgrade.targetDesc')"
-    >
-      <div class="upg-form">
-        <div class="upg-form-row">
-          <label class="upg-label" for="upg-mc">{{ t("settings.version.setup.upgrade.targetMc") }}</label>
+    <section class="upg-card">
+      <header class="upg-card-head">
+        <span class="upg-card-icon">
+          <ArrowUpCircle :size="18" :stroke-width="1.8" />
+        </span>
+        <span class="upg-card-titles">
+          <span class="upg-card-title">{{ t("settings.version.setup.upgrade.targetTitle") }}</span>
+          <span class="upg-card-desc">{{ t("settings.version.setup.upgrade.targetDesc") }}</span>
+        </span>
+      </header>
+
+      <div class="upg-fields">
+        <div class="upg-field">
+          <span class="upg-field-label">
+            <Box :size="14" />
+            {{ t("settings.version.setup.upgrade.targetMc") }}
+          </span>
           <DropSelect
             id="upg-mc"
             v-model="targetMc"
@@ -532,18 +582,33 @@ onMounted(async () => {
             class="upg-select"
           />
         </div>
-        <div class="upg-form-row">
-          <label class="upg-label" for="upg-loader">{{ t("settings.version.setup.upgrade.targetLoader") }}</label>
-          <DropSelect
-            id="upg-loader"
-            v-model="targetLoader"
-            :options="loaderOptions"
-            :disabled="loadingInfo || !info"
-            class="upg-select"
-          />
+
+        <div class="upg-field">
+          <span class="upg-field-label">
+            <Puzzle :size="14" />
+            {{ t("settings.version.setup.upgrade.targetLoader") }}
+          </span>
+          <div class="upg-loader-grid">
+            <button
+              v-for="tile in loaderTiles"
+              :key="tile.value"
+              type="button"
+              class="upg-loader-tile"
+              :class="{ active: targetLoader === tile.value }"
+              :disabled="loadingInfo || !info"
+              @click="targetLoader = tile.value"
+            >
+              <img :src="tile.icon" alt="" />
+              <span>{{ tile.label }}</span>
+            </button>
+          </div>
         </div>
-        <div v-if="targetLoader !== 'vanilla'" class="upg-form-row">
-          <label class="upg-label" for="upg-loader-version">{{ t("settings.version.setup.upgrade.targetLoaderVersion") }}</label>
+
+        <div v-if="targetLoader !== 'vanilla'" class="upg-field">
+          <span class="upg-field-label">
+            <Box :size="14" />
+            {{ t("settings.version.setup.upgrade.targetLoaderVersion") }}
+          </span>
           <DropSelect
             id="upg-loader-version"
             v-model="targetLoaderVersion"
@@ -563,7 +628,7 @@ onMounted(async () => {
         <span class="upg-note upg-warn" :title="vdState.error">
           {{ t("settings.version.setup.upgrade.manifestFailed") }}
         </span>
-        <button type="button" class="setup-btn" @click="vdState.fetchManifest()">
+        <button type="button" class="upg-btn upg-btn--ghost" @click="vdState.fetchManifest()">
           {{ t("common.action.retry") }}
         </button>
       </div>
@@ -573,36 +638,46 @@ onMounted(async () => {
       </div>
       <div v-else-if="loaderError" class="upg-inline-error">
         <span class="upg-note upg-warn">{{ loaderError }}</span>
-        <button type="button" class="setup-btn" @click="loadLoaderVersions">
+        <button type="button" class="upg-btn upg-btn--ghost" @click="loadLoaderVersions">
           {{ t("common.action.retry") }}
         </button>
       </div>
-      <div v-if="!loaderSupported" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.loaderUnsupported") }}
-      </div>
-      <div v-if="sameTarget" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.sameTarget") }}
-      </div>
-      <div v-if="!targetMeta" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.noTargetUrl") }}
-      </div>
-      <div v-if="loaderChanged" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.warningLoaderChange") }}
-      </div>
-      <div v-if="loaderDowngrade" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.warningDowngrade") }}
-      </div>
-      <div class="upg-note">{{ t("settings.version.setup.upgrade.startHint") }}</div>
-      <div v-if="info && targetMc && info.mc_version !== targetMc" class="upg-note upg-warn">
-        {{ t("settings.version.setup.upgrade.warningWorlds") }}
-      </div>
-      <div class="upg-note">{{ t("settings.version.setup.upgrade.closeGameHint") }}</div>
-    </SetupCard>
 
-    <SetupCard
-      :title="t('settings.version.setup.upgrade.modsTitle')"
-      :desc="t('settings.version.setup.upgrade.modsDesc')"
-    >
+      <div class="upg-messages">
+        <div v-if="!loaderSupported" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.loaderUnsupported") }}
+        </div>
+        <div v-if="sameTarget" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.sameTarget") }}
+        </div>
+        <div v-if="!targetMeta" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.noTargetUrl") }}
+        </div>
+        <div v-if="loaderChanged" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.warningLoaderChange") }}
+        </div>
+        <div v-if="loaderDowngrade" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.warningDowngrade") }}
+        </div>
+        <div class="upg-note">{{ t("settings.version.setup.upgrade.startHint") }}</div>
+        <div v-if="info && targetMc && info.mc_version !== targetMc" class="upg-note upg-warn">
+          {{ t("settings.version.setup.upgrade.warningWorlds") }}
+        </div>
+        <div class="upg-note">{{ t("settings.version.setup.upgrade.closeGameHint") }}</div>
+      </div>
+    </section>
+
+    <section class="upg-card">
+      <header class="upg-card-head">
+        <span class="upg-card-icon">
+          <Puzzle :size="18" :stroke-width="1.8" />
+        </span>
+        <span class="upg-card-titles">
+          <span class="upg-card-title">{{ t("settings.version.setup.upgrade.modsTitle") }}</span>
+          <span class="upg-card-desc">{{ t("settings.version.setup.upgrade.modsDesc") }}</span>
+        </span>
+      </header>
+
       <div v-if="info && info.mod_count === 0" class="upg-note">
         {{ t("settings.version.setup.upgrade.noMods") }}
       </div>
@@ -610,11 +685,13 @@ onMounted(async () => {
         <div class="upg-toolbar">
           <button
             type="button"
-            class="setup-btn"
+            class="upg-btn upg-btn--ghost"
             :disabled="!canCheck"
             @click="checkCompatibility"
           >
             <LoaderCircle v-if="checking" :size="15" class="upg-spin" />
+            <CircleCheck v-else-if="report" :size="15" />
+            <Puzzle v-else :size="15" />
             <span>
               {{
                 checking
@@ -627,22 +704,41 @@ onMounted(async () => {
           </button>
           <span class="upg-note">{{ t("settings.version.setup.upgrade.checkHint") }}</span>
         </div>
+
         <div v-if="checkError" class="upg-note upg-warn">{{ checkError }}</div>
+
         <div v-if="report" class="upg-report">
-          <div class="upg-summary">
-            {{ t("settings.version.setup.upgrade.reportSummary", {
-              compatible: report.compatible,
-              update: report.update,
-              incompatible: report.incompatible,
-              unknown: report.unknown,
-            }) }}
+          <div class="upg-stats">
+            <span class="upg-stat upg-stat--compatible">
+              <CircleCheck :size="14" />
+              <strong>{{ report.compatible }}</strong>
+              {{ statusLabel("compatible") }}
+            </span>
+            <span class="upg-stat upg-stat--update">
+              <ArrowUpCircle :size="14" />
+              <strong>{{ report.update }}</strong>
+              {{ statusLabel("update") }}
+            </span>
+            <span class="upg-stat upg-stat--incompatible">
+              <X :size="14" />
+              <strong>{{ report.incompatible }}</strong>
+              {{ statusLabel("incompatible") }}
+            </span>
+            <span class="upg-stat upg-stat--unknown">
+              <AlertCircle :size="14" />
+              <strong>{{ report.unknown }}</strong>
+              {{ statusLabel("unknown") }}
+            </span>
           </div>
           <div v-if="report.network_error" class="upg-note upg-warn">
             {{ t("settings.version.setup.upgrade.networkFallback") }}
           </div>
           <div class="upg-mod-list">
             <div v-for="mod in report.mods" :key="mod.file_name" class="upg-mod">
-              <span class="upg-status" :class="statusClass(mod.status)">{{ statusLabel(mod.status) }}</span>
+              <span class="upg-status" :class="statusClass(mod.status)">
+                <component :is="statusIcon(mod.status)" :size="13" />
+                <span>{{ statusLabel(mod.status) }}</span>
+              </span>
               <span class="upg-mod-main">
                 <span class="upg-mod-name">{{ mod.file_name }}</span>
                 <span class="upg-mod-meta">{{ metaText(mod) }}</span>
@@ -651,6 +747,7 @@ onMounted(async () => {
             </div>
           </div>
         </div>
+
         <div class="upg-toggles">
           <div class="upg-toggle">
             <CheckToggle v-model="disableIncompatible">
@@ -669,45 +766,114 @@ onMounted(async () => {
           {{ t("settings.version.setup.upgrade.warningNoDisable") }}
         </div>
       </template>
-    </SetupCard>
+    </section>
 
-    <div class="upg-submit">
-      <span v-if="info && info.mod_count > 0 && !report" class="upg-note">
-        {{ t("settings.version.setup.upgrade.needCheck") }}
-      </span>
-      <button
-        type="button"
-        class="setup-btn upg-primary"
-        :disabled="!canStart"
-        @click="startUpgrade"
-      >
-        <ArrowUpCircle :size="16" />
-        <span>
-          {{
-            starting
-              ? t("settings.version.setup.upgrade.starting")
-              : t("settings.version.setup.upgrade.start")
-          }}
+    <section class="upg-card upg-action-card">
+      <header class="upg-card-head">
+        <span class="upg-card-icon">
+          <Rocket :size="18" :stroke-width="1.8" />
         </span>
-      </button>
-    </div>
-
-    <div v-if="starting" class="upg-overlay" role="status">
-      <LoadingSpinner :text="t('settings.version.setup.upgrade.starting')" />
-    </div>
+        <span class="upg-card-titles">
+          <span class="upg-card-title">{{ t("settings.version.setup.upgrade.actionTitle") }}</span>
+          <span class="upg-card-desc">{{ t("settings.version.setup.upgrade.actionDesc") }}</span>
+        </span>
+      </header>
+      <div class="upg-action-body">
+        <span class="upg-action-summary">
+          <span class="upg-action-target">{{ targetSummary }}</span>
+          <span v-if="info && info.mod_count > 0 && !report" class="upg-note">
+            {{ t("settings.version.setup.upgrade.needCheck") }}
+          </span>
+        </span>
+        <button
+          type="button"
+          class="upg-btn upg-btn--primary upg-btn--lg"
+          :disabled="!canStart"
+          @click="startUpgrade"
+        >
+          <LoaderCircle v-if="starting" :size="17" class="upg-spin" />
+          <Rocket v-else :size="17" />
+          <span>
+            {{
+              starting
+                ? t("settings.version.setup.upgrade.starting")
+                : t("settings.version.setup.upgrade.start")
+            }}
+          </span>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .upg-page {
-  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+
+.upg-card {
+  padding: 16px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.upg-card--warning {
+  border-left: 3px solid var(--color-warning);
+}
+
+.upg-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.upg-card-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--color-brand);
+  background: var(--color-brand-bg);
+}
+
+.upg-card-icon--warning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.upg-card-titles {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.upg-card-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.upg-card-desc {
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .upg-state {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 6px 0;
   color: var(--text-tertiary);
   font-size: var(--fs-sm);
 }
@@ -726,41 +892,97 @@ onMounted(async () => {
   cursor: pointer;
 }
 
-.upg-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 18px;
-}
-
-.upg-kv {
+.upg-instance {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
 }
 
-.upg-k {
-  font-size: var(--fs-xs);
-  color: var(--text-tertiary);
+.upg-instance-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-page);
 }
 
-.upg-v {
-  font-size: var(--fs-base);
-  color: var(--text-primary);
+.upg-instance-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.upg-instance-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upg-instance-name {
   overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.upg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.upg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-page);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.upg-chip-dim {
+  color: var(--text-tertiary);
+}
+
+.upg-chip-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  object-fit: contain;
+}
+
 .upg-note {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: var(--fs-sm);
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text-tertiary);
 }
 
 .upg-warn {
   color: var(--color-warning);
+}
+
+.upg-messages {
+  margin-top: 10px;
+}
+
+.upg-messages .upg-note:first-child {
+  margin-top: 0;
 }
 
 .upg-inline-error {
@@ -775,28 +997,83 @@ onMounted(async () => {
   margin-top: 0;
 }
 
-.upg-form {
+.upg-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.upg-form-row {
-  display: flex;
-  align-items: center;
   gap: 12px;
 }
 
-.upg-label {
-  flex: none;
-  width: 140px;
-  font-size: var(--fs-sm);
+.upg-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upg-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 500;
 }
 
 .upg-select {
-  flex: 1;
+  width: 100%;
+}
+
+.upg-loader-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.upg-loader-tile {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
   min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-page);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.upg-loader-tile img {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  object-fit: contain;
+}
+
+.upg-loader-tile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upg-loader-tile:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.upg-loader-tile.active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-bg);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+.upg-loader-tile:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .upg-toolbar {
@@ -814,24 +1091,60 @@ onMounted(async () => {
   margin-top: 10px;
 }
 
-.upg-summary {
+.upg-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upg-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+
+.upg-stat strong {
   font-size: var(--fs-sm);
-  color: var(--text-secondary);
+}
+
+.upg-stat--compatible {
+  color: var(--color-success);
+  background: var(--color-brand-bg);
+}
+
+.upg-stat--update {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.upg-stat--incompatible {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.upg-stat--unknown {
+  color: var(--text-tertiary);
+  background: var(--surface-hover);
 }
 
 .upg-mod-list {
-  margin-top: 8px;
-  max-height: 360px;
+  max-height: 340px;
+  margin-top: 10px;
   overflow-y: auto;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
+  background: var(--surface-page);
 }
 
 .upg-mod {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 7px 10px;
+  padding: 8px 10px;
 }
 
 .upg-mod + .upg-mod {
@@ -840,12 +1153,14 @@ onMounted(async () => {
 
 .upg-status {
   flex: none;
-  min-width: 56px;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 64px;
+  padding: 2px 7px;
+  border-radius: 999px;
   font-size: var(--fs-2xs);
   font-weight: 600;
-  text-align: center;
   white-space: nowrap;
 }
 
@@ -878,9 +1193,9 @@ onMounted(async () => {
 }
 
 .upg-mod-name {
-  font-size: var(--fs-sm);
-  color: var(--text-primary);
   overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -888,21 +1203,23 @@ onMounted(async () => {
 .upg-mod-meta,
 .upg-mod-reason {
   font-size: var(--fs-xs);
-  color: var(--text-tertiary);
   line-height: 1.5;
+  color: var(--text-tertiary);
 }
 
 .upg-mod-reason {
   flex: none;
-  max-width: 42%;
+  max-width: 40%;
   text-align: right;
 }
 
 .upg-toggles {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-default);
 }
 
 .upg-toggle {
@@ -915,7 +1232,7 @@ onMounted(async () => {
   margin-top: 0;
 }
 
-.upg-pending {
+.upg-pending-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -923,41 +1240,105 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
-.upg-pending .upg-note {
+.upg-pending-row .upg-note {
   margin-top: 0;
 }
 
-.upg-actions {
-  display: flex;
+.upg-card-actions {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.upg-danger {
+.upg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+
+.upg-btn:hover:not(:disabled) {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+.upg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.upg-btn--primary {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--text-inverse);
+}
+
+.upg-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  color: var(--text-inverse);
+}
+
+.upg-btn--danger {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
 
-.upg-submit {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 12px;
+.upg-btn--danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
-.upg-submit .upg-note {
-  margin-top: 0;
+.upg-btn--ghost {
+  height: 30px;
+  border-color: var(--border-default);
+  background: var(--surface-page);
 }
 
-.upg-primary {
-  border-color: var(--color-brand);
-  background: var(--color-brand);
-  color: var(--text-inverse);
+.upg-btn--lg {
+  height: 40px;
+  padding: 0 20px;
+  font-size: var(--fs-md);
   font-weight: 600;
 }
 
-.upg-primary:hover:not(:disabled) {
-  filter: brightness(1.12);
+.upg-action-card {
+  border-color: var(--border-strong);
+}
+
+.upg-action-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.upg-action-summary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.upg-action-target {
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.upg-action-summary .upg-note {
+  margin-top: 0;
 }
 
 .upg-spin {
@@ -970,29 +1351,40 @@ onMounted(async () => {
   }
 }
 
-.upg-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay);
-}
-
 @media (max-width: 760px) {
-  .upg-grid {
-    grid-template-columns: 1fr;
+  .upg-card {
+    padding: 14px;
   }
 
-  .upg-form-row {
+  .upg-instance {
+    align-items: flex-start;
+  }
+
+  .upg-instance-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .upg-loader-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .upg-action-body {
     align-items: stretch;
     flex-direction: column;
-    gap: 4px;
   }
 
-  .upg-label {
-    width: auto;
+  .upg-btn--lg {
+    width: 100%;
+  }
+
+  .upg-mod {
+    flex-wrap: wrap;
+  }
+
+  .upg-mod-reason {
+    max-width: 100%;
+    text-align: left;
   }
 }
 </style>

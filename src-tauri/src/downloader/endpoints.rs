@@ -20,10 +20,17 @@ pub const BMCLAPI_ASSETS: &str = "https://bmclapi2.bangbang93.com/assets";
 pub const BMCLAPI_MAVEN: &str = "https://bmclapi2.bangbang93.com/maven";
 pub const BMCLAPI_LIBRARIES: &str = "https://bmclapi2.bangbang93.com/libraries";
 pub const BMCLAPI_FABRIC_META: &str = "https://bmclapi2.bangbang93.com/fabric-meta";
+/// BMCLAPI Quilt meta（仅全量 loader 列表可用；按 MC 查询端点未镜像）。
+pub const BMCLAPI_QUILT_META: &str = "https://bmclapi2.bangbang93.com/quilt-meta";
+/// Quilt loader 全量版本列表（无 MC 过滤；按 MC 查询失败时的兜底）。
+pub const QUILT_ALL_LOADER_PATH: &str = "/v3/versions/loader";
+/// Quilt loader maven-metadata（全量版本，最后兜底）。
+pub const QUILT_MAVEN_METADATA: &str =
+    "https://maven.quiltmc.org/repository/release/org/quiltmc/quilt-loader/maven-metadata.xml";
 
 // ── URL 路径/模板片段（base 之上，每段唯一；官方与镜像共用处只定义一次）──
 
-/// forge 版本元数据（两源同走官方 maven）。
+/// forge 版本元数据（官方 maven；BMCLAPI 经 /maven 代理）。
 pub const FORGE_METADATA_PATH: &str = "/net/minecraftforge/forge/maven-metadata.xml";
 /// neoforge 版本元数据（官方含 /releases 段，镜像无）。
 pub const NEOFORGE_METADATA_PATH: &str = "/releases/net/neoforged/neoforge/maven-metadata.xml";
@@ -79,7 +86,7 @@ pub fn mirror_source() -> DownloadSource {
         resource_url: BMCLAPI_ASSETS.into(),
         maven_url: BMCLAPI_MAVEN.into(),
         libraries_url: BMCLAPI_LIBRARIES.into(),
-        forge_list_url: format!("{FORGE_MAVEN}{FORGE_METADATA_PATH}"),
+        forge_list_url: format!("{BMCLAPI_MAVEN}{FORGE_METADATA_PATH}"),
         fabric_list_url: format!("{BMCLAPI_FABRIC_META}{FABRIC_LOADER_LIST_PATH}"),
         neoforge_list_url: format!("{BMCLAPI_MAVEN}{NEOFORGE_METADATA_MIRROR_PATH}"),
         quilt_list_url: format!("{QUILT_META}{QUILT_LOADER_LIST_PATH}"),
