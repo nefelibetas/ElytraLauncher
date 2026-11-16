@@ -113,19 +113,56 @@ watch(gameVersionOptions, () => {
 
 const TYPE_ORDER: Record<string, number> = { release: 0, beta: 1, alpha: 2, unknown: 3 };
 
-const filteredVersions = computed(() =>
-  versions.value
+/** 解析正式版 MC 版本数值段；快照/预发布不参与，避免 "24w14a" 冒充最高版本。 */
+function releaseSegments(gv: string): number[] | null {
+  if (isSnapshot(gv)) return null;
+  const m = gv.match(/^(\d+(?:\.\d+)*)/);
+  return m ? m[1].split(".").map(Number) : null;
+}
+
+/** 数值段降序比较；段数不足按 0 补足（"1.20" 与 "1.20.0" 相等）。 */
+function compareSegmentsDesc(a: number[], b: number[]): number {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const diff = (b[i] ?? 0) - (a[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** 文件声明的最高正式版 MC 版本；只有快照时返回 null（排在正式版之后）。 */
+function highestReleaseVersion(version: CommunityVersion): number[] | null {
+  let best: number[] | null = null;
+  for (const gv of shownGameVersions(version.game_versions)) {
+    const seg = releaseSegments(gv);
+    if (!seg) continue;
+    if (!best || compareSegmentsDesc(seg, best) < 0) best = seg;
+  }
+  return best;
+}
+
+/** 版本文件按支持的最高 MC 版本降序；同版本内 release > beta > alpha，再按发布时间降序。 */
+const filteredVersions = computed(() => {
+  const rows = versions.value
     .filter(
       v =>
         (!loaderFilter.value || v.loaders.includes(loaderFilter.value)) &&
         (!gameVersionFilter.value || shownGameVersions(v.game_versions).some(gv => majorVersion(gv) === gameVersionFilter.value)),
     )
-    .sort((a, b) => {
-      const t = (TYPE_ORDER[a.version_type] ?? 3) - (TYPE_ORDER[b.version_type] ?? 3);
-      if (t !== 0) return t;
-      return b.date_published.localeCompare(a.date_published);
-    }),
-);
+    .map(version => ({ version, mc: highestReleaseVersion(version) }));
+  rows.sort((a, b) => {
+    if (a.mc || b.mc) {
+      if (!a.mc) return 1;
+      if (!b.mc) return -1;
+      const byGame = compareSegmentsDesc(a.mc, b.mc);
+      if (byGame !== 0) return byGame;
+    }
+    const byType = (TYPE_ORDER[a.version.version_type] ?? 3) - (TYPE_ORDER[b.version.version_type] ?? 3);
+    if (byType !== 0) return byType;
+    return b.version.date_published.localeCompare(a.version.date_published);
+  });
+  return rows.map(row => row.version);
+});
 
 function loaderLabel(l: string): string {
   return l.charAt(0).toUpperCase() + l.slice(1);
@@ -428,6 +465,7 @@ function backAfterSubmit() {
 
 const depDialogOpen = ref(false);
 const depDialogLoading = ref(false);
+const depResolving = ref(false);
 const depDialogUpdating = ref(false);
 const depSubmitting = ref(false);
 const depDialogError = ref("");
@@ -519,11 +557,19 @@ async function submitModFiles(files: DownloadFileInput[], name: string) {
   }
 }
 
-/** 解析/重解析前置；重解析保留已选可选根，并丢弃已不在计划里的版本覆盖。 */
+/** 应用解析结果：丢弃已不在计划里的版本覆盖。 */
+function applyDependencyPlan(plan: ModDependencyPlan) {
+  depPlan.value = plan;
+  const projectIds = new Set(plan.items.map(dep => dep.project_id));
+  depVersionOverrides.value = Object.fromEntries(
+    Object.entries(depVersionOverrides.value).filter(([projectId]) => projectIds.has(projectId)),
+  );
+}
+
+/** 弹窗内重试/切换前置版本：按当前覆盖重新解析，不自动提交。 */
 async function resolveDependencyPlan(initial: boolean) {
   const request = pendingMain;
   if (!request) return;
-  const version = request.version;
   const seq = ++depDialogSeq;
   if (initial) {
     depDialogLoading.value = true;
@@ -535,23 +581,12 @@ async function resolveDependencyPlan(initial: boolean) {
     const plan = await resolveModDependencies({
       source: item.value?.source ?? "modrinth",
       projectId: item.value?.id ?? "",
-      versionId: version.version_id,
+      versionId: request.version.version_id,
       versionDirName: request.target,
       versionOverrides: depVersionOverrides.value,
     });
     if (depDisposed || seq !== depDialogSeq || !depDialogOpen.value) return;
-    depPlan.value = plan;
-    const projectIds = new Set(plan.items.map(dep => dep.project_id));
-    depVersionOverrides.value = Object.fromEntries(
-      Object.entries(depVersionOverrides.value).filter(([projectId]) => projectIds.has(projectId)),
-    );
-    if (initial && plan.items.length === 0 && plan.errors.length === 0) {
-      if (depDisposed) return;
-      await submitModFiles(
-        [mainDownloadFile(version, mainReplacements(version))],
-        depModName.value,
-      );
-    }
+    applyDependencyPlan(plan);
   } catch (e) {
     if (depDisposed || seq !== depDialogSeq || !depDialogOpen.value) return;
     if (initial) depDialogError.value = errMsg(e);
@@ -570,7 +605,10 @@ function retryDependencyPlan() {
   void resolveDependencyPlan(true);
 }
 
-/** 解析前置并打开确认框；无前置则直接提交主 Mod。 */
+/**
+ * 解析前置后再决定是否弹窗：没有可确认的前置就直接提交主 Mod，避免空前置弹窗抢占主下载。
+ * 解析失败仍打开弹窗承接错误与重试。
+ */
 async function openModDownload(version: CommunityVersion, target: string) {
   if (depDisposed) return;
   pendingMain = { version, target };
@@ -580,12 +618,38 @@ async function openModDownload(version: CommunityVersion, target: string) {
   depModLoaders.value = version.loaders;
   depPlan.value = null;
   depDialogError.value = "";
+  depDialogLoading.value = false;
+  depDialogOpen.value = false;
   depVersionOverrides.value = {};
   depDialogUpdating.value = false;
   depSubmitting.value = false;
-  depDialogLoading.value = true;
-  depDialogOpen.value = true;
-  await resolveDependencyPlan(true);
+  const seq = ++depDialogSeq;
+  depResolving.value = true;
+  try {
+    const plan = await resolveModDependencies({
+      source: item.value?.source ?? "modrinth",
+      projectId: item.value?.id ?? "",
+      versionId: version.version_id,
+      versionDirName: target,
+      versionOverrides: {},
+    });
+    if (depDisposed || seq !== depDialogSeq) return;
+    applyDependencyPlan(plan);
+    if (plan.items.length === 0 && plan.errors.length === 0) {
+      await submitModFiles(
+        [mainDownloadFile(version, mainReplacements(version))],
+        depModName.value,
+      );
+      return;
+    }
+    depDialogOpen.value = true;
+  } catch (e) {
+    if (depDisposed || seq !== depDialogSeq) return;
+    depDialogError.value = errMsg(e);
+    depDialogOpen.value = true;
+  } finally {
+    if (seq === depDialogSeq) depResolving.value = false;
+  }
 }
 
 function onDependencyVersionChange(projectId: string, versionId: string) {
@@ -791,10 +855,11 @@ async function copyName() {
               <button
                 v-if="fileKind || isModpack"
                 class="mv-dl"
-                :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload }"
+                :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload || depResolving }"
+                :disabled="depResolving"
                 v-tooltip="downloadButtonTooltip"
                 @click="submitDownload"
-              >{{ isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
+              >{{ depResolving ? t("download.detail.modDepsLoading") : isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
 
               <VersionFilterSelect
                 v-if="isMod"
