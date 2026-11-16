@@ -229,6 +229,8 @@ pub struct DownloadTask {
     pub version_dir_name: Option<String>,
     #[serde(default)]
     pub fabric_api: Option<FabricApi>,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 impl DownloadTask {
@@ -390,6 +392,7 @@ pub(crate) fn test_valid_task() -> DownloadTask {
         optifine_patch: None,
         version_dir_name: None,
         fabric_api: None,
+        display_name: None,
     }
 }
 

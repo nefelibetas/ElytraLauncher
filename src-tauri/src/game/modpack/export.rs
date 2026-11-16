@@ -9,6 +9,8 @@ use crate::game::community::modrinth_version_files;
 use crate::game::version::dir::find_version_json;
 use crate::util::{infer_loader_from_json, loader_from_dir, mc_version_from_dir};
 
+use super::version_meta::loader_from_version_json;
+
 // ── 导出侧（与上方导入解析对称）──
 
 /// 导出阶段：扫描/哈希已存在文件 → 写入 zip。任务层据此切换分步进度。
@@ -242,17 +244,22 @@ pub(crate) fn resolve_version_meta(
                 .map(|s| mc_version_from_dir(s).to_string())
         })
         .unwrap_or_else(|| dir_mc.to_string());
-    let json_kind = infer_loader_from_json(&text);
-    let (kind, ver) = if json_kind != "vanilla" {
-        let ver = match dir_loader {
-            Some((k, v)) if k == json_kind.as_str() => Some(v.to_string()),
-            _ => None,
-        };
-        (json_kind, ver)
-    } else if let Some((k, v)) = dir_loader {
-        (k.to_string(), Some(v.to_string()))
+    let json_loader = loader_from_version_json(&text);
+    let (kind, ver) = if let Some(choice) = json_loader {
+        (choice.kind.name().to_string(), Some(choice.version))
     } else {
-        ("vanilla".to_string(), None)
+        let json_kind = infer_loader_from_json(&text);
+        if json_kind != "vanilla" {
+            let ver = match dir_loader {
+                Some((k, v)) if k == json_kind.as_str() => Some(v.to_string()),
+                _ => None,
+            };
+            (json_kind, ver)
+        } else if let Some((k, v)) = dir_loader {
+            (k.to_string(), Some(v.to_string()))
+        } else {
+            ("vanilla".to_string(), None)
+        }
     };
     (mc, kind, ver)
 }
@@ -434,5 +441,24 @@ mod tests {
         let (mc, loader, _) = resolve_version_meta(dir.path(), "Pack-1.21.1");
         assert_eq!(mc, "1.20.1");
         assert_eq!(loader, "fabric");
+    }
+
+    #[test]
+    fn json_loader_version_wins_over_stale_dir_name() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("1.20.1-fabric-0.14.0.json"),
+            r#"{"id":"1.20.1-fabric-0.14.0","mainClass":"net.fabricmc.loader.impl.launch.knot.KnotClient","libraries":[{"name":"net.fabricmc:fabric-loader:0.16.9"}]}"#,
+        )
+        .unwrap();
+
+        let (mc, loader, version) = resolve_version_meta(dir.path(), "1.20.1-fabric-0.14.0");
+        assert_eq!(mc, "1.20.1");
+        assert_eq!(loader, "fabric");
+        assert_eq!(
+            version.as_deref(),
+            Some("0.16.9"),
+            "应取 JSON 中的实际 loader 版本"
+        );
     }
 }

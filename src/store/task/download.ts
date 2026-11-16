@@ -104,6 +104,19 @@ export function registerTaskDoneHook(taskId: string, onDone: () => void) {
   taskDoneHooks.set(taskId, onDone);
 }
 
+/** taskId → 终态回调（done/error/cancel 均触发一次，消费后即删）：升级任务据此提交或回滚。 */
+export const taskTerminalHooks = new Map<string, (ok: boolean) => void>();
+
+export function registerTaskTerminalHook(taskId: string, onTerminal: (ok: boolean) => void) {
+  taskTerminalHooks.set(taskId, onTerminal);
+}
+
+function finishTerminalHook(taskId: string, ok: boolean) {
+  const hook = taskTerminalHooks.get(taskId);
+  taskTerminalHooks.delete(taskId);
+  hook?.(ok);
+}
+
 export const dlState = reactive({
   tasks: [] as TaskItem[],
 
@@ -163,6 +176,7 @@ export const dlState = reactive({
     versionDirName?: string,
     fabricApiUrl?: string,
     fabricApiVersion?: string,
+    displayName?: string,
   ) {
     const task: DownloadTask = {
       version_id: versionId,
@@ -178,6 +192,7 @@ export const dlState = reactive({
         fabricApiUrl && fabricApiVersion
           ? { url: fabricApiUrl, version: fabricApiVersion }
           : null,
+      display_name: displayName ?? null,
     }
     const taskId = await invoke<string>("start_download", { task })
     await this.adoptTask(taskId, { name: "" })
@@ -235,6 +250,7 @@ export const dlState = reactive({
     await invoke("cancel_task", { taskId })
     // 取消不走 done 分发，钩子就地清除防泄漏
     taskDoneHooks.delete(taskId)
+    finishTerminalHook(taskId, false)
   },
 
   /** 暂停：停下载、保留目录与快照，卡片本地标 paused；后端收尾 emit 的 cancelled 事件对 paused 任务忽略。 */
@@ -304,6 +320,7 @@ function finishDone(p: ProgressPayload, kind?: TaskKind) {
   const doneHook = taskDoneHooks.get(p.task_id)
   taskDoneHooks.delete(p.task_id)
   doneHook?.()
+  finishTerminalHook(p.task_id, true)
 }
 
 function finishError(p: ProgressPayload) {
@@ -314,6 +331,7 @@ function finishError(p: ProgressPayload) {
   dlState.onTaskError?.(progressLabel(p) || t("task.defaultName"), p.error || t("task.unknownError"))
   dlState.removeTask(p.task_id)
   taskDoneHooks.delete(p.task_id)
+  finishTerminalHook(p.task_id, false)
 }
 
 function finishCancelled(p: ProgressPayload) {
@@ -321,6 +339,7 @@ function finishCancelled(p: ProgressPayload) {
   taskNames.delete(p.task_id)
   versionTargets.delete(p.task_id)
   taskDoneHooks.delete(p.task_id)
+  finishTerminalHook(p.task_id, false)
   dlState.removeTask(p.task_id)
 }
 

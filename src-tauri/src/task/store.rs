@@ -329,6 +329,7 @@ mod tests {
             optifine_patch: None,
             version_dir_name: None,
             fabric_api: None,
+            display_name: None,
         };
         save_snapshot(
             &id,
@@ -420,6 +421,7 @@ mod tests {
             optifine_patch: None,
             version_dir_name: None,
             fabric_api: None,
+            display_name: None,
         };
         // spawn 的任务在 runtime worker 线程执行（真实 async command 场景）。
         tokio::task::spawn(async move {

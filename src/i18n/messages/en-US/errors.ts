@@ -145,6 +145,25 @@ export default {
     iconTooLarge: "Image must be no larger than 1 MB",
     iconFormat: "Unsupported image format (only png / jpg / webp / gif)"
   },
+  upgrade: {
+    sameVersion: "The target version is the same as the current instance",
+    pending: "This instance has an unfinished upgrade; roll it back first",
+    gameRunning: "Close the running game first",
+    invalidTarget: "Invalid target game version",
+    loaderVersionEmpty: "Select a ModLoader version",
+    versionFilesMissing: "The version directory is missing JSON / JAR files and cannot be upgraded safely",
+    noBackup: "No upgrade backup found",
+    notReady: "The upgrade installation has not completed successfully",
+    ambiguous: "The upgrade directory is in an unexpected state; automatic rollback is not possible",
+    dirMissing: "The upgrade directory is missing",
+    dirConflict: "The target version directory already exists",
+    versionJsonMissing: "Version JSON not found",
+    clientJarMissing: "Client JAR not found; cannot complete the upgrade",
+    targetMismatch: "The installation result does not match the target version; roll back and retry",
+    pendingLaunch: "This instance is being upgraded; finish or roll back the upgrade from instance settings first",
+    busyLaunch: "This instance is running an installation or upgrade task; wait for it to finish",
+    busy: "This instance is busy with another task"
+  },
   mod: {
     failed: "Mod operation failed",
     search: "Failed to search mods"

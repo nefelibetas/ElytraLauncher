@@ -528,6 +528,11 @@ pub fn note_launched(generation: u64, pid: u32) -> bool {
     true
 }
 
+/// 当前是否有由本启动器拉起且尚未退出的游戏进程。
+pub fn is_game_running() -> bool {
+    LAUNCH_PID.load(Ordering::SeqCst) != 0
+}
+
 /// 进程退出后注销 pid：否则后续取消可能误杀复用同一 pid 的其他进程。
 pub fn clear_launched(generation: u64, pid: u32) {
     if LAUNCH_PID_GEN.load(Ordering::SeqCst) == generation

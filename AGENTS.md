@@ -4,12 +4,12 @@
 
 Elytra Launcher — **Tauri v2（Rust 后端）+ Vue 3（TypeScript 前端）** 的 Minecraft 启动器。核心能力：多源游戏下载（官方/国内镜像）、ModLoader 安装（Fabric/Quilt/Forge/NeoForge/OptiFine）、微软 OAuth PKCE 登录与离线模式、皮肤衣柜（3D 预览 / 皮肤披风 / 本地收藏；第三方站点衣柜不内置，点头像用浏览器打开）、JDK 扫描与 managed runtime 下载、Mod 双源搜索与依赖解析、任务管理、启动与进程管理、局域网联机（easytier 内嵌）、工具箱（多线程下载器 / 种子预览 / 世界预览）。
 
-后端 **161 个 `#[tauri::command]`**（21 个模块），前端 **10 个页面**（`src/pages/`），无状态管理库（模块级 `reactive()`/`ref()` 单例）。
+后端 **173 个 `#[tauri::command]`**（23 个模块），前端 **10 个页面**（`src/pages/`），无状态管理库（模块级 `reactive()`/`ref()` 单例）。
 
 ## Architecture & Data Flow
 
 ```
-前端 Vue3 (src/) ──invoke(snake_case)──▶ commands/（薄胶水，21 模块 / 161 命令）
+前端 Vue3 (src/) ──invoke(snake_case)──▶ commands/（薄胶水，23 模块 / 173 命令）
     ▲                                        │ 读 persist 配置、调领域函数
     │ task-progress / ms-login-complete /    ▼
     │ game-exited 等（emit 顺序队列线程）  downloader/（传输层）  game/（内容与装配）
@@ -25,6 +25,8 @@ Elytra Launcher — **Tauri v2（Rust 后端）+ Vue 3（TypeScript 前端）** 
 - **CurseForge Key**：运行时优先 `secrets.bin` 的用户 key，其次 `constants::CURSEFORGE_API_KEY`（构建期 `.env`）；用户 key 只经命令写入，不返回前端。
 - **目录监听**：`game/version/watch.rs` 进程级单例（`notify`，非递归多目标）跟随激活目录监听 `versions/` 与聚焦版本的一级资源子目录；300ms 静默窗口合并后推 `versions-changed`（带全量列表）/ `version-dir-changed`；前端仅在窗口可见时应用（不可见置脏，`visibilitychange` 补拉）。
 - **三态配置**：`game_source_mode`（统管版本列表 / 版本 json / 资源 / 支持库 / ModLoader 构件与安装器 / Mojang JDK runtime；OfficialOnly / MirrorOnly / Auto 默认，按健康度路由，元数据官方优先 4s 降级镜像）、`community_source_mode`（Modrinth vs MCIM）、`network_mode`（Auto 读系统代理 / System / Direct）。
+- **实例升级**（版本设置 → 游戏升级）：先把 `versions/{old}` 顶层 JSON/JAR 备份到 `versions/.elytra-upgrade-{old}/`，再以旧目录名原地安装目标 MC/loader；成功后 JSON id 记录目标 MC，自动生成的目录名改为 `{mc}-{loader}-{ver}`（自定义实例名保留），同步 `elytra-pack.json` 的 `mc_version`、迁移 `version_server_*`、按兼容报告禁用 Mod；任务失败/取消或“上次升级未完成”横幅回滚。备份存在时该版本禁止启动；备份目录以 `.` 开头，版本列表过滤。
+- **升级前 Mod 兼容**：Modrinth 当前文件 + 目标版本查询优先；未收录时解析 jar 内 `fabric.mod.json` / `quilt.mod.json` / `META-INF/mods.toml` / `neoforge.mods.toml` 的 MC / Loader 版本范围；`.jar.disabled` 不参与，前置依赖不展开。
 - **natives 两代**：旧式（≤1.12）`process_natives` 解压到 `natives/<mc>/`（`.elytra-ready` 存 native 集合指纹，不一致即清空重建）并设 `-Djava.library.path`；新式（1.13+）native JAR 作普通库进 classpath。
 
 ## Key Directories
@@ -38,7 +40,7 @@ Elytra Launcher — **Tauri v2（Rust 后端）+ Vue 3（TypeScript 前端）** 
 | `src-tauri/src/persist/` | `config.rs`（TOML section + 全局锁）、`store.rs`（低层 IO）、`instance.rs`（`versions/{id}/.elytra-instance.toml`，存在即该实例完全采用自己的 `[auto_tasks]`）、`secrets.rs`（DPAPI / Keychain / Secret Service + ChaCha20-Poly1305；原子写 `.tmp` + rename；列表读改写一律 `update_json_list`）。`util::config_dir()`：Windows `%APPDATA%\Elytra`、macOS `~/Library/Application Support/Elytra`、Linux `$XDG_DATA_HOME/Elytra`；dev/test 进程在 cargo target 下仍走 exe 旁保持隔离 |
 | `src-tauri/src/launcher/` | `args.rs`（命令构建 / 占位符 / rules / classpath）、**`compat.rs`（版本 ↔ 所选 Java 兼容判定唯一入口）**、`env.rs`、`process.rs`（崩溃判定 + 启动取消闸门）、`auto_tasks/`（执行器内置在前、自定义在后，单项失败继续并汇总 / backup / record / crashpack / redact）、`script.rs`、`skin.rs`、`platform.rs`、`memory.rs`（`GcType::Custom` 不追加预设 GC 参数）、`model.rs` |
 | `src-tauri/src/online/` | 联机：`service.rs`（单例；`stop()` 先释放端口再 `session.stop()`）、`host.rs`、`guest.rs`（`gen` 贯穿到回写，防停止后继续广播）、`session.rs`（no_tun + smoltcp + KCP 数据面，`enable_kcp_proxy=true` 必需，缺则传大数中断）、`scaffold/`（房间码 base34+模 7 / 帧编解码（长度字段外部可控，分配前校验 `MAX_BODY_LEN`）/ 玩家表 / `InfoServer` 必须被单例持有才会释放端口）、`mc_discover.rs`、`mc_advertise.rs`（guest 端模拟 LAN 广播） |
-| `src-tauri/src/commands/` | 21 模块 / 161 命令，薄胶水：account(27) community(7) config(1) downloader(5) gamedirs(12) auto_tasks(4) jdk(5) launch(7) launch_options(3) launch_script(1) loader(6) map(15) seedmap(8) offline_account(5) online(6) server_status(1) skins(6) task(14) tooldl(9) version(15) version_icon(4) |
+| `src-tauri/src/commands/` | 23 模块 / 173 命令，薄胶水：account(27) community(7) config(1) downloader(6) gamedirs(12) instance_upgrade(6) auto_tasks(4) jdk(5) launch(7) launch_options(5) launch_script(1) loader(6) map(15) seedmap(8) offline_account(5) online(6) server_status(1) skins(6) task(14) tooldl(9) version(16) version_icon(4) |
 | `src-tauri/src/map/` `seedmap/` `vendor/cubiomes/` | 世界预览（只读 region：`region_io` / `render` / `tile_cache` / `mod_color`；不依赖 tauri）；种子预览（cubiomes 参数族，只做主世界）；cubiomes 为 xpple fork `d934de1`（MIT，不含 loot），Windows MSVC 用 clang-cl |
 | `src-tauri/src/config/` `auth/` `jdk/` `util/` | 纯数据模型；微软 OAuth + 官方 API + 第三方皮肤站 + 本地收藏；JDK 扫描 + managed runtime 三源（Mojang all.json / Adoptium / Azul；zip/tar 目录条目名带尾 `/`，必须先跳过再校验路径；`on_attempt` 换源清零计数、`on_bytes` 以传输总长作进度分母）；`util` 纯函数（`path.rs` 的 `safe_relative_path`/`sha1_sub_dir`、`process.rs` 的 `NoWindow`、`dirs.rs` 的 `config_dir`） |
 | `src/pages/` | 10 页：Launch / Download / DownloadDetail（顶级路由）/ ResourceDetail（依赖链进入的返回上一层详情）/ Settings / VersionSelect / VersionSetup / WorldPreview / CustomThemeEditor / SkinStudio（仅微软账号） |
@@ -111,7 +113,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **错误提示两级**：toast（`showToast`，默认 4000ms、同屏 5 条、hover 暂停）vs AlertDialog（复杂错误，带复制）；均经 `errMsg()` 取首行
 - **键盘与焦点**：Tab/Shift+Tab 走 `utils/focusNav.ts` 自管遍历（文档序；弹窗内收窄成焦点陷阱，`data-tabskip` 跳过），不用浏览器原生遍历；焦点环由该模块**内联写入内描边**，不要再加 `:focus-visible` 外轮廓；弹窗需 `role="dialog" aria-modal="true"` + `focusDialog`/`restoreFocus`，提示通道用 `role="status"`
 - **展开/收起动画**：`<Transition name="expand">` + `.expand-enter-to/.expand-leave-from { max-height: 1000px }` 显式目标值（写在 active 类上会因同特异性覆盖 from 而无动画）
-- **社区资源搜索**：搜索表单 + 结果列表组件成对复制（绑各自 store）；聚合模式按源累积（每批 40 条），`mcmod_id` 优先、标题兜底去重，按标题相关度 + 平台加权下载量排序，页内从累积列表切片；内容分类走 `tag`（`CFID/MRslug`，空侧表示该源不支持）；排序走 `sort`（relevance 综合 / downloads / updated）；进入下载页并发预加载各 tab 热门（`ensureAutoSearch` 幂等）；刷新按钮 = 各 store 的 `reset()`
+- **社区资源搜索**：搜索表单 + 结果列表组件成对复制（绑各自 store）；聚合模式按源累积（每批 40 条，按页窗口补齐两源），`mcmod_id` 优先、标题兜底去重，按标题相关度 + 原始下载量全局排序，页内从累积列表切片；内容分类走 `tag`（`CFID/MRslug`，空侧表示该源不支持）；排序走 `sort`（relevance 综合 / downloads / updated）；进入下载页并发预加载各 tab 热门（`ensureAutoSearch` 幂等）；刷新按钮 = 各 store 的 `reset()`
 - **路由**：hash 路由，`RouteMeta.transition` + `routeLevel`/`tabOrder` 驱动动画；DownloadDetail 为顶级 tab（routeLevel 0）
 
 ### 注释规范（Rust / TS / Vue 通用）
@@ -151,7 +153,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 
 ## Testing & QA
 
-- **无前端测试**；Rust 439 个单元测试（431 passed + 8 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
+- **无前端测试**；Rust 632 个单元测试（609 passed + 23 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
 - **只测纯函数与关键不变量**：PKCE、URL 组装、启动命令构建、离线皮肤 UUID、内存分配公式、util、maven 解析与排序、Mod 双源搜索、修复步骤规划、persist 读写、secrets DPAPI、store 快照/恢复、fetcher 取消/换源/校验/重定向、segmented 切分/续传/回退、loader profile 合并与继承、房间码与广播回环、emit 派发器（合并/保序）、progress 口径、步骤索引↔名字对齐
 - **断言风格**：`assert_eq!` 精确值为主要；行为不变量用 `assert!` + 中文 message
 - **平台隔离**：Windows 专属（BAT 渲染、DPAPI、注册表代理）用 `#[cfg(target_os = "windows")]`

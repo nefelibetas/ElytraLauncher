@@ -145,6 +145,25 @@ export default {
     iconTooLarge: "图片大小需在 1MB 以内",
     iconFormat: "不支持的图片格式（仅支持 png / jpg / webp / gif）"
   },
+  upgrade: {
+    sameVersion: "目标版本与当前实例相同",
+    pending: "该实例有未完成的升级，请先回滚",
+    gameRunning: "请先关闭正在运行的游戏",
+    invalidTarget: "目标游戏版本不合法",
+    loaderVersionEmpty: "请选择 ModLoader 版本",
+    versionFilesMissing: "版本目录缺少 JSON / JAR，无法安全升级",
+    noBackup: "没有可用的升级备份",
+    notReady: "升级安装任务尚未成功结束，不能提交",
+    ambiguous: "升级目录状态异常，无法自动回滚",
+    dirMissing: "升级目录不存在",
+    dirConflict: "目标版本目录已存在",
+    versionJsonMissing: "未找到版本 JSON",
+    clientJarMissing: "未找到客户端 JAR，无法完成升级",
+    targetMismatch: "安装结果与目标版本不一致，请回滚后重试",
+    pendingLaunch: "该实例正在升级，请先在实例设置中完成或回滚升级",
+    busyLaunch: "该实例正在执行安装或升级任务，请等待任务结束",
+    busy: "该实例正在执行其他任务"
+  },
   mod: {
     failed: "Mod 操作失败",
     search: "搜索 Mod 失败"

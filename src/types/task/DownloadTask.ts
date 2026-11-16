@@ -5,4 +5,4 @@ import type { LoaderChoice } from "./LoaderChoice";
 /**
  * 下载游戏本体任务（原版，或带 ModLoader/OptiFine/Fabric API）。
  */
-export type DownloadTask = { version_id: string, version_url: string, mc_version: string, loader: LoaderChoice | null, optifine_patch: string | null, version_dir_name: string | null, fabric_api: FabricApi | null, };
+export type DownloadTask = { version_id: string, version_url: string, mc_version: string, loader: LoaderChoice | null, optifine_patch: string | null, version_dir_name: string | null, fabric_api: FabricApi | null, display_name: string | null, };

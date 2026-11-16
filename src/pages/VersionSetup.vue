@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // 页面容器：左侧导航 + 各 tab 编排；业务在管理组件内
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import type { Component } from "vue";
 import { useRoute } from "vue-router";
-import { Puzzle, Map, Palette, Sun, Database, Upload, ImagePlus, FileText, Server, Play, SlidersHorizontal } from "@lucide/vue";
+import { Puzzle, Map, Palette, Sun, Database, Upload, ImagePlus, FileText, Server, Play, SlidersHorizontal, ArrowUpCircle } from "@lucide/vue";
 import SideNav from "../component/common/SideNav.vue";
 import VersionSetupMisc from "../component/version-setup/VersionSetupMisc.vue";
+import VersionSetupUpgrade from "../component/version-setup/VersionSetupUpgrade.vue";
 import AutoTasksEditor from "../component/settings/AutoTasksEditor.vue";
 import VersionSetupLogs from "../component/version-setup/VersionSetupLogs.vue";
 import VersionSetupServer from "../component/version-setup/VersionSetupServer.vue";
@@ -21,12 +22,13 @@ import {
 } from "../store/task/versionDetail";
 import { useI18n } from "vue-i18n";
 
-type TabKey = "mods" | "saves" | "resourcepacks" | "shaderpacks" | "datapacks" | "export" | "logs" | "server" | "launchOptions" | "auto_tasks" | "misc";
+type TabKey = "mods" | "upgrade" | "saves" | "resourcepacks" | "shaderpacks" | "datapacks" | "export" | "logs" | "server" | "launchOptions" | "auto_tasks" | "misc";
 
 const { t } = useI18n();
 
 const tabs = computed<{ key: TabKey; label: string; icon: Component }[]>(() => [
   { key: "mods", label: t("settings.version.setup.tabs.mods"), icon: Puzzle },
+  { key: "upgrade", label: t("settings.version.setup.tabs.upgrade"), icon: ArrowUpCircle },
   { key: "saves", label: t("settings.version.setup.tabs.saves"), icon: Map },
   { key: "resourcepacks", label: t("settings.version.setup.tabs.resourcepacks"), icon: Palette },
   { key: "shaderpacks", label: t("settings.version.setup.tabs.shaderpacks"), icon: Sun },
@@ -58,6 +60,7 @@ const REFRESHERS: Record<TabKey, () => void> = {
     void loadMods(versionName.value, true);
     void loadModsQuick(versionName.value);
   },
+  upgrade: () => {},
   saves: () => {
     void loadWorlds(versionName.value);
   },
@@ -76,6 +79,10 @@ onMounted(() => {
   // 聚焦当前版本：后端据此监听 versions/{name} 的一级资源子目录
   if (versionName.value) watchVersionDir(versionName.value);
 });
+
+watch(versionName, name => {
+  if (name) watchVersionDir(name);
+});
 </script>
 
 <template>
@@ -86,10 +93,12 @@ onMounted(() => {
       :width="240"
       refreshable
       internal-scroll
-      :no-refresh-keys="['export', 'launchOptions']"
+      :no-refresh-keys="['export', 'launchOptions', 'upgrade']"
       @refresh="REFRESHERS[$event as TabKey]()"
     >
       <VersionSetupMods v-if="activeTab === 'mods'" key="mods" />
+
+      <VersionSetupUpgrade v-else-if="activeTab === 'upgrade'" key="upgrade" />
 
       <VersionSetupSaves v-else-if="activeTab === 'saves'" key="saves" />
 

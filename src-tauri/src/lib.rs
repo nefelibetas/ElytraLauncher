@@ -54,6 +54,10 @@ use commands::gamedirs::{
     get_active_game_dir, get_game_dirs, open_folder, remove_game_dir, rename_game_dir,
     rename_version_dir, set_active_game_dir, set_watched_version,
 };
+use commands::instance_upgrade::{
+    check_instance_upgrade, commit_instance_upgrade, get_instance_upgrade_info,
+    mark_instance_upgrade_ready, prepare_instance_upgrade, rollback_instance_upgrade,
+};
 use commands::jdk::{
     auto_scan_jdk, get_discovered_jdks, get_jdk_options, save_jdk_options, scan_custom_jdk,
 };
@@ -322,6 +326,12 @@ pub fn run() {
             update_mod_file,
             delete_mod_file,
             get_instance_mod_target,
+            get_instance_upgrade_info,
+            check_instance_upgrade,
+            prepare_instance_upgrade,
+            mark_instance_upgrade_ready,
+            rollback_instance_upgrade,
+            commit_instance_upgrade,
             get_version_server,
             save_version_server,
             toggle_mod_file,

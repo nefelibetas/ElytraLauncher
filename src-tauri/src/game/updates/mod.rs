@@ -4,10 +4,12 @@
 //! 仅支持 Modrinth；CurseForge 无公开 hash 查询通道，命中不了静默跳过。
 //! 子模块：`scan` 目录扫描、`identify` 项目识别与元数据补全、`update` 更新/替换/删除。
 
+mod compat;
 mod identify;
 mod scan;
 mod update;
 
+pub use compat::{check_upgrade_compat, UpgradeModReport, UpgradeModStatus, UpgradeReport};
 pub use identify::{
     identify_one_file, list_dir_detailed, list_mods_detailed, ModFileDetail, ModListResult,
     ResourceListResult,

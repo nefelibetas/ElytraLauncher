@@ -16,6 +16,14 @@ pub trait TaskSpec {
 
 impl TaskSpec for DownloadTask {
     fn name(&self) -> String {
+        if let Some(name) = self
+            .display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            return name.to_string();
+        }
         match (&self.loader, &self.optifine_patch) {
             (Some(l), _) => format!(
                 "{} {}-{} 安装",

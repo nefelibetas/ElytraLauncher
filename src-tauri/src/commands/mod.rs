@@ -4,6 +4,7 @@ pub mod community;
 pub mod config;
 pub mod downloader;
 pub mod gamedirs;
+pub mod instance_upgrade;
 pub mod jdk;
 pub mod launch;
 pub mod launch_options;

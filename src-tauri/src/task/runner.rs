@@ -18,6 +18,7 @@ use crate::game::resource::{assets, extract, library};
 use crate::game::version::dir::resolve_version_dir;
 use crate::game::version::meta;
 use crate::game::version::model::VersionJson;
+use crate::game::version::upgrade;
 use crate::persist;
 use crate::task::{
     self,
@@ -759,6 +760,13 @@ pub async fn run_task(
     }
 
     // 收尾：显式设 100% 并发 done 终态事件（EmitLoop 封顶 99.9%，前端据此移除卡片并通知）
+    if task.optifine_patch.is_none() {
+        upgrade::mark_ready_for_task(
+            &dir_name,
+            mc_version,
+            loader.map(|l| (l.kind.name(), l.version.as_str())),
+        );
+    }
     eprintln!("[task] 完成 ({:.1}s)", t0.elapsed().as_secs_f64());
     set_done(app, progress, "完成");
 }
@@ -1017,6 +1025,7 @@ mod tests {
             optifine_patch: patch.map(str::to_string),
             version_dir_name: None,
             fabric_api: None,
+            display_name: None,
         }
     }
 

@@ -35,6 +35,7 @@ pub fn auto_activate_first_version() -> Result<AutoActivate, String> {
             .map_err(common_err_ctx_key!("errors.file.read", "读取目录失败"))?
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         if names.is_empty() {
@@ -124,7 +125,9 @@ fn list_installed_in(versions_dir: &Path) -> Result<Vec<InstalledVersionInfo>, S
         ))?
         .filter_map(|entry| {
             let entry = entry.ok()?;
-            if !entry.file_type().ok()?.is_dir() {
+            if !entry.file_type().ok()?.is_dir()
+                || entry.file_name().to_string_lossy().starts_with('.')
+            {
                 return None;
             }
             Some((
@@ -453,6 +456,25 @@ mod tests {
         }
         let warm = t.elapsed() / 5;
         eprintln!("list_installed 500: cold={cold:?} warm={warm:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn list_installed_skips_hidden_upgrade_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let versions = dir.path().join("versions");
+        for name in ["1.20.1", ".elytra-upgrade-old"] {
+            let vdir = versions.join(name);
+            fs::create_dir_all(&vdir).unwrap();
+            fs::write(
+                vdir.join(format!("{name}.json")),
+                r#"{"id":"1.20.1","type":"release"}"#,
+            )
+            .unwrap();
+        }
+        let list = list_installed_in(&versions).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "1.20.1");
         let _ = fs::remove_dir_all(dir);
     }
 

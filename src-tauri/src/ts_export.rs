@@ -20,7 +20,11 @@ use crate::config::game_dirs::{GameDir, GameDirsConfig};
 use crate::config::online::OnlineConfig;
 use crate::config::tooldl::ToolDlConfig;
 use crate::game::community::CurseForgeKeySource;
+use crate::game::updates::{UpgradeModReport, UpgradeModStatus, UpgradeReport};
 use crate::game::version::dir::InstalledVersionInfo;
+use crate::game::version::upgrade::{
+    InstanceUpgradeInfo, UpgradeBackupMeta, UpgradeCommitResult, UpgradeRollbackResult,
+};
 use crate::game::version::watch::{VersionDirChanged, VersionsChanged};
 use crate::jdk::model::{JdkInfo, JdkOptions, JdkScanCache, JdkSelection};
 use crate::launcher::auto_tasks::model::{
@@ -100,6 +104,13 @@ pub fn export_all() {
     WaitingUserPayload::export().unwrap();
     InstalledVersionInfo::export().unwrap();
     InstanceModTarget::export().unwrap();
+    InstanceUpgradeInfo::export().unwrap();
+    UpgradeBackupMeta::export().unwrap();
+    UpgradeCommitResult::export().unwrap();
+    UpgradeRollbackResult::export().unwrap();
+    UpgradeModStatus::export().unwrap();
+    UpgradeModReport::export().unwrap();
+    UpgradeReport::export().unwrap();
     VersionsChanged::export().unwrap();
     VersionDirChanged::export().unwrap();
     MapWorldInfo::export().unwrap();

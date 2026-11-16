@@ -63,3 +63,18 @@ export async function resetVersionIcon(versionDirName: string) {
   await invoke("reset_version_icon", { versionDirName });
   await refresh(versionDirName);
 }
+
+/** 版本目录改名后同步图标缓存，避免新名字先回退到 loader 图标。 */
+export function renameVersionIconCache(from: string, to: string) {
+  if (from === to) return;
+  const icon = versionIconsCache.record[from];
+  if (icon) {
+    versionIconsCache.put(to, icon);
+    versionIconsCache.drop(from);
+  }
+  const source = iconSourcesCache.record[from];
+  if (source) {
+    iconSourcesCache.put(to, source);
+    iconSourcesCache.drop(from);
+  }
+}

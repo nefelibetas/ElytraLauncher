@@ -12,6 +12,7 @@ use crate::game::resource::library::missing_libraries;
 use crate::game::version::dir::find_version_json;
 use crate::game::version::dir::version_server_section;
 use crate::game::version::model::VersionJson;
+use crate::game::version::upgrade;
 use crate::jdk::model::{JdkInfo, JdkOptions, JdkScanCache, JdkSelection};
 use crate::launcher::compat::{self, JavaCompat};
 use crate::launcher::model::LaunchOptions;
@@ -50,6 +51,7 @@ pub fn load_launch_config(
 
     // minecraft_dir 可能是相对路径（默认 ".minecraft"），统一转绝对，避免 classpath/natives 基于 java cwd 解析出错
     let mc_dir = dl_config.minecraft_dir_abs();
+    upgrade::ensure_no_pending_upgrade(&mc_dir, version_dir_name)?;
 
     // 实例级启动参数（有 [launch] 段则覆盖全局；否则沿用全局）
     let instance_launch = persist::instance::read_launch(&mc_dir, version_dir_name);
