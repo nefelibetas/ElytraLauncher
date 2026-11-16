@@ -3,7 +3,7 @@ import { normalizeText, scoreItem, type CommunitySort, type CommunitySource } fr
 
 /** 聚合模式每页展示条数（累积列表切片）。 */
 export const AGG_PAGE_SIZE = 40;
-/** 聚合模式每源每批拉取条数：首批最多 80 条，够铺两页，减少翻页时新增批次对顺序的影响。 */
+/** 聚合模式每源每批拉取条数：一次补两源的同一窗口，减少翻页请求；更深的页按需继续补齐。 */
 export const AGG_FETCH_SIZE = 40;
 
 export interface AggParams {
@@ -61,8 +61,9 @@ function copyMissingMetadata(from: AggregatorItem, to: AggregatorItem) {
 }
 
 /**
- * 按源独立记录 offset/total，逐批拉取后在“已累积结果”上追加。
- * 不重排已展示条目，翻页顺序稳定；批内按 rank.ts 的加权分排序。
+ * 按源独立记录 offset/total，逐批拉取后对“已累积结果”全局排序再切片。
+ * 每页先把两源各自补到 page*40 条：跨源排序时某一源更靠后的条目仍可能插到本页，
+ * 只按去重后条数补批会让后续页混入更高的分项。后加载批次可使已展示条目后移。
  */
 export class CommunityAggregator<T extends AggregatorItem> {
   private signature = "";
@@ -121,7 +122,7 @@ export class CommunityAggregator<T extends AggregatorItem> {
     const gen = this.generation;
     const target = page * AGG_PAGE_SIZE;
     let stale = 0;
-    while (this.items.length < target && !(this.done.curseforge && this.done.modrinth)) {
+    while (this.needsMore(target) && !(this.done.curseforge && this.done.modrinth)) {
       const before = this.items.length;
       await this.loadBatch(params, gen);
       // 两源大量重复时可能连续几批没有新增；连续 3 批无进展即停，避免无上限请求。
@@ -130,12 +131,6 @@ export class CommunityAggregator<T extends AggregatorItem> {
       } else {
         stale = 0;
       }
-    }
-    if (gen !== this.generation) throw new StaleSearchError();
-    // 当前页刚好填满且仍有源未耗尽：再探一批。若只探到重复项，下一页会空，
-    // 这里提前把 hasMore 收口，避免用户点进空页。
-    if (this.items.length === target && !(this.done.curseforge && this.done.modrinth)) {
-      await this.loadBatch(params, gen);
     }
     if (gen !== this.generation) throw new StaleSearchError();
     const start = (page - 1) * AGG_PAGE_SIZE;
@@ -147,6 +142,12 @@ export class CommunityAggregator<T extends AggregatorItem> {
       hasMore: this.items.length > end || !(this.done.curseforge && this.done.modrinth),
       partial: this.partial,
     };
+  }
+
+  /** 本页需要的窗口：去重后够一页，且每个未耗尽的源自身也拉到该页末端。 */
+  private needsMore(target: number): boolean {
+    if (this.items.length < target) return true;
+    return SOURCE_ORDER.some(source => !this.done[source] && this.offsets[source] < target);
   }
 
   private async loadBatch(params: AggParams, gen: number): Promise<void> {
@@ -196,13 +197,17 @@ export class CommunityAggregator<T extends AggregatorItem> {
       this.index(item);
       fresh.push(item);
     }
-    fresh.sort(
-      (a, b) =>
-        scoreItem(b, params.query, params.category, params.sort) -
-          scoreItem(a, params.query, params.category, params.sort) ||
-        b.downloads - a.downloads,
-    );
     this.items.push(...fresh);
+    // 新批次可能含有高于已展示条目的分项（例如另一源后 40 条），必须并入全局顺序。
+    this.items.sort(this.comparator(params));
+  }
+
+  /** 分数降序；同分按原始下载量与 key 固定次序，避免两源返回顺序影响结果。 */
+  private comparator(params: AggParams): (a: T, b: T) => number {
+    return (a, b) =>
+      scoreItem(b, params.query, params.sort) - scoreItem(a, params.query, params.sort) ||
+      b.downloads - a.downloads ||
+      a.key.localeCompare(b.key);
   }
 
   /** 同一项目：mcmod_id 精确优先；缺 id 时按归一化标题兜底，两个不同非空 id 绝不合并。 */

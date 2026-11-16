@@ -14,18 +14,6 @@ export interface RankableItem {
   source: CommunitySource;
 }
 
-/**
- * 平台下载量权重：两平台累计下载口径不同，按资源类型做量级补偿。
- * 系数只参与排序，不改变 UI 上展示的原始下载量。
- */
-export function platformMultiplier(category: string | null, source: CommunitySource): number {
-  const kind = category ?? "mod";
-  if (kind === "datapack") return source === "curseforge" ? 10 : 1;
-  if (kind === "resourcepack" || kind === "shader") return source === "curseforge" ? 1 : 4;
-  // mod / modpack：MR 头部项目下载量与 CF 同量级，×2 只补长尾，避免 ×5 时首屏几乎全被 MR 占据。
-  return source === "curseforge" ? 1 : 2;
-}
-
 /** 归一化：小写并去掉所有非字母数字字符；中文等 Unicode 字母保留。 */
 export function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -70,25 +58,26 @@ export function titleRelevance(title: string, titleZh: string | null, query: str
   return best;
 }
 
-/** 聚合排序分：按 sort 选择下载量 / 更新时间 / 标题相关度 + 百科加成。 */
+/**
+ * 聚合排序分：downloads/updated 直接取展示值；relevance 以标题相关度为主，
+ * 下载量对数与百科收录作次级权重。下载量一律用原始值，避免可见顺序与排名自相矛盾。
+ */
 export function scoreItem(
   item: RankableItem,
   query: string,
-  category: string | null,
   sort: CommunitySort,
 ): number {
   if (sort === "downloads") {
-    return item.downloads * platformMultiplier(category, item.source);
+    return item.downloads;
   }
   if (sort === "updated") {
     const ts = Date.parse(item.updated_at ?? "");
     return Number.isNaN(ts) ? 0 : ts;
   }
-  const weighted = item.downloads * platformMultiplier(category, item.source);
-  if (!query) return weighted;
+  if (!query) return item.downloads;
   return (
     titleRelevance(item.title, item.title_zh, query) +
-    Math.log10(Math.max(weighted, 1)) / 10 +
+    Math.log10(Math.max(item.downloads, 1)) / 10 +
     (item.mcmod_id == null ? 0 : 0.1)
   );
 }

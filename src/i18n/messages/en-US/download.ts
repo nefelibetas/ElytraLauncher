@@ -48,7 +48,7 @@ export default {
     next: "Next",
     resultCountExact: "{count} result | {count} results",
     resultCountAtLeast: "At least {count} result | At least {count} results",
-    rankHint: "Ranked by title relevance and source-weighted downloads",
+    rankHint: "Ranked by title relevance and downloads",
     pageLabel: "Page {page}",
     tagUnavailable: "This category isn't available on {source}",
   },

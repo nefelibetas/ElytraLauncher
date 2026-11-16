@@ -48,7 +48,7 @@ export default {
     next: "下一页",
     resultCountExact: "共 {count} 个结果",
     resultCountAtLeast: "至少 {count} 个结果",
-    rankHint: "综合排序：标题相关度 + 平台加权下载量",
+    rankHint: "综合排序：标题相关度 + 下载量",
     pageLabel: "第 {page} 页",
     tagUnavailable: "该分类在 {source} 不可用",
   },
