@@ -61,9 +61,10 @@ function copyMissingMetadata(from: AggregatorItem, to: AggregatorItem) {
 }
 
 /**
- * 按源独立记录 offset/total，逐批拉取后对“已累积结果”全局排序再切片。
- * 每页先把两源各自补到 page*40 条：跨源排序时某一源更靠后的条目仍可能插到本页，
- * 只按去重后条数补批会让后续页混入更高的分项。后加载批次可使已展示条目后移。
+ * 按源独立记录 offset/total，逐批拉取后对“已累积结果”全局排序。
+ * 每页先把两源各自补到 page*40 条：跨源排序时某一源更靠后的条目仍可能插到本页。
+ * 补批会重排已加载列表，因此每页从“未展示”条目中取前 40 条并缓存：既避免同一项目
+ * 跨页重复，也不会因过滤已展示项造成后续页空缺。
  */
 export class CommunityAggregator<T extends AggregatorItem> {
   private signature = "";
@@ -72,6 +73,10 @@ export class CommunityAggregator<T extends AggregatorItem> {
   /** 已展示条目按 mcmod_id / 归一化标题双索引；跨源缺一侧 id 时靠标题兜底合并。 */
   private byId = new Map<number, T>();
   private byTitle = new Map<string, T>();
+  /** 已展示对象身份：合并可能改写 key，不能再用 key 作为跨页去重依据。 */
+  private shown = new Set<T>();
+  /** 页快照：返回旧页保持原内容；新页只从未展示条目中取。 */
+  private pageCache = new Map<number, T[]>();
   private offsets: Record<CommunitySource, number> = { curseforge: 0, modrinth: 0 };
   private totals: Record<CommunitySource, number> = { curseforge: 0, modrinth: 0 };
   private done: Record<CommunitySource, boolean> = { curseforge: false, modrinth: false };
@@ -90,6 +95,8 @@ export class CommunityAggregator<T extends AggregatorItem> {
     this.items = [];
     this.byId.clear();
     this.byTitle.clear();
+    this.shown.clear();
+    this.pageCache.clear();
     this.offsets = { curseforge: 0, modrinth: 0 };
     this.totals = { curseforge: 0, modrinth: 0 };
     this.done = { curseforge: false, modrinth: false };
@@ -120,12 +127,17 @@ export class CommunityAggregator<T extends AggregatorItem> {
 
   private async runPage(page: number, params: AggParams): Promise<AggPage<T>> {
     const gen = this.generation;
+    const cached = this.pageCache.get(page);
+    if (cached) return this.pageResult(cached, page);
     const target = page * AGG_PAGE_SIZE;
     let stale = 0;
-    while (this.needsMore(target) && !(this.done.curseforge && this.done.modrinth)) {
+    // 既要覆盖本页的源窗口，也要有足够未展示条目填满一页；无新增时最多连拉 3 批。
+    while (
+      (this.needsMore(target) || this.items.length - this.shown.size < AGG_PAGE_SIZE)
+      && !(this.done.curseforge && this.done.modrinth)
+    ) {
       const before = this.items.length;
       await this.loadBatch(params, gen);
-      // 两源大量重复时可能连续几批没有新增；连续 3 批无进展即停，避免无上限请求。
       if (this.items.length === before) {
         if (++stale >= 3) break;
       } else {
@@ -133,13 +145,26 @@ export class CommunityAggregator<T extends AggregatorItem> {
       }
     }
     if (gen !== this.generation) throw new StaleSearchError();
-    const start = (page - 1) * AGG_PAGE_SIZE;
-    const end = start + AGG_PAGE_SIZE;
+    // 全局顺序可能因补批改变；取当前未展示条目的前 40 条，已展示项不会再次进入后续页。
+    const items = this.items
+      .filter(item => !this.shown.has(item))
+      .slice(0, AGG_PAGE_SIZE);
+    for (const item of items) this.shown.add(item);
+    this.pageCache.set(page, items);
+    return this.pageResult(items, page);
+  }
+
+  private pageResult(items: T[], page: number): AggPage<T> {
+    const hasRemaining = this.items.length > this.shown.size;
     return {
-      items: this.items.slice(start, end),
+      items,
       loaded: this.items.length,
       total: Math.max(this.totals.curseforge, this.totals.modrinth),
-      hasMore: this.items.length > end || !(this.done.curseforge && this.done.modrinth),
+      // 返回旧页时，后续页可能已在快照里；单看未展示数会把“下一页”误判为不可用。
+      hasMore:
+        hasRemaining
+        || !(this.done.curseforge && this.done.modrinth)
+        || this.pageCache.has(page + 1),
       partial: this.partial,
     };
   }
