@@ -1,7 +1,7 @@
 // 社区资源聚合器：纯状态机，不依赖 Vue/Tauri；请求函数注入，便于单独验证分页与去重。
 import { normalizeText, scoreItem, type CommunitySort, type CommunitySource } from "./rank";
 
-/** 聚合模式每页展示条数（累积列表切片）。 */
+/** 聚合模式每页展示条数（从未展示累积项中取页）。 */
 export const AGG_PAGE_SIZE = 40;
 /** 聚合模式每源每批拉取条数：一次补两源的同一窗口，减少翻页请求；更深的页按需继续补齐。 */
 export const AGG_FETCH_SIZE = 40;
