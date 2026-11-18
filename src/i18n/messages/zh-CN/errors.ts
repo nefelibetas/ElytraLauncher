@@ -405,6 +405,8 @@ export default {
     universalCoordNoVersion: "NeoForge universal 坐标缺少版本号",
     installerEntryMissing: "安装程序内缺少所需文件",
     vanillaClientTimeout: "等待原版客户端下载超时",
+    vanillaClientFailed: "原版客户端下载失败",
+    vanillaClientIncomplete: "原版客户端文件不完整",
     javaMissing: "未检测到 Java 环境，无法运行 ModLoader 安装工具",
     manifestNoVersions: "版本清单缺少 versions 数组",
     manifestVersionMissing: "版本清单未收录版本 {mc_ver}",

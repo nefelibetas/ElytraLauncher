@@ -405,6 +405,8 @@ export default {
     universalCoordNoVersion: "NeoForge universal coordinate is missing its version",
     installerEntryMissing: "The installer archive is missing a required file",
     vanillaClientTimeout: "Timed out waiting for the vanilla client download",
+    vanillaClientFailed: "Failed to download the vanilla client",
+    vanillaClientIncomplete: "The vanilla client file is incomplete",
     javaMissing: "No Java runtime detected, cannot run the ModLoader installer",
     manifestNoVersions: "The version manifest has no versions array",
     manifestVersionMissing: "Version {mc_ver} is not listed in the version manifest",

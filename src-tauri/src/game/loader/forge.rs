@@ -7,7 +7,9 @@ use std::sync::Arc;
 
 use super::neoforge::{download_neoforge_universal, extract_neoforge_client};
 use super::processors;
-use super::{expand_inheritance, InstallCtx, LoaderEvent, LoaderHook, VersionTarget};
+use super::{
+    expand_inheritance, ClientJarWait, InstallCtx, LoaderEvent, LoaderHook, VersionTarget,
+};
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::endpoints;
 use crate::downloader::fetcher::{self, http};
@@ -58,7 +60,7 @@ pub(super) async fn download_and_extract(
         pc,
         cancel,
         hook,
-        ..
+        client_jar,
     } = ctx;
     let source = config.file_primary_source().ok_or("no active source")?;
     let mc_dir = config.minecraft_dir_abs();
@@ -123,6 +125,7 @@ pub(super) async fn download_and_extract(
         lib_dir: &lib_dir,
         config,
         cancel,
+        client_jar,
     };
     forge_patch_client(&mut archive, &installer_path, &profile_ref, &files).await?;
     // NeoForge：universal 不在 version.json，须下载到 libraries 但不进 classpath（进了会因"找到
@@ -162,6 +165,7 @@ struct LoaderFiles<'a> {
     lib_dir: &'a Path,
     config: &'a DownloaderConfig,
     cancel: &'a Arc<AtomicBool>,
+    client_jar: Option<ClientJarWait<'a>>,
 }
 
 /// 下载官方 installer.jar 到临时目录并打开为 ZIP。
@@ -375,6 +379,7 @@ async fn install_neoforge_universal(
         lib_dir,
         config,
         cancel,
+        ..
     } = *files;
     let neo_version = uni["name"]
         .as_str()
@@ -400,6 +405,7 @@ async fn install_neoforge_universal(
             pc,
             cancel,
             hook,
+            client_jar: files.client_jar,
         },
     )
     .await?;
@@ -546,6 +552,7 @@ fn forge_patch_client<'a>(
         lib_dir,
         config,
         cancel,
+        client_jar,
     } = *files;
     Box::pin(async move {
         let _ = archive; // 条目解包由 processors 引擎按 profile 自行处理
@@ -557,7 +564,7 @@ fn forge_patch_client<'a>(
         if processors::intact_archive(&patched) {
             return Ok(());
         }
-        let vanilla_jar = wait_for_vanilla_client(mc_dir, dir_name, cancel).await?;
+        let vanilla_jar = wait_for_vanilla_client(mc_dir, dir_name, cancel, client_jar).await?;
         let work_dir = mc_dir.join(".elytra").join("tmp").join("loader");
         let pctx = processors::ProcessorCtx {
             installer: installer_path,
@@ -580,11 +587,13 @@ fn forge_patch_client<'a>(
     })
 }
 
-/// 等待 runner 的 ClientJar 步骤下载完成（与 install 并行）：连续 3 次（间隔 500ms）大小不变视为完成；上限 120s，取消立即返回。
+/// 等待 runner 的 ClientJar 步骤下载完成（与 install 并行）。
+/// 有 `ClientJarWait` 时按真实下载进度判断停滞；仅在长时间无字节/文件增长时失败，不设固定总时长。
 pub(super) async fn wait_for_vanilla_client(
     mc_dir: &Path,
     dir_name: &str,
     cancel: &Arc<AtomicBool>,
+    client: Option<ClientJarWait<'_>>,
 ) -> Result<PathBuf, String> {
     let vanilla_jar = mc_dir
         .join("versions")
@@ -592,13 +601,24 @@ pub(super) async fn wait_for_vanilla_client(
         .join(format!("{dir_name}.jar"));
     let mut last_size = 0u64;
     let mut stable = 0u32;
-    for _ in 0..240 {
+    let mut last_bytes = 0u64;
+    let mut stalled = 0u32;
+    loop {
         if cancel.load(Ordering::SeqCst) {
             return Err(keyed_msg!("errors.task.cancelled", "任务已取消"));
+        }
+        if let Some(gate) = client {
+            if gate.failed.load(Ordering::Relaxed) {
+                return Err(keyed_msg!(
+                    "errors.loader.vanillaClientFailed",
+                    "原版客户端下载失败\n无法生成 ModLoader client"
+                ));
+            }
         }
         let size = std::fs::metadata(&vanilla_jar)
             .map(|m| m.len())
             .unwrap_or(0);
+        let size_changed = size != last_size;
         if size > 1_000_000 {
             if size == last_size {
                 stable += 1;
@@ -608,14 +628,56 @@ pub(super) async fn wait_for_vanilla_client(
             } else {
                 stable = 0;
             }
-            last_size = size;
+        } else {
+            stable = 0;
+        }
+        last_size = size;
+
+        if let Some(gate) = client {
+            if gate.done.load(Ordering::Relaxed) != 0 {
+                if size > 1_000_000 {
+                    return Ok(vanilla_jar);
+                }
+                return Err(keyed_msg!(
+                    "errors.loader.vanillaClientIncomplete",
+                    "原版客户端文件不完整\n无法生成 ModLoader client"
+                ));
+            }
+            if !gate.declared && size <= 1_000_000 {
+                return Err(keyed_msg!(
+                    "errors.loader.clientJarMissing",
+                    "未找到 client.jar\n版本 JSON 未声明 downloads.client，无法生成 ModLoader client"
+                ));
+            }
+            let bytes = gate.bytes.load(Ordering::Relaxed);
+            if size_changed || bytes != last_bytes {
+                last_bytes = bytes;
+                stalled = 0;
+            } else {
+                stalled += 1;
+                if stalled >= 240 {
+                    return Err(keyed_msg!(
+                        "errors.loader.vanillaClientTimeout",
+                        "等待原版客户端下载超时\n原版客户端下载长时间无进度，无法生成 ModLoader client"
+                    ));
+                }
+            }
+        } else {
+            // 无 runner 信号（矩阵/整合包自带 jar）：保留文件轮询上限；有增长则继续等。
+            if size_changed {
+                stalled = 0;
+            } else {
+                stalled += 1;
+                if stalled >= 240 {
+                    return Err(keyed_msg!(
+                        "errors.loader.vanillaClientTimeout",
+                        "等待原版客户端下载超时\n120s 内未检测到完整的原版客户端，无法生成 ModLoader client"
+                    ));
+                }
+            }
         }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
-    Err(keyed_msg!(
-        "errors.loader.vanillaClientTimeout",
-        "等待原版客户端下载超时\n120s 内未检测到完整的原版客户端，无法生成 ModLoader client"
-    ))
 }
 
 /// Auto 模式选 JDK 的纯决策：`required > 0` 走启动侧按需选择（精确/最低满足/最高），否则回退缓存首项。
@@ -911,8 +973,78 @@ async fn resolve_jar_from_manifest(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
+
     use super::*;
     use crate::downloader::hash::sha1_hex;
+
+    /// 下载完成标记存在时直接接受已写入的 jar，不再依赖“连续 3 次大小不变”。
+    #[tokio::test]
+    async fn wait_for_client_accepts_completed_jar() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = "1.20.1-forge-47.2.0";
+        let vdir = dir.path().join("versions").join(name);
+        std::fs::create_dir_all(&vdir).unwrap();
+        std::fs::write(vdir.join(format!("{name}.jar")), vec![0u8; 1_000_001]).unwrap();
+        let done = AtomicU32::new(1);
+        let failed = AtomicBool::new(false);
+        let bytes = AtomicU64::new(1_000_001);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let result = wait_for_vanilla_client(
+            dir.path(),
+            name,
+            &cancel,
+            Some(ClientJarWait {
+                declared: true,
+                done: &done,
+                failed: &failed,
+                bytes: &bytes,
+            }),
+        )
+        .await;
+        assert!(result.is_ok());
+    }
+
+    /// 下载失败和未声明 downloads.client 都必须立即报错，不能继续空等 120s。
+    #[tokio::test]
+    async fn wait_for_client_reports_terminal_failures_immediately() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = "1.20.1-forge-47.2.0";
+        let cancel = Arc::new(AtomicBool::new(false));
+        let done = AtomicU32::new(0);
+        let failed = AtomicBool::new(true);
+        let bytes = AtomicU64::new(0);
+        let err = wait_for_vanilla_client(
+            dir.path(),
+            name,
+            &cancel,
+            Some(ClientJarWait {
+                declared: true,
+                done: &done,
+                failed: &failed,
+                bytes: &bytes,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("vanillaClientFailed"));
+
+        let failed = AtomicBool::new(false);
+        let err = wait_for_vanilla_client(
+            dir.path(),
+            name,
+            &cancel,
+            Some(ClientJarWait {
+                declared: false,
+                done: &done,
+                failed: &failed,
+                bytes: &bytes,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("clientJarMissing"));
+    }
 
     /// legacy 安装器内嵌构件：按 `maven/` 相对路径解到 `libraries/`，并按声明 sha1 幂等。
     #[test]

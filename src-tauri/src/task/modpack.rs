@@ -831,6 +831,7 @@ impl<'a> PackInstall<'a> {
                     pc: &counters,
                     cancel: self.cancel,
                     hook: Some(&hook),
+                    client_jar: None,
                 },
             );
             let mut install_fut = Box::pin(install_fut);
@@ -885,6 +886,7 @@ impl<'a> PackInstall<'a> {
                     pc: &counters,
                     cancel: self.cancel,
                     hook: None,
+                    client_jar: None,
                 },
             )
             .await

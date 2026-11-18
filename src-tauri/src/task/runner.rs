@@ -145,6 +145,7 @@ async fn stage_fetch_version(
 #[derive(Default)]
 struct Counters {
     jar_done: Arc<AtomicU32>,
+    jar_failed: Arc<AtomicBool>,
     jar_bytes: Arc<AtomicU64>,
     jar_total: Arc<AtomicU64>,
     lib_done: Arc<AtomicU32>,
@@ -220,22 +221,31 @@ async fn download_client_jar(ctx: &DownloadCtx<'_>) -> Result<(), Vec<String>> {
         .overwrite_callback();
         let urls: Vec<String> = sources.iter().map(|src| src.mirror_url(&c.url)).collect();
         let client_rel = format!("versions/{}/{}.jar", dir_name, dir_name);
-        if let Some(src) = reuse_root.and_then(|r| {
+        let result: Result<(), Vec<String>> = if let Some(src) = reuse_root.and_then(|r| {
             reuse::classify_local_artifact(r, &client_rel, Some(c.size), Some(&c.sha1))
         }) {
-            if let Err(e) =
-                reuse::copy_verified_local(&src, &jar_path, c.size, Some(cb.clone())).await
-            {
-                fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
-                    .await
-                    .map_err(|e2| vec![format!("{e2}（本地复用失败: {e}）")])?;
+            match reuse::copy_verified_local(&src, &jar_path, c.size, Some(cb.clone())).await {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
+                        .await
+                        .map(|_| ())
+                        .map_err(|e2| vec![format!("{e2}（本地复用失败: {e}）")])
+                }
             }
         } else {
             fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
                 .await
-                .map_err(|e| vec![e.to_string()])?;
+                .map(|_| ())
+                .map_err(|e| vec![e.to_string()])
+        };
+        match result {
+            Ok(()) => ctr.jar_done.store(1, Ordering::Relaxed),
+            Err(e) => {
+                ctr.jar_failed.store(true, Ordering::Relaxed);
+                return Err(e);
+            }
         }
-        ctr.jar_done.store(1, Ordering::Relaxed);
     }
     if let Some(i) = steps.jar {
         step_done(app, progress, i);
@@ -420,6 +430,7 @@ async fn install_loader_step(
         config,
         dir_name,
         vdir,
+        vj,
         ctr,
         steps,
         ..
@@ -456,6 +467,12 @@ async fn install_loader_step(
                 // Forge/NeoForge（installer 式）用于 kill 子进程；Fabric/Quilt 忽略
                 cancel,
                 hook: Some(&hook),
+                client_jar: Some(loader::ClientJarWait {
+                    declared: vj.downloads.client.is_some(),
+                    done: ctr.jar_done.as_ref(),
+                    failed: ctr.jar_failed.as_ref(),
+                    bytes: ctr.jar_bytes.as_ref(),
+                }),
             },
         )
         .await
@@ -516,6 +533,7 @@ async fn install_optifine_step(
             },
             cancel,
             hook: None,
+            client_jar: None,
         },
     )
     .await

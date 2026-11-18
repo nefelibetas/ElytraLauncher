@@ -109,7 +109,12 @@ pub(super) async fn extract_neoforge_client(
     dir_name: &str,
     ctx: InstallCtx<'_>,
 ) -> Result<(), String> {
-    let InstallCtx { config, cancel, .. } = ctx;
+    let InstallCtx {
+        config,
+        cancel,
+        client_jar,
+        ..
+    } = ctx;
 
     // 1. 读 installer 内的 install_profile.json
     let profile_text = {
@@ -139,7 +144,7 @@ pub(super) async fn extract_neoforge_client(
     }
 
     // 3. 等 vanilla client 就绪（runner 的 ClientJar 步骤与之并行）
-    let vanilla_jar = wait_for_vanilla_client(mc_dir, dir_name, cancel).await?;
+    let vanilla_jar = wait_for_vanilla_client(mc_dir, dir_name, cancel, client_jar).await?;
 
     // 4. 按声明跑完整条处理器链
     let work_dir = mc_dir.join(".elytra").join("tmp").join("loader");

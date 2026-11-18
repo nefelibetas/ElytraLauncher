@@ -15,7 +15,7 @@ mod hook;
 mod model;
 mod shared;
 
-pub use ctx::{InstallCtx, VersionTarget};
+pub use ctx::{ClientJarWait, InstallCtx, VersionTarget};
 pub use dispatch::install_loader;
 pub use fabric::{install_fabric, install_quilt};
 pub use forge::install_forge;
@@ -409,6 +409,7 @@ mod matrix {
             pc: &pc,
             cancel: &cancel,
             hook: None,
+            client_jar: None,
         };
 
         let result =
@@ -751,6 +752,7 @@ mod matrix {
                     pc: &pc,
                     cancel: &cancel,
                     hook: None,
+                    client_jar: None,
                 },
             )
             .await;
@@ -786,6 +788,7 @@ mod matrix {
                     pc: &pc,
                     cancel: &cancel,
                     hook: None,
+                    client_jar: None,
                 },
             )
             .await
