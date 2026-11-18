@@ -486,6 +486,129 @@ mod matrix {
         })
     }
 
+    /// 同一版本目录连续安装 from→to，覆盖各 Loader 互转；真实网络 + Java，默认忽略。
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "真实网络 + Java：Loader 互转矩阵"]
+    async fn loader_switch_matrix() {
+        let cfg = DownloaderConfig::default();
+        let mc = "1.20.4";
+        let kinds = ["fabric", "quilt", "forge", "neoforge"];
+        let mut versions = std::collections::HashMap::new();
+        for kind in kinds {
+            let list = match kind {
+                "fabric" => version_query::fabric_versions(mc).await,
+                "quilt" => version_query::quilt_versions(mc).await,
+                "forge" => version_query::forge_versions(mc).await,
+                _ => version_query::neoforge_versions(mc).await,
+            }
+            .unwrap_or_else(|e| panic!("拉取 {kind} 版本列表失败：{e}"));
+            let ver = list
+                .first()
+                .cloned()
+                .unwrap_or_else(|| panic!("{kind} 在 {mc} 无可用版本"));
+            versions.insert(kind, ver);
+        }
+        let (parent_text, vanilla_jar) = vanilla_inputs(&cfg, mc).await;
+        let mut rows = Vec::new();
+        for from in kinds {
+            for to in kinds {
+                if from == to {
+                    continue;
+                }
+                let started = Instant::now();
+                let case_name = format!("{from}-to-{to}");
+                let case_dir = out_root().join("switches").join(&case_name);
+                let _ = std::fs::remove_dir_all(&case_dir);
+                let mc_dir = case_dir.join(".minecraft");
+                let dir_name = "1.20.4-switch";
+                let vdir = mc_dir.join("versions").join(dir_name);
+                std::fs::create_dir_all(&vdir).expect("创建版本目录失败");
+                let parent_dir = mc_dir.join("versions").join(mc);
+                std::fs::create_dir_all(&parent_dir).expect("创建父版本目录失败");
+                std::fs::write(parent_dir.join(format!("{mc}.json")), &parent_text)
+                    .expect("写父版本 JSON 失败");
+                let _ = std::fs::copy(&vanilla_jar, parent_dir.join(format!("{mc}.jar")));
+                let _ = std::fs::copy(&vanilla_jar, vdir.join(format!("{dir_name}.jar")));
+
+                let mut case_cfg = cfg.clone();
+                case_cfg.minecraft_dir = mc_dir.to_string_lossy().to_string();
+                game_dirs::set_active(&case_cfg.minecraft_dir).expect("设置激活目录失败");
+
+                let from_ver = versions[from].as_str();
+                let to_ver = versions[to].as_str();
+                let mut install_err = None;
+                for (kind, ver) in [(from, from_ver), (to, to_ver)] {
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    let pc = ProgressCounters::default();
+                    let result = install_loader(
+                        kind_of(kind),
+                        mc,
+                        ver,
+                        VersionTarget {
+                            dir_name,
+                            vdir: &vdir,
+                        },
+                        &parent_text,
+                        InstallCtx {
+                            config: &case_cfg,
+                            pc: &pc,
+                            cancel: &cancel,
+                            hook: None,
+                            client_jar: None,
+                        },
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        install_err = Some(format!("{kind} {ver}: {e}"));
+                        break;
+                    }
+                }
+
+                let (plan, plan_err) = if install_err.is_none() {
+                    let text = std::fs::read_to_string(vdir.join(format!("{dir_name}.json")))
+                        .unwrap_or_default();
+                    match parse_and_plan(&text, dir_name, &mc_dir, to, mc, to_ver) {
+                        Ok((_, plan)) => (plan, None),
+                        Err(e) => (serde_json::json!({ "error": e.clone() }), Some(e)),
+                    }
+                } else {
+                    (serde_json::json!({}), None)
+                };
+                let ok = install_err.is_none() && plan_err.is_none();
+                let first_line = install_err
+                    .as_deref()
+                    .and_then(|e| e.lines().next())
+                    .unwrap_or("")
+                    .to_string();
+                let (lib_files, lib_bytes) = dir_bytes(&mc_dir.join("libraries"));
+                rows.push(serde_json::json!({
+                    "case": case_name,
+                    "kind": to,
+                    "mc": mc,
+                    "ver": to_ver,
+                    "from": from,
+                    "from_ver": from_ver,
+                    "ok": ok,
+                    "error": install_err,
+                    "first_line": first_line,
+                    "elapsed_s": (started.elapsed().as_secs_f64() * 10.0).round() / 10.0,
+                    "version_dir": dir_name,
+                    "lib_files": lib_files,
+                    "lib_bytes": lib_bytes,
+                    "artifacts": [],
+                    "launch_plan": plan,
+                }));
+                write_report(&rows, "switches");
+            }
+        }
+        let failed: Vec<&str> = rows
+            .iter()
+            .filter(|r| !r["ok"].as_bool().unwrap_or(false))
+            .map(|r| r["case"].as_str().unwrap_or(""))
+            .collect();
+        assert!(failed.is_empty(), "Loader 互转失败: {failed:?}");
+    }
+
     fn write_report(rows: &[serde_json::Value], label: &str) {
         let dir = out_root();
         std::fs::create_dir_all(&dir).expect("创建报告目录失败");
