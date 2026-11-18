@@ -142,7 +142,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **reqwest 0.13 无 `.form()`**：表单手工 urlencode
 - **MS_CLIENT_ID 已内置公开常量**；回调固定 `http://localhost:27205`，换 Azure 应用时同步改常量与注册地址
 - **lib 名 `elytra_lib`**（Windows bin/lib 同名会 Cargo 8519）
-- **版本号三处一致**：`tauri.conf.json` / `Cargo.toml` / `package.json`（当前 1.7.0）
+- **版本号三处一致**：`tauri.conf.json` / `Cargo.toml` / `package.json`（当前 1.7.1）
 - **系统代理**：Windows 读注册表（`winreg`）→ env；Linux env → GNOME gsettings；reqwest 默认不读，开启系统代理时官方源直连会被劫持
 - **打包**：`bundle.targets` 列全 deb/rpm/appimage/app/dmg/nsis/msi（bundler 按平台求交过滤）。NSIS 卸载是逐文件 `Delete` + 非递归 `RMDir`，**不会删游戏数据**；`identifier`（`xyz.bridgefish.elytra`）≠ 配置目录（`Elytra`），故 `POSTUNINSTALL` 按真实路径补删；MSI 装 `Program Files`，`default_game_dir_base` 有回退；卸载后保留 `HKCU\Software\<manufacturer>\<product>` 是有意行为
 - **发布工作流**：`.github/workflows/release.yml` 只在推 `v*` tag 时跑（手动 dispatch 只出 artifacts，需 workflow 在 `main`）。门禁复用 `check.yml`（frontend：vue-tsc + lint:css + i18n + fmt；rust-windows：clippy + test；rust-cross：Linux/macOS clippy）；`prepare` → `build`（三平台并行）→ `publish`，任一失败 Release 停在草稿。产物：Win 便携 zip + NSIS + MSI、macOS universal dmg（ad-hoc 签名，Apple Silicon 上未签名无法启动）、Linux AppImage + deb + rpm + tar.gz。密钥走 Secrets（`ELYTRA_CURSEFORGE_API_KEY`，缺失 workflow 直接失败；本地缺 `.env` 时 CurseForge 静默降级）。Linux 固定 `ubuntu-22.04`（glibc 下限）。同版本重跑：`git tag -f v1.0.0 <提交> && git push -f origin v1.0.0`（tag 必须与版本号一致）
