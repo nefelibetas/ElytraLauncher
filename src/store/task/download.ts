@@ -108,13 +108,23 @@ export function registerTaskDoneHook(taskId: string, onDone: () => void) {
 export const taskTerminalHooks = new Map<string, (ok: boolean) => void>();
 
 export function registerTaskTerminalHook(taskId: string, onTerminal: (ok: boolean) => void) {
+  // 极快任务可能在注册钩子前已收口；补发终态结果，避免升级页永久停在“任务进行中”。
+  if (terminalTaskIds.has(taskId)) {
+    const ok = terminalResults.get(taskId) ?? false;
+    terminalResults.delete(taskId);
+    onTerminal(ok);
+    return;
+  }
   taskTerminalHooks.set(taskId, onTerminal);
 }
 
 function finishTerminalHook(taskId: string, ok: boolean) {
   const hook = taskTerminalHooks.get(taskId);
   taskTerminalHooks.delete(taskId);
-  hook?.(ok);
+  if (hook) {
+    terminalResults.delete(taskId);
+    hook(ok);
+  }
 }
 
 export const dlState = reactive({
@@ -247,6 +257,7 @@ export const dlState = reactive({
   async cancelTask(taskId: string) {
     // 主动取消即终态：先标 terminal，防迟到事件让卡片复活/重建。
     terminalTaskIds.add(taskId)
+    terminalResults.set(taskId, false)
     await invoke("cancel_task", { taskId })
     // 取消不走 done 分发，钩子就地清除防泄漏
     taskDoneHooks.delete(taskId)
@@ -300,12 +311,15 @@ let listening = false
 
 // 已收到终态/已移除的任务 id：防迟到 running 事件让卡片复活
 const terminalTaskIds = new Set<string>()
+/** 已收口任务的成败：钩子晚注册时补发，消费后删除。 */
+const terminalResults = new Map<string, boolean>()
 
 /** 卡片尚未预注册时先到的终态帧：adoptTask 消费并补发对应提示。 */
 const terminalSnapshots = new Map<string, ProgressPayload>()
 
 function finishDone(p: ProgressPayload, kind?: TaskKind) {
   terminalTaskIds.add(p.task_id)
+  terminalResults.set(p.task_id, true)
   const mapped = taskNames.get(p.task_id)
   taskNames.delete(p.task_id)
   const message = mapped
@@ -325,6 +339,7 @@ function finishDone(p: ProgressPayload, kind?: TaskKind) {
 
 function finishError(p: ProgressPayload) {
   terminalTaskIds.add(p.task_id)
+  terminalResults.set(p.task_id, false)
   // 终态即清理资源名/版本目标映射，防条目泄漏
   taskNames.delete(p.task_id)
   versionTargets.delete(p.task_id)
@@ -336,6 +351,7 @@ function finishError(p: ProgressPayload) {
 
 function finishCancelled(p: ProgressPayload) {
   terminalTaskIds.add(p.task_id)
+  terminalResults.set(p.task_id, false)
   taskNames.delete(p.task_id)
   versionTargets.delete(p.task_id)
   taskDoneHooks.delete(p.task_id)
