@@ -13,6 +13,7 @@ use crate::downloader::path_lock::PathLock;
 use crate::game::modpack::resolve_version_meta;
 use crate::game::updates::scan_mod_files;
 use crate::game::version::dir::{active_minecraft_dir, find_version_json, version_server_section};
+use crate::game::version::watch;
 use crate::launcher::process;
 use crate::persist;
 use crate::util::{is_safe_filename, is_simple_name, loader_from_dir, mc_version_from_dir};
@@ -330,6 +331,8 @@ fn rollback_in(mc: &Path, version_name: &str) -> Result<UpgradeRollbackResult, S
     };
 
     let _lock = acquire_version_lock(&from_dir)?;
+    // Windows 上聚焦版本目录的 watcher 句柄会阻止目录改名；先解绑，guard 结束恢复。
+    let _watch = watch::suspend_focus();
     let current = if current != from_dir {
         if from_dir.exists() {
             bail_key!("errors.upgrade.ambiguous", "升级目录状态异常，无法自动回滚");
@@ -383,6 +386,8 @@ fn commit_in(mc: &Path, version_name: &str) -> Result<UpgradeCommitResult, Strin
     };
 
     let _lock = acquire_version_lock(&from_dir)?;
+    // Windows 上聚焦版本目录的 watcher 句柄会阻止目录改名；先解绑，guard 结束恢复。
+    let _watch = watch::suspend_focus();
     let final_name = if meta.rename_to_target {
         match meta.to_version.clone() {
             Some(name) => name,

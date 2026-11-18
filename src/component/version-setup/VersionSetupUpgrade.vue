@@ -405,6 +405,25 @@ async function completePending() {
   }
 }
 
+/** 安装已完成（install_done）的备份自动提交；失败保留手动按钮，同一 pending 只自动尝试一次。 */
+let autoCommitKey = "";
+async function autoCompleteReady() {
+  const backup = info.value?.pending;
+  if (
+    !backup?.install_done
+    || info.value?.busy
+    || upgradeRunning.value
+    || starting.value
+    || pendingAction.value
+  ) {
+    return;
+  }
+  const key = `${versionName.value}\u0000${backup.to_version ?? ""}\u0000${backup.created_at}`;
+  if (autoCommitKey === key) return;
+  autoCommitKey = key;
+  await completePending();
+}
+
 async function rollbackPending() {
   if (pendingBusy.value) return;
   pendingAction.value = "rollback";
@@ -449,6 +468,19 @@ watch(versionName, async (name, old) => {
 watch(upgradeRunning, running => {
   if (!running) void loadInfo();
 });
+watch(
+  () => [
+    info.value?.pending?.install_done,
+    info.value?.pending?.to_version,
+    info.value?.pending?.created_at,
+    info.value?.busy,
+    upgradeRunning.value,
+  ],
+  () => {
+    void autoCompleteReady();
+  },
+  { immediate: true },
+);
 watch(
   () => dlState.tasks.map(task => `${task.taskId}:${task.status}`).join("|"),
   () => {

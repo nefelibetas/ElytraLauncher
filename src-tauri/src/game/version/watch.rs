@@ -58,6 +58,8 @@ enum Target {
 enum Msg {
     Fs(notify::Result<notify::Event>),
     Retarget,
+    /// 暂停聚焦版本监听并等待当前 watch 集合完成解绑（升级改名目录前用）。
+    Sync(Sender<()>),
 }
 
 struct Inner {
@@ -118,6 +120,43 @@ pub fn set_focus(version: Option<String>) {
     retarget();
 }
 
+/// 临时释放聚焦版本目录的监听句柄（Windows 上持有目录句柄会阻止目录改名）。
+/// 返回的 guard Drop 时恢复原聚焦版本并重定向。
+pub struct FocusGuard {
+    inner: Arc<Inner>,
+    prev: Option<String>,
+}
+
+impl Drop for FocusGuard {
+    fn drop(&mut self) {
+        if let Some(prev) = self.prev.take() {
+            *self.inner.focus.lock() = Some(prev);
+        }
+        let _ = self.inner.tx.send(Msg::Retarget);
+    }
+}
+
+/// 暂停聚焦版本监听，等 watcher 真正解绑后返回；未初始化监听时返回 None。
+pub fn suspend_focus() -> Option<FocusGuard> {
+    let inner = INNER.get()?;
+    let prev = {
+        let mut focus = inner.focus.lock();
+        focus.take()
+    };
+    let (ack_tx, ack_rx) = channel();
+    if inner.tx.send(Msg::Sync(ack_tx)).is_err() {
+        if let Some(prev) = prev {
+            *inner.focus.lock() = Some(prev);
+        }
+        return None;
+    }
+    let _ = ack_rx.recv_timeout(Duration::from_secs(1));
+    Some(FocusGuard {
+        inner: Arc::clone(inner),
+        prev,
+    })
+}
+
 /// 监听线程：收事件 → 静默窗口合并 → 分类推送；`Retarget` 期间到达的批次整体丢弃（多属旧目录）。
 fn watch_loop(inner: &Arc<Inner>, rx: &Receiver<Msg>) {
     let tx = inner.tx.clone();
@@ -140,6 +179,11 @@ fn watch_loop(inner: &Arc<Inner>, rx: &Receiver<Msg>) {
                 Msg::Retarget => {
                     batch.clear();
                     apply_targets(inner, &mut watcher, &mut watched);
+                }
+                Msg::Sync(ack) => {
+                    batch.clear();
+                    apply_targets(inner, &mut watcher, &mut watched);
+                    let _ = ack.send(());
                 }
                 Msg::Fs(res) => batch.push(res),
             }
