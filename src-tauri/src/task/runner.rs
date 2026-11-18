@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::fetcher;
+use crate::downloader::hash::file_sha1_matches;
 use crate::downloader::path_lock::PathLock;
 use crate::downloader::{progress, reuse};
 use crate::game::loader;
@@ -221,29 +222,36 @@ async fn download_client_jar(ctx: &DownloadCtx<'_>) -> Result<(), Vec<String>> {
         .overwrite_callback();
         let urls: Vec<String> = sources.iter().map(|src| src.mirror_url(&c.url)).collect();
         let client_rel = format!("versions/{}/{}.jar", dir_name, dir_name);
-        let result: Result<(), Vec<String>> = if let Some(src) = reuse_root.and_then(|r| {
-            reuse::classify_local_artifact(r, &client_rel, Some(c.size), Some(&c.sha1))
-        }) {
-            match reuse::copy_verified_local(&src, &jar_path, c.size, Some(cb.clone())).await {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
-                        .await
-                        .map(|_| ())
-                        .map_err(|e2| vec![format!("{e2}（本地复用失败: {e}）")])
-                }
-            }
+        // 目标 jar 已完整时直接复用：reuse 可能把目标自身当本地源，copy 会先截断目标再读，得到空文件。
+        let local_ok = std::fs::metadata(&jar_path).is_ok_and(|meta| meta.len() == c.size)
+            && file_sha1_matches(&jar_path, &c.sha1);
+        if local_ok {
+            ctr.jar_done.store(1, Ordering::Relaxed);
         } else {
-            fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
-                .await
-                .map(|_| ())
-                .map_err(|e| vec![e.to_string()])
-        };
-        match result {
-            Ok(()) => ctr.jar_done.store(1, Ordering::Relaxed),
-            Err(e) => {
-                ctr.jar_failed.store(true, Ordering::Relaxed);
-                return Err(e);
+            let result: Result<(), Vec<String>> = if let Some(src) = reuse_root.and_then(|r| {
+                reuse::classify_local_artifact(r, &client_rel, Some(c.size), Some(&c.sha1))
+            }) {
+                match reuse::copy_verified_local(&src, &jar_path, c.size, Some(cb.clone())).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
+                            .await
+                            .map(|_| ())
+                            .map_err(|e2| vec![format!("{e2}（本地复用失败: {e}）")])
+                    }
+                }
+            } else {
+                fetcher::fetch_verified_c(&urls, &jar_path, Some(cb), &c.sha1, Some(cancel))
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| vec![e.to_string()])
+            };
+            match result {
+                Ok(()) => ctr.jar_done.store(1, Ordering::Relaxed),
+                Err(e) => {
+                    ctr.jar_failed.store(true, Ordering::Relaxed);
+                    return Err(e);
+                }
             }
         }
     }
