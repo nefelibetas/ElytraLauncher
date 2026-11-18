@@ -232,8 +232,10 @@ jobs:
           BODY="$(mktemp)"
           RELEASE_API="$(mktemp)"
           gh release view "$TAG" --json body -q .body -R "$GITHUB_REPOSITORY" > "$BODY"
-          # 用 token 调 API 取真实产物清单（浏览器下载地址 + 大小），避免客户端匿名 API 限流
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RELEASE_API"
+          # 草稿 Release 不能按 tag 查（API 返回 404），必须用 databaseId；token 调 API 取真实产物清单，
+          # 避免客户端匿名 API 限流
+          RELEASE_ID="$(gh release view "$TAG" --json databaseId -q .databaseId -R "$GITHUB_REPOSITORY")"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$RELEASE_API"
           python3 - "$BODY" "$VERSION" "$PUBLISHED" "$PAGE" "$RELEASE_API" <<'PY'
           import json, sys
           body_path, version, published, page, api_path = sys.argv[1:6]
