@@ -199,7 +199,11 @@ const canCheck = computed(
     && !info.value.busy
     && !!targetMc.value
     && loaderSupported.value
-    && (targetLoader.value === "vanilla" || !!targetLoaderVersion.value)
+    && !loaderLoading.value
+    && !loaderError.value
+    && (targetLoader.value === "vanilla"
+      || (!!targetLoaderVersion.value
+        && loaderVersions.value.includes(targetLoaderVersion.value)))
     && !checking.value,
 );
 const canStart = computed(() => {
@@ -298,12 +302,15 @@ async function loadLoaderVersions() {
     loaderVersions.value = [];
     loaderError.value = "";
     loaderLoading.value = false;
+    targetLoaderVersion.value = "";
     return;
   }
   const seq = ++loaderSeq;
   loaderLoading.value = true;
   loaderError.value = "";
   loaderVersions.value = [];
+  // 切 Loader / MC 后旧版本（如 NeoForge 26.3.0.113）不能留给 Quilt 使用。
+  targetLoaderVersion.value = "";
   try {
     const versions = await fetchUpgradeLoaderVersions(targetLoader.value, targetMc.value);
     if (seq !== loaderSeq) return;
@@ -439,15 +446,19 @@ async function rollbackPending() {
   }
 }
 
-watch([targetMc, targetLoader], () => {
-  if (!initialized) return;
-  if (targetLoader.value === "vanilla") targetLoaderVersion.value = "";
-  checkSeq += 1;
-  checking.value = false;
-  report.value = null;
-  checkError.value = "";
-  void loadLoaderVersions();
-});
+watch(
+  [targetMc, targetLoader],
+  () => {
+    if (!initialized) return;
+    if (targetLoader.value === "vanilla") targetLoaderVersion.value = "";
+    checkSeq += 1;
+    checking.value = false;
+    report.value = null;
+    checkError.value = "";
+    void loadLoaderVersions();
+  },
+  { flush: "sync" },
+);
 watch([targetMc, targetLoader, targetLoaderVersion], () => {
   if (!initialized) return;
   checkSeq += 1;
