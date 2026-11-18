@@ -619,10 +619,15 @@ pub(super) async fn wait_for_vanilla_client(
             .map(|m| m.len())
             .unwrap_or(0);
         let size_changed = size != last_size;
+        // 已声明由 runner 下载时，必须以完成标记（含 sha1 校验）为准；仅大小稳定可能是预分配/中断的残片。
+        let verified = match client {
+            None => true,
+            Some(gate) => !gate.declared || gate.done.load(Ordering::Relaxed) != 0,
+        };
         if size > 1_000_000 {
             if size == last_size {
                 stable += 1;
-                if stable >= 3 {
+                if stable >= 3 && verified {
                     return Ok(vanilla_jar);
                 }
             } else {
