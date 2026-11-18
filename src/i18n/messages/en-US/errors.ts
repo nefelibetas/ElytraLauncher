@@ -100,7 +100,9 @@ export default {
   },
   update: {
     failed: "Update check failed",
-    rateLimited: "Update check failed (GitHub API rate limit; try again later)"
+    rateLimited: "Update check failed (GitHub API rate limit; try again later)",
+    noRelease: "No downloadable release found",
+    dirInvalid: "The download directory must be an absolute path"
   },
   jdk: {
     failed: "JDK operation failed",

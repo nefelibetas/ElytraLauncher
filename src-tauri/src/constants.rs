@@ -67,6 +67,8 @@ pub const SECT_ONLINE: &str = "online";
 pub const SECT_LOCAL_SKINS: &str = "local_skins";
 /// 工具箱多线程下载器（保存目录 / 并发文件数 / 分段数）
 pub const SECT_TOOL_DL: &str = "tooldl";
+/// 启动器更新下载（默认下载目录）
+pub const SECT_LAUNCHER_UPDATE: &str = "launcher_update";
 
 #[cfg(test)]
 mod tests {

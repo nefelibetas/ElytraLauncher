@@ -3,6 +3,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+#[cfg(target_os = "windows")]
+use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+
 use crate::constants;
 
 /// 配置目录在进程生命周期内不变；缓存避免每次 `current_exe()` 系统调用。
@@ -13,6 +16,124 @@ static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(compute_config_dir);
 /// exe 旁在只读安装位置不可写、多用户共用会因 `secrets.bin` 存 token 而互相污染；dev / cargo test 仍走 exe 旁隔离。
 pub fn config_dir() -> PathBuf {
     CONFIG_DIR.clone()
+}
+
+/// 平台默认下载目录：Windows `%USERPROFILE%\Downloads`、macOS `~/Downloads`、
+/// Linux 优先 XDG user-dirs 的 `XDG_DOWNLOAD_DIR`（本地化目录名）否则 `~/Downloads`；
+/// 无 HOME 的极端环境回退配置目录（必然可写）。
+pub fn downloads_dir() -> PathBuf {
+    platform_downloads_dir().unwrap_or_else(config_dir)
+}
+
+#[cfg(target_os = "windows")]
+fn platform_downloads_dir() -> Option<PathBuf> {
+    if let Some(dir) = windows_known_downloads() {
+        return Some(dir);
+    }
+    let profile = std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .or_else(|| {
+            let drive = std::env::var_os("HOMEDRIVE")?;
+            let path = std::env::var_os("HOMEPATH")?;
+            let mut joined = PathBuf::from(drive);
+            joined.push(path);
+            Some(joined)
+        })?;
+    Some(profile.join("Downloads"))
+}
+
+/// 读取 Windows「下载」已知文件夹（支持被 OneDrive/用户重定向到其他盘）。
+#[cfg(target_os = "windows")]
+fn windows_known_downloads() -> Option<PathBuf> {
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+        .ok()?;
+    let raw: String = key
+        .get_value("{374DE290-123F-4565-9164-39C4925E467B}")
+        .ok()?;
+    let expanded = expand_env_vars(&raw);
+    if expanded.is_empty() || expanded.contains('%') {
+        return None;
+    }
+    Some(PathBuf::from(expanded))
+}
+
+/// 展开 `%VAR%`（注册表 User Shell Folders 常存 `%USERPROFILE%\Downloads`）。
+#[cfg(any(test, target_os = "windows"))]
+fn expand_env_vars(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('%') else {
+            out.push('%');
+            out.push_str(after);
+            return out;
+        };
+        let name = &after[..end];
+        match std::env::var(name) {
+            Ok(value) if !value.is_empty() => out.push_str(&value),
+            _ => {
+                out.push('%');
+                out.push_str(name);
+                out.push('%');
+            }
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn platform_downloads_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Downloads"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn platform_downloads_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    if let Ok(text) = std::fs::read_to_string(config_home.join("user-dirs.dirs")) {
+        if let Some(dir) = parse_xdg_download_dir(&text, &home) {
+            // 配置指向已删除/未挂载目录时退回通用 Downloads，避免 downloader 在错误位置新建
+            if dir.is_dir() {
+                return Some(dir);
+            }
+        }
+    }
+    Some(home.join("Downloads"))
+}
+
+/// 解析 `user-dirs.dirs` 的 `XDG_DOWNLOAD_DIR`；只接受绝对路径，`$HOME` / `${HOME}` 展开。
+#[cfg(any(test, all(unix, not(target_os = "macos"))))]
+fn parse_xdg_download_dir(contents: &str, home: &Path) -> Option<PathBuf> {
+    let home_text = home.to_string_lossy();
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        let Some(value) = line.strip_prefix("XDG_DOWNLOAD_DIR=") else {
+            continue;
+        };
+        let raw = value.trim().trim_matches('"');
+        if raw.is_empty() {
+            continue;
+        }
+        let expanded = raw
+            .replace("${HOME}", &home_text)
+            .replace("$HOME", &home_text);
+        let path = PathBuf::from(expanded);
+        if path.is_absolute() {
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn compute_config_dir() -> PathBuf {
@@ -149,5 +270,38 @@ mod tests {
         assert!(!path_is_readonly_install(Path::new(
             r"D:\Games\Elytra\Elytra.exe"
         )));
+    }
+
+    /// 注册表 User Shell Folders 的 `%VAR%` 展开：未知变量保留原样，供上层回退。
+    #[test]
+    fn env_vars_expand_and_unknown_are_kept() {
+        let expanded = expand_env_vars("%PATH%/elytra-download");
+        assert!(!expanded.contains("%PATH%"));
+        assert!(expanded.ends_with("/elytra-download"));
+        assert_eq!(expand_env_vars("plain"), "plain");
+        assert_eq!(
+            expand_env_vars("%ELY_UNKNOWN_DOWNLOAD_DIR%/x"),
+            "%ELY_UNKNOWN_DOWNLOAD_DIR%/x"
+        );
+    }
+
+    /// XDG 下载目录：展开 $HOME、忽略注释、拒绝相对路径。
+    #[test]
+    fn xdg_download_dir_parsing() {
+        let home = std::env::temp_dir();
+        let text = "# xdg\nXDG_DOWNLOAD_DIR=\"$HOME/下载\"\n";
+        assert_eq!(parse_xdg_download_dir(text, &home), Some(home.join("下载")));
+
+        let text = "XDG_DOWNLOAD_DIR=\"${HOME}/Downloads\"\n";
+        assert_eq!(
+            parse_xdg_download_dir(text, &home),
+            Some(home.join("Downloads"))
+        );
+
+        assert_eq!(
+            parse_xdg_download_dir("XDG_DOWNLOAD_DIR=\"relative/path\"", &home),
+            None
+        );
+        assert_eq!(parse_xdg_download_dir("", &home), None);
     }
 }

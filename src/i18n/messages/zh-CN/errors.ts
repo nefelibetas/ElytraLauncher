@@ -100,7 +100,9 @@ export default {
   },
   update: {
     failed: "检查更新失败",
-    rateLimited: "检查更新失败（GitHub API 限流，请稍后重试）"
+    rateLimited: "检查更新失败（GitHub API 限流，请稍后重试）",
+    noRelease: "未找到可下载的发布版本",
+    dirInvalid: "下载目录必须是绝对路径"
   },
   jdk: {
     failed: "JDK 操作失败",

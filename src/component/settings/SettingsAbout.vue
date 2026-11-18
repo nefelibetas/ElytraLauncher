@@ -15,6 +15,7 @@ import {
   updateInfo,
   updateState,
 } from "../../store/app/update";
+import { openUpdateDownloadDialog } from "../../store/app/updateDownload";
 import CheckToggle from "../common/CheckToggle.vue";
 import pcl2Icon from "../../assets/thanks/pcl2.png";
 import hmclIcon from "../../assets/thanks/hmcl.png";
@@ -148,10 +149,6 @@ async function handleCheckUpdate() {
   await checkLauncherUpdate();
 }
 
-function openUpdatePage() {
-  if (updateInfo.value) open(updateInfo.value.url);
-}
-
 function copyFallback(text: string) {
   const ta = document.createElement("textarea");
   ta.value = text;
@@ -196,7 +193,7 @@ async function copyVersionInfo() {
           <span class="ab-version" :class="{ 'has-update': updateAvailable }">{{ t("settings.about.version", { version }) }}</span>
           <span v-if="updateState === 'available' && updateInfo" class="ab-update-summary">
             <span class="ab-update-new">{{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}</span>
-            <button type="button" class="ab-update-download" @click="openUpdatePage">
+            <button type="button" class="ab-update-download" @click="openUpdateDownloadDialog">
               {{ t("settings.about.downloadUpdate") }}
             </button>
           </span>

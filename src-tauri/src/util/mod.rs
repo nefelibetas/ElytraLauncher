@@ -16,7 +16,7 @@ mod time;
 mod version_name;
 
 pub use archive::{extract_entry_to, open_zip};
-pub use dirs::{config_dir, default_game_dir_base, exe_dir};
+pub use dirs::{config_dir, default_game_dir_base, downloads_dir, exe_dir};
 pub use icon::{icon_payload, image_mime, is_supported_image, to_base64, IconData};
 pub use log::init_file_logging;
 pub use net::community_download_urls;

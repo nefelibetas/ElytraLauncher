@@ -1,4 +1,4 @@
-// 工具箱多线程下载器状态机：任务列表（按 id 增量）+ 配置 + 操作命令；与 download.ts 启动器下载任务隔离（独立事件名 tooldl-progress），仅承载手动粘贴的外部 URL。
+// 工具箱多线程下载器状态机：任务列表（按 id 增量）+ 配置 + 操作命令；与 download.ts 启动器下载任务隔离（独立事件名 tooldl-progress），承载手动粘贴的外部 URL 与启动器更新包。
 import { reactive, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

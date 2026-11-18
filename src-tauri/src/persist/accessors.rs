@@ -32,5 +32,6 @@ section_accessors! {
     game_dirs_config, save_game_dirs_config => crate::config::game_dirs::GameDirsConfig, crate::constants::SECT_GAME_DIRS;
     launch_options, save_launch_options => crate::launcher::model::LaunchOptions, crate::constants::SECT_LAUNCHER;
     tooldl_config, save_tooldl_config => crate::config::tooldl::ToolDlConfig, crate::constants::SECT_TOOL_DL;
+    launcher_update_config, save_launcher_update_config => crate::config::launcher_update::LauncherUpdateConfig, crate::constants::SECT_LAUNCHER_UPDATE;
     online_config, save_online_config => crate::config::online::OnlineConfig, crate::constants::SECT_ONLINE, crate::config::online::OnlineConfig::with_defaults();
 }

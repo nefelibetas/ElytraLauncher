@@ -12,7 +12,7 @@ name: Release
 #             macOS    universal dmg（ad-hoc 签名：Apple Silicon 上未签名二进制无法启动）
 #             Linux    AppImage + deb + rpm + 便携 tar.gz（固定 ubuntu-22.04，取该发行版的 glibc 下限）
 #   publish needs [prepare, build]：三平台产物齐了且验证门通过，生成 release.json
-#             （静态更新清单）后把草稿 Release 转正；任一环节失败 Release 停在草稿
+#             （静态更新清单：版本 / 说明 / 产物文件列表）后把草稿 Release 转正；任一环节失败 Release 停在草稿
 #
 # 想重跑同版本：`git tag -f v1.0.0 <新提交> && git push -f origin v1.0.0`
 # （版本校验要求 tag 与 tauri.conf.json 的版本一致，故不能随便换个新 tag 号重跑）
@@ -230,18 +230,33 @@ jobs:
           PAGE="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
           PUBLISHED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           BODY="$(mktemp)"
+          RELEASE_API="$(mktemp)"
           gh release view "$TAG" --json body -q .body -R "$GITHUB_REPOSITORY" > "$BODY"
-          python3 - "$BODY" "$VERSION" "$PUBLISHED" "$PAGE" <<'PY'
+          # 用 token 调 API 取真实产物清单（浏览器下载地址 + 大小），避免客户端匿名 API 限流
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RELEASE_API"
+          python3 - "$BODY" "$VERSION" "$PUBLISHED" "$PAGE" "$RELEASE_API" <<'PY'
           import json, sys
-          body_path, version, published, page = sys.argv[1:5]
+          body_path, version, published, page, api_path = sys.argv[1:6]
           with open(body_path, encoding="utf-8") as f:
               notes = f.read().strip()
+          with open(api_path, encoding="utf-8") as f:
+              release = json.load(f)
+          assets = [
+              {
+                  "name": asset["name"],
+                  "url": asset["browser_download_url"],
+                  "size": asset.get("size", 0),
+              }
+              for asset in release.get("assets", [])
+              if asset.get("name") and asset.get("browser_download_url")
+          ]
           with open("release.json", "w", encoding="utf-8") as f:
               json.dump({
                   "version": version,
                   "notes": notes,
                   "published_at": published,
                   "url": page,
+                  "assets": assets,
               }, f, ensure_ascii=False, indent=2)
           PY
           gh release upload "$TAG" release.json --clobber -R "$GITHUB_REPOSITORY"

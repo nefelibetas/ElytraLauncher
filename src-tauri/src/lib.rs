@@ -107,7 +107,9 @@ use commands::tooldl::{
     tooldl_cancel, tooldl_clear_finished, tooldl_enqueue, tooldl_get_config, tooldl_list,
     tooldl_pause, tooldl_remove, tooldl_resume, tooldl_save_config,
 };
-use commands::update::check_launcher_update;
+use commands::update::{
+    check_launcher_update, get_launcher_update_plan, save_launcher_update_config,
+};
 use commands::version::{
     check_mod_updates, delete_mod_file, delete_resource_file, delete_world, export_modpack,
     get_instance_mod_target, get_version_server, get_world_icon, identify_mod_file,
@@ -444,6 +446,8 @@ pub fn run() {
             tooldl_get_config,
             tooldl_save_config,
             check_launcher_update,
+            get_launcher_update_plan,
+            save_launcher_update_config,
             take_config_recovery_notice,
             has_tray,
             set_tray_labels

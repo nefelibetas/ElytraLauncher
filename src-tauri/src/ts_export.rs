@@ -17,6 +17,7 @@ use crate::config::downloader::{
     DownloadSource, DownloadSourceMode, DownloaderConfig, JdkSourceMode, NetworkMode,
 };
 use crate::config::game_dirs::{GameDir, GameDirsConfig};
+use crate::config::launcher_update::LauncherUpdateConfig;
 use crate::config::online::OnlineConfig;
 use crate::config::tooldl::ToolDlConfig;
 use crate::game::community::CurseForgeKeySource;
@@ -49,6 +50,7 @@ use crate::task::model::{
 };
 use crate::task::{LoaderChoice, LoaderKind};
 use crate::tooldl::{ToolDlSnapshot, ToolDlStatus};
+use crate::update::{LauncherUpdateAsset, LauncherUpdatePlan};
 
 /// 导出全部登记类型到 `TS_RS_EXPORT_DIR`（见 `src-tauri/.cargo/config.toml`）。
 pub fn export_all() {
@@ -65,6 +67,9 @@ pub fn export_all() {
     ToolDlConfig::export().unwrap();
     ToolDlStatus::export().unwrap();
     ToolDlSnapshot::export().unwrap();
+    LauncherUpdateConfig::export().unwrap();
+    LauncherUpdateAsset::export().unwrap();
+    LauncherUpdatePlan::export().unwrap();
     TaskStatus::export().unwrap();
     TaskProgress::export().unwrap();
     StepStatus::export().unwrap();

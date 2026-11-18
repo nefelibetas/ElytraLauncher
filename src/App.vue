@@ -8,6 +8,7 @@ import { initNavHistory, goBack, goForward } from "./store/app/nav";
 import { prefetchTabPages } from "./router";
 import TitleBar from "./component/common/TitleBar.vue";
 import AlertDialog from "./component/common/AlertDialog.vue";
+import UpdateDownloadDialog from "./component/common/UpdateDownloadDialog.vue";
 import CheckToggle from "./component/common/CheckToggle.vue";
 import { dlState, ensureListen, waitingUser, decideWaitingTask, type TaskKind } from "./store/task/download";
 import { ensureAutoTasksListen, lastAutoTasksFinished } from "./store/config/autoTasks";
@@ -401,6 +402,8 @@ onUnmounted(() => {
         <button class="dialog-btn primary" @click="openLauncherLog">{{ t("task.dialog.viewLog") }}</button>
       </template>
     </AlertDialog>
+
+    <UpdateDownloadDialog />
 
     <AlertDialog
       v-model="alertState.show"

@@ -64,7 +64,10 @@ pub fn enqueue(
         let task = Arc::new(build_task(url, &dir, segments));
         created.push(task.id.clone());
         TASKS.lock().push(Arc::clone(&task));
-        spawn_waiter(Arc::clone(&sink), task);
+        let waiter_sink = Arc::clone(&sink);
+        spawn_waiter(waiter_sink, Arc::clone(&task));
+        // 入队即推一帧 Queued：调用方（工具箱/更新对话框）无需猜测任务是否已创建
+        runner::emit_snapshot(&sink, &task);
     }
     if created.is_empty() {
         return Err(keyed_msg!(
