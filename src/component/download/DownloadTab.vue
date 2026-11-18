@@ -39,6 +39,13 @@ const { t } = useI18n();
 .tab:hover { color: var(--text-primary); background-color: var(--surface-hover); }
 .tab.active { color: var(--color-brand); background-color: var(--color-brand-bg); }
 
+.tab > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tab-row:hover .tab:not(.active) {
   color: var(--text-primary);
   background-color: var(--surface-hover);

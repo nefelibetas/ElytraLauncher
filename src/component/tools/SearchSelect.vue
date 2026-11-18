@@ -179,6 +179,8 @@ function onBlur() {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   outline: none;
+  /* 失焦时超长选中项显示省略号；聚焦后随光标滚动 */
+  text-overflow: ellipsis;
 }
 
 .ss-input:hover,
@@ -202,6 +204,8 @@ function onBlur() {
   /* 内容自适应高度；超出按 8 项（8×36px=288px）封顶滚动 */
   max-height: 288px;
   overflow-y: auto;
+  /* 长名称/长 ID 必须在行内省略，不能撑破面板 */
+  overflow-x: hidden;
 }
 
 .ss-opt {
@@ -209,6 +213,7 @@ function onBlur() {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
   padding: 6px 10px;
   border: none;
   background: transparent;
@@ -221,14 +226,25 @@ function onBlur() {
 }
 
 .ss-opt-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: var(--fs-base);
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ss-opt-id {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
   font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ss-empty {

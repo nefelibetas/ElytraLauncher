@@ -114,9 +114,13 @@ function goSettings(tab: "launch" | "external") {
 }
 
 .launch-version {
+  max-width: 100%;
   font-size: var(--fs-sm);
   opacity: 0.8;
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .launch-actions {

@@ -70,8 +70,12 @@ const { t } = useI18n();
 
 .lp-version {
   margin-top: 4px;
+  max-width: 100%;
   font-size: var(--fs-sm);
   color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── 启动动画 ── */

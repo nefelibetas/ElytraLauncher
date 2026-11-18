@@ -269,12 +269,22 @@ function editionLabel(): string {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin-top: 4px;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
+.ping-ver {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ping-protocol {
+  flex: none;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
 }
@@ -319,11 +329,15 @@ function editionLabel(): string {
 }
 
 .ping-sample-item {
+  max-width: 180px;
   padding: 2px 8px;
   font-size: var(--fs-sm);
   border-radius: var(--radius-pill);
   background: var(--surface-hover);
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ping-sample-more {

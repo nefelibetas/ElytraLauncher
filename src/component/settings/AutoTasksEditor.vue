@@ -297,7 +297,7 @@ function toggleWorld(name: string, step: AutoTaskStep) {
                     :checked="scopedWorlds(step).includes(w.name)"
                     @change="toggleWorld(w.name, step)"
                   />
-                  {{ w.name }}
+                  <span class="vsh-world-name">{{ w.name }}</span>
                 </label>
               </div>
             </div>
@@ -601,9 +601,17 @@ function toggleWorld(name: string, step: AutoTaskStep) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 260px;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   cursor: pointer;
+}
+
+.vsh-world-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .vsh-add {
   position: relative;

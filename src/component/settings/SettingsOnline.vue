@@ -418,7 +418,9 @@ async function handleSaveNickname() {
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .online-node-remove {
   flex: none;

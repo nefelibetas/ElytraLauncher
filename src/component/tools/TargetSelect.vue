@@ -189,6 +189,8 @@ const extraText = computed({
 }
 
 .ts-preview {
+  flex: 1;
+  min-width: 0;
   font-family: Consolas, "Courier New", monospace;
   font-size: var(--fs-sm);
   color: var(--text-tertiary);

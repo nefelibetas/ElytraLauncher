@@ -324,9 +324,13 @@ function openCurseforgeConsole() {
 
 .dl-label {
   flex: 0 0 112px;
+  min-width: 0;
   font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dl-row-key .dl-label {

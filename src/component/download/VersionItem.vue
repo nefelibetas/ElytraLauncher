@@ -56,9 +56,27 @@ const emit = defineEmits<{ select: [] }>();
   gap: 6px;
 }
 
-.ver-id { font-weight: 600; color: var(--text-primary); font-size: var(--fs-base); }
+.ver-info-top .ver-id { flex: 1; }
 
-.ver-sub { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.ver-id {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ver-sub {
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .ver-badge {
   font-size: var(--fs-2xs); font-weight: 500;

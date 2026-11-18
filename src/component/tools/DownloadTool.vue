@@ -303,7 +303,7 @@ function modeText(task: ToolDlSnapshot): string {
           @contextmenu.prevent.stop="openTaskMenu(task)"
         >
           <div class="tdl-item-hdr">
-            <span class="tdl-name" :title="task.file_name">{{ task.file_name }}</span>
+            <span class="tdl-name">{{ task.file_name }}</span>
             <span class="tdl-chip" :class="'is-' + task.status">{{ statusText(task) }}</span>
             <span class="tdl-mode">{{ modeText(task) }}</span>
             <span class="tdl-spacer" />
@@ -439,9 +439,13 @@ function modeText(task: ToolDlSnapshot): string {
 }
 
 .tdl-label {
-  flex: 0 0 64px;
+  flex: 0 0 84px;
+  min-width: 0;
   font-size: var(--fs-base);
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tdl-input {

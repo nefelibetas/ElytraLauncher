@@ -200,7 +200,7 @@ onMounted(() => {
     <div class="tp-list">
       <div v-for="(sv, i) in presetServers" :key="sv.value" class="tp-row">
         <span class="tp-name" :title="sv.value">{{ sv.label }}</span>
-        <span class="tp-url" :title="sv.value">{{ sv.value }}</span>
+        <span class="tp-url">{{ sv.value }}</span>
         <button class="tp-del" :title="t('settings.external.openPresetSite')" @click="openServerLink(sv.value)">
           <ExternalLink :size="13" />
         </button>

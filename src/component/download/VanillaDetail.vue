@@ -142,8 +142,10 @@ const fabricLikeMain = computed(
   font-size: var(--fs-base); font-weight: 600; outline: none; cursor: text; transition: border-color var(--dur-fast);
 }
 .det-dir {
-  flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-tertiary);
-  white-space: nowrap; user-select: none;
+  flex: 0 1 auto; min-width: 0; max-width: 42%;
+  font-size: var(--fs-xs); color: var(--text-tertiary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  user-select: none;
 }
 .det-input:focus { border-color: var(--color-brand); }
 

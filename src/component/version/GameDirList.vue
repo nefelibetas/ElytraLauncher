@@ -232,6 +232,9 @@ async function menuImportPack() {
   font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vs-dir-sub {

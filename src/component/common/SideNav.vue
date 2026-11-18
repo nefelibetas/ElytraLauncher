@@ -71,7 +71,7 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
         @click="emit('update:modelValue', tab.key)"
       >
         <component :is="tab.icon" :size="16" />
-        <span>{{ tab.label }}</span>
+        <span class="sn-label">{{ tab.label }}</span>
         <span v-if="tab.dot" class="sn-dot" aria-hidden="true" />
         <button
           v-if="refreshable && !noRefreshKeys.includes(tab.key)"
@@ -139,6 +139,13 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
   transition: all var(--dur-fast);
   user-select: none;
   text-align: left;
+}
+
+.sn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sn-dot {

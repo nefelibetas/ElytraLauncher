@@ -208,8 +208,11 @@ for (const def of COMMANDS) valuesFor(def);
 }
 
 .cmd-label {
-  /* 固定宽：label 随字数变宽会让各行控件左缘参差 */
-  flex: 0 0 64px;
+  /* 固定宽：label 随字数变宽会让各行控件左缘参差；英文长标签省略并靠 tooltip 显示全文 */
+  flex: 0 0 92px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-base);
   color: var(--text-secondary);

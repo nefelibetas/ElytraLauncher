@@ -213,7 +213,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         <div class="dialog-body">
           <div class="dep-main">
             <div class="dep-main-head">
-              <span class="dep-main-name" :title="modName">{{ modName }}</span>
+              <span class="dep-main-name">{{ modName }}</span>
               <span v-if="modLoaders.length" class="dep-main-tags">
                 <span
                   v-for="loader in modLoaders"
@@ -236,7 +236,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
               </div>
               <div class="dep-meta-row">
                 <span class="dep-meta-label">{{ t("download.detail.modDepsFilenameLabel") }}：</span>
-                <span class="dep-meta-value" :title="modFilename">{{ modFilename || "—" }}</span>
+                <span class="dep-meta-value">{{ modFilename || "—" }}</span>
               </div>
             </div>
           </div>
@@ -283,7 +283,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
                     :class="{ 'dep-row--error': row.error, 'dep-row--muted': row.installed }"
                   >
                     <div class="dep-row-main">
-                      <span class="dep-name" :title="row.name">{{ row.name }}</span>
+                      <span class="dep-name">{{ row.name }}</span>
                       <span
                         v-if="row.loader"
                         class="dep-tag"
@@ -371,7 +371,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
                     />
                     <span v-else class="dep-indent">↳</span>
                     <div class="dep-row-main">
-                      <span class="dep-name" :title="row.name">{{ row.name }}</span>
+                      <span class="dep-name">{{ row.name }}</span>
                       <span
                         v-if="row.loader"
                         class="dep-tag"

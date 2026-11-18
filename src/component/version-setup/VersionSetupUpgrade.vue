@@ -1211,6 +1211,9 @@ onMounted(async () => {
   flex: none;
   max-width: 40%;
   text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .upg-toggles {

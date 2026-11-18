@@ -603,7 +603,7 @@ defineExpose({ reload });
           </div>
         </div>
         <Transition name="expand">
-          <div v-if="panels.coord" class="wp-biome" :title="active?.biome ?? ''">
+          <div v-if="panels.coord" class="wp-biome">
             {{ biomeText }}
           </div>
         </Transition>
@@ -704,14 +704,17 @@ defineExpose({ reload });
 
 .wp-dim {
   flex: none;
+  max-width: 180px;
   padding: 5px 9px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-sm);
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .wp-dim:hover { color: var(--text-primary); border-color: var(--border-strong); }

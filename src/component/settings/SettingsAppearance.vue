@@ -371,11 +371,23 @@ function confirmRemoveCustom() {
 }
 
 .appearance-name {
+  max-width: 100%;
+  padding: 0 8px;
   font-size: var(--fs-base);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .appearance-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-width: 100%;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
   text-align: center;

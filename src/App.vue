@@ -486,6 +486,15 @@ input, textarea {
   user-select: text;
 }
 
+/* 单行文本输入超长失焦时省略号；tooltip 由自动检测补全文（密码/控件类不参与） */
+input:not([type]),
+input[type="text"],
+input[type="search"],
+input[type="url"],
+input[type="email"] {
+  text-overflow: ellipsis;
+}
+
 /* 组件级自定义可覆盖 */
 ::placeholder {
   color: var(--text-tertiary);

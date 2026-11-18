@@ -118,7 +118,7 @@ onUnmounted(() => unlistenResize?.());
   <header class="titlebar" @mousedown="onMouseDown">
     <Transition :name="barTransition">
       <div v-if="isDetail" key="detail" class="bar-inner">
-        <div class="tl">
+        <div class="tl tl-detail">
           <button class="back-btn" @click="goBack">
             <ArrowLeft :size="18" />
             <span>{{ barTitle }}</span>
@@ -190,6 +190,15 @@ onUnmounted(() => unlistenResize?.());
 
 .tl { display: flex; align-items: center; width: auto; min-width: 0; }
 
+/* 详情页返回标题：占满左侧可用宽度，超长标题省略而不是顶开窗口按钮 */
+.tl-detail { flex: 1 1 auto; }
+.back-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .logo {
   font-size: var(--fs-2xl);
   font-weight: 800;
@@ -211,6 +220,8 @@ onUnmounted(() => unlistenResize?.());
 
 .back-btn {
   display: flex; align-items: center; gap: 6px;
+  max-width: 100%;
+  min-width: 0;
   padding: 4px 10px;
   border: none; background: transparent;
   color: var(--titlebar-fg-dim);

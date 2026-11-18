@@ -343,7 +343,7 @@ function useOfflineName(name: string) {
               <RefreshCw :size="14" />
             </button>
           </div>
-          <div v-if="authMode === 'premium'" class="uname" :class="{ 'uname-empty': !msAccount }">
+          <div v-if="authMode === 'premium'" class="uname uname-text" :class="{ 'uname-empty': !msAccount }">
             {{ msAccount?.name || t("launch.auth.notLoggedIn") }}
           </div>
           <div v-else-if="authMode === 'external'" class="uname" :class="{ 'uname-empty': !externalAccount }">
@@ -576,10 +576,14 @@ function useOfflineName(name: string) {
   color: var(--text-tertiary);
 }
 .ext-name {
+  max-width: 100%;
   font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ext-actions {
   display: flex;
@@ -870,9 +874,17 @@ function useOfflineName(name: string) {
 }
 
 .uname {
+  max-width: 100%;
   font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* 仅正版用户名是纯文本；第三方账号内含角色下拉，不能裁剪其溢出层 */
+.uname-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .uname-empty {
@@ -1027,9 +1039,11 @@ function useOfflineName(name: string) {
 
 .acct-name {
   flex: 1;
+  min-width: 0;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  white-space: nowrap;
 }
 
 .acct-check {

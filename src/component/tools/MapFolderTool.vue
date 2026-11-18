@@ -36,6 +36,13 @@ const selectedLabel = computed(
   () => selectedEntry.value?.name ?? (picked.value ? baseName(picked.value) : ""),
 );
 
+/** 单候选时按钮只显示文件夹名：hover 同时给出完整路径（气泡支持多行）。 */
+const folderTip = computed(() =>
+  selectedLabel.value && picked.value
+    ? `${selectedLabel.value}\n${picked.value}`
+    : selectedLabel.value,
+);
+
 let lastSelected = "";
 watch(selected, (value) => {
   if (value !== BROWSE) {
@@ -110,7 +117,7 @@ function clear() {
         class="wft-select wft-select-btn"
         :class="{ placeholder: !selectedLabel }"
         :disabled="busy"
-        :title="picked || undefined"
+        v-tooltip="folderTip"
         @click="pickFolder"
       >
         {{ selectedLabel || t("tools.worldpreview.selectSave") }}

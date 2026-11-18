@@ -135,7 +135,7 @@ async function handleDismissPaused(task: TaskItem) {
       <TransitionGroup name="task" class="task-list">
         <div v-for="task in dlState.tasks" :key="task.taskId" class="task-card">
           <div class="tc-hdr">
-            <span class="tc-name" :title="taskLabel(task)">{{ taskLabel(task) || t("task.defaultName") }}</span>
+            <span class="tc-name">{{ taskLabel(task) || t("task.defaultName") }}</span>
             <span class="tc-chip" :class="statusChip(task).cls">{{ statusChip(task).text }}</span>
             <template v-if="task.status === 'running'">
               <button v-if="!isExportTask(task)" class="tc-cancel" v-tooltip="t('task.pause')" @click="dlState.pauseTask(task.taskId)">
@@ -535,9 +535,13 @@ async function handleDismissPaused(task: TaskItem) {
 }
 
 .tc-st-name {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tc-st-bar {

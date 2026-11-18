@@ -474,9 +474,12 @@ async function copyCommand() {
 }
 
 .give-label {
-  /* 固定宽：label 随字数变宽会让各行控件左缘参差（实测 4 字 56px vs 5 字 63px） */
-  flex: 0 0 64px;
+  /* 固定宽：label 随字数变宽会让各行控件左缘参差；英文长标签省略并靠 tooltip 显示全文 */
+  flex: 0 0 80px;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-base);
   color: var(--text-secondary);
 }
@@ -681,8 +684,11 @@ async function copyCommand() {
 
 .give-raw-label {
   /* 与 .give-label 同宽，保证附加 NBT 的 textarea 与上方控件左缘对齐 */
-  flex: 0 0 64px;
+  flex: 0 0 80px;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: var(--fs-sm);
   color: var(--text-secondary);
   line-height: 1.8;
