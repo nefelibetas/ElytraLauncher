@@ -225,6 +225,12 @@ const FAILURE_SIGNATURES: &[(&str, &str, &str, &str)] = &[
         "请检查「设置 → Java 虚拟机参数」（部分参数仅老版本 Java 支持）",
     ),
     (
+        "Mixin apply for mod ",
+        "errors.launch.mod_mixin",
+        "Mod 不兼容：Mixin 注入失败",
+        "请禁用或更新日志中 failed 的 Mod（如 Sodium / Iris）后重试",
+    ),
+    (
         "Could not find or load main class",
         "errors.launch.missing_files",
         "启动文件不完整：缺少主类或支持库",
@@ -966,6 +972,10 @@ mod crash_tests {
             (
                 "Error: Could not find or load main class net.minecraft.launchwrapper.Launch",
                 "errors.launch.missing_files",
+            ),
+            (
+                "[mixin/]: Error loading class: com/portingdeadmods/cable_facades/events/GameClientEvents$2 (java.lang.ClassNotFoundException: com.portingdeadmods.cable_facades.events.GameClientEvents$2)\n[Render thread/FATAL] [mixin/]: Mixin apply for mod sodium failed sodium-neoforge.mixins.json:platform.neoforge.LevelExtractorMixin",
+                "errors.launch.mod_mixin",
             ),
             (
                 "# A fatal error has been detected by the Java Runtime Environment",
