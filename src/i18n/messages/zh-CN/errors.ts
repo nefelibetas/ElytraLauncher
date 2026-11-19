@@ -60,7 +60,7 @@ export default {
     jdk_too_new: "Java 版本过高：该版本需要 Java 8（launchwrapper 在 Java 9+ 上无法启动）",
     jdk_too_old: "Java 版本过低：游戏字节码版本高于当前 Java",
     missing_files: "启动文件不完整：缺少主类或支持库",
-    mod_mixin: "Mod 不兼容：Mixin 注入失败",
+    mod_mixin: "Mod 不兼容，Mixin 注入失败",
     oom: "内存不足：游戏堆内存耗尽",
     memory_too_large: "JVM 无法启动：内存参数超出可用内存",
     jvm_args: "JVM 参数不被当前 Java 支持",

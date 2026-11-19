@@ -748,7 +748,7 @@ async function submitDownloadInner() {
     if (!isModLoader(target.loader)) {
       showDownloadCompatError(
         t("download.detail.modLoaderRequiredTitle"),
-        `${item.value?.title ?? v.filename}：${t("download.detail.modLoaderRequired", { loader: loaderName(target.loader) })}`,
+        `${item.value?.title ?? v.filename} · ${t("download.detail.modLoaderRequired", { loader: loaderName(target.loader) })}`,
         targetVersion,
       );
       return;
@@ -756,7 +756,7 @@ async function submitDownloadInner() {
     if (!v.loaders.some(loader => loader.toLowerCase() === target.loader.toLowerCase())) {
       showDownloadCompatError(
         t("download.detail.modLoaderMismatchTitle"),
-        `${item.value?.title ?? v.filename}：${t("download.detail.modLoaderMismatch", {
+        `${item.value?.title ?? v.filename} · ${t("download.detail.modLoaderMismatch", {
           loader: loaderName(target.loader),
           loaders: v.loaders.map(loaderName).join(" / ") || "—",
         })}`,
@@ -770,7 +770,7 @@ async function submitDownloadInner() {
         + (v.game_versions.length > 5 ? " …" : "");
       showDownloadCompatError(
         t("download.detail.modGameVersionMismatchTitle"),
-        `${item.value?.title ?? v.filename}：${t("download.detail.modGameVersionMismatch", {
+        `${item.value?.title ?? v.filename} · ${t("download.detail.modGameVersionMismatch", {
           mc: target.mc_version,
           versions: versions || "—",
         })}`,

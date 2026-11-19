@@ -60,7 +60,7 @@ export default {
     jdk_too_new: "Java too new: this version needs Java 8 (launchwrapper cannot start on Java 9+)",
     jdk_too_old: "Java too old: the game bytecode requires a newer Java",
     missing_files: "Incomplete launch files: missing main class or libraries",
-    mod_mixin: "Mod incompatible: mixin injection failed",
+    mod_mixin: "Mod incompatible, mixin injection failed",
     oom: "Out of memory: the game heap is exhausted",
     memory_too_large: "JVM could not start: memory settings exceed available RAM",
     jvm_args: "JVM arguments are not supported by this Java",

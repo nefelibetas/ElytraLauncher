@@ -416,7 +416,6 @@ function crashMessage(
   const summary = failedMod
     ? t("launch.error.crashedWithMod", {
         code: code === null ? "?" : code,
-        cause: causeSummary,
         mod: failedMod,
       })
     : t("launch.error.crashed", {
