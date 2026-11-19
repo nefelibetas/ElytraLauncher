@@ -3,7 +3,8 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  Download, ExternalLink, FolderOpen, Pause, Play, RotateCcw, X,
+  AlertCircle, Check, Clock, Download, ExternalLink, FolderOpen, Info, Pause, Play,
+  RotateCcw, X,
 } from "@lucide/vue";
 import AlertDialog from "./AlertDialog.vue";
 import CheckToggle from "./CheckToggle.vue";
@@ -80,6 +81,32 @@ const statusText = computed(() => {
   const status = updateDownloadTask.value?.status;
   return status ? labelOf(STATUS_KEYS, status) : "";
 });
+const taskError = computed(() => {
+  const error = updateDownloadTask.value?.error;
+  return error ? formatError(error) : null;
+});
+/** 总长未知时只有「下载中」显示不确定进度条；失败/暂停没有可画的比例，留白更干净。 */
+const showProgressBar = computed(() => {
+  const task = updateDownloadTask.value;
+  return !!task && (task.total > 0 || task.status === "downloading");
+});
+const isIndeterminate = computed(() => {
+  const task = updateDownloadTask.value;
+  return !!task && task.status === "downloading" && task.total <= 0;
+});
+const showProgressMeta = computed(() => {
+  const task = updateDownloadTask.value;
+  return !!task
+    && (task.total > 0 || task.downloaded > 0 || task.speed > 0 || updateDownloadEta.value !== null);
+});
+const cancelable = computed(() =>
+  ["queued", "downloading", "paused", "error"].includes(updateDownloadTask.value?.status ?? ""),
+);
+
+/** fmtSize 对 0 返回空串（多数位置用于隐藏），进度卡片需要显式 0 B。 */
+function sizeText(bytes: number): string {
+  return fmtSize(bytes) || "0 B";
+}
 const starting = ref(false);
 const canStart = computed(() =>
   !!selectedAssetUrl.value
@@ -237,6 +264,7 @@ async function handleResetDir() {
         </div>
 
         <div class="upd-dir">
+          <FolderOpen :size="13" class="upd-dir-icon" />
           <span class="upd-dir-label">{{ t("settings.about.updateDialog.downloadDir") }}</span>
           <span class="upd-dir-path">{{ updatePlan.download_dir }}</span>
           <span v-if="updateDownloadDirIsDefault" class="upd-badge">
@@ -258,24 +286,38 @@ async function handleResetDir() {
 
         <div v-if="updateDownloadTask" class="upd-progress" :class="`is-${updateDownloadTask.status}`">
           <div class="upd-progress-head">
-            <span class="upd-status">{{ statusText }}</span>
-            <span class="upd-pct">{{ updateDownloadPercent }}%</span>
-          </div>
-          <div class="upd-bar">
-            <div class="upd-bar-fill" :style="{ width: `${updateDownloadPercent}%` }"></div>
-          </div>
-          <div class="upd-progress-meta">
-            <span>
-              {{ fmtSize(updateDownloadTask.downloaded) }} /
-              {{ updateDownloadTask.total > 0 ? fmtSize(updateDownloadTask.total) : "—" }}
+            <span class="upd-state-icon" aria-hidden="true">
+              <AlertCircle v-if="updateDownloadTask.status === 'error'" :size="14" />
+              <Check v-else-if="updateDownloadTask.status === 'done'" :size="14" />
+              <Pause v-else-if="updateDownloadTask.status === 'paused'" :size="14" />
+              <Clock v-else-if="updateDownloadTask.status === 'queued'" :size="14" />
+              <Download v-else :size="14" />
             </span>
+            <span class="upd-status">{{ statusText }}</span>
+            <span v-if="updateDownloadTask.total > 0" class="upd-pct">{{ updateDownloadPercent }}%</span>
+          </div>
+          <div v-if="showProgressBar" class="upd-bar" :class="{ indeterminate: isIndeterminate }">
+            <div
+              class="upd-bar-fill"
+              :style="isIndeterminate ? undefined : { width: `${updateDownloadPercent}%` }"
+            ></div>
+          </div>
+          <div v-if="showProgressMeta" class="upd-progress-meta">
+            <span v-if="updateDownloadTask.total > 0">
+              {{ sizeText(updateDownloadTask.downloaded) }} / {{ fmtSize(updateDownloadTask.total) }}
+            </span>
+            <span v-else>{{ sizeText(updateDownloadTask.downloaded) }}</span>
             <span v-if="updateDownloadTask.speed > 0">{{ fmtSpeed(updateDownloadTask.speed) }}</span>
             <span v-if="updateDownloadEta !== null">
               {{ t("settings.about.updateDialog.eta", { eta: fmtEta(updateDownloadEta) }) }}
             </span>
           </div>
-          <div v-if="updateDownloadTask.error" class="upd-error-detail">
-            {{ errMsg(updateDownloadTask.error) }}
+          <div v-if="taskError" class="upd-error-box">
+            <AlertCircle :size="14" />
+            <span class="upd-error-text">
+              <span class="upd-error-summary">{{ taskError.summary }}</span>
+              <span v-if="taskError.detail" class="upd-error-detail">{{ taskError.detail }}</span>
+            </span>
           </div>
           <div class="upd-progress-actions">
             <button
@@ -288,16 +330,25 @@ async function handleResetDir() {
               {{ t("settings.about.updateDialog.pause") }}
             </button>
             <button
-              v-if="updateDownloadTask.status === 'paused' || updateDownloadTask.status === 'error'"
+              v-if="updateDownloadTask.status === 'paused'"
               type="button"
-              class="upd-action"
+              class="upd-action primary"
               @click="handleResume"
             >
               <Play :size="12" />
               {{ t("settings.about.updateDialog.resume") }}
             </button>
             <button
-              v-if="['downloading', 'paused', 'error'].includes(updateDownloadTask.status)"
+              v-if="updateDownloadTask.status === 'error'"
+              type="button"
+              class="upd-action primary"
+              @click="handleResume"
+            >
+              <RotateCcw :size="12" />
+              {{ t("common.action.retry") }}
+            </button>
+            <button
+              v-if="cancelable"
               type="button"
               class="upd-action danger"
               @click="handleCancel"
@@ -318,7 +369,10 @@ async function handleResetDir() {
         </div>
       </template>
 
-      <p class="upd-hint">{{ t("settings.about.updateDialog.manualHint") }}</p>
+      <p class="upd-hint">
+        <Info :size="12" class="upd-hint-icon" />
+        <span>{{ t("settings.about.updateDialog.manualHint") }}</span>
+      </p>
     </div>
 
     <template #actions>
@@ -359,8 +413,11 @@ async function handleResetDir() {
 }
 
 .upd-current {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
   font-size: var(--fs-sm);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .upd-link {
@@ -388,8 +445,13 @@ async function handleResetDir() {
 }
 
 .upd-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
+  text-align: center;
 }
 
 .upd-assets {
@@ -495,6 +557,9 @@ async function handleResetDir() {
 }
 
 .upd-rec {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-bg);
   font-size: var(--fs-2xs);
   font-weight: 600;
   color: var(--color-brand);
@@ -510,6 +575,11 @@ async function handleResetDir() {
   background: var(--surface-page);
 }
 
+.upd-dir-icon {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
 .upd-dir-label {
   flex: none;
   font-size: var(--fs-sm);
@@ -519,6 +589,7 @@ async function handleResetDir() {
 .upd-dir-path {
   flex: 1;
   min-width: 0;
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-primary);
   white-space: nowrap;
@@ -531,14 +602,15 @@ async function handleResetDir() {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 9px;
+  gap: 5px;
+  padding: 5px 11px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-card);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   cursor: pointer;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
 }
 
 .upd-action:hover:not(:disabled) {
@@ -551,30 +623,100 @@ async function handleResetDir() {
   cursor: not-allowed;
 }
 
+.upd-action.primary {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+.upd-action.primary:hover:not(:disabled) {
+  border-color: var(--color-brand-hover);
+  background: var(--color-brand-hover);
+  color: var(--text-inverse);
+}
+
+.upd-action.danger {
+  background: transparent;
+}
+
 .upd-action.danger:hover:not(:disabled) {
   border-color: var(--color-danger);
+  background: var(--color-danger-bg);
   color: var(--color-danger);
 }
 
 .upd-progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--surface-page);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+/* 左侧色条按状态着色：状态一眼可辨，也避免整卡铺色过重 */
+.upd-progress.is-downloading {
+  border-color: var(--color-brand-bg);
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+
+.upd-progress.is-paused {
+  border-color: var(--color-warning-bg);
+  box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.upd-progress.is-done {
+  box-shadow: inset 3px 0 0 var(--color-success);
+}
+
+.upd-progress.is-error {
+  border-color: var(--color-danger-bg);
+  box-shadow: inset 3px 0 0 var(--color-danger);
 }
 
 .upd-progress-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
+.upd-state-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-brand-bg);
+  color: var(--color-brand);
+}
+
+.upd-progress.is-paused .upd-state-icon {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.upd-progress.is-done .upd-state-icon {
+  background: var(--surface-hover);
+  color: var(--color-success);
+}
+
+.upd-progress.is-error .upd-state-icon {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.upd-progress.is-queued .upd-state-icon {
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+}
+
 .upd-status {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -592,23 +734,40 @@ async function handleResetDir() {
 }
 
 .upd-pct {
-  font-size: var(--fs-sm);
-  font-weight: 600;
+  margin-left: auto;
+  font-size: var(--fs-md);
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
+.upd-progress.is-downloading .upd-pct {
+  color: var(--color-brand);
+}
+
+.upd-progress.is-done .upd-pct {
+  color: var(--color-success);
+}
+
+.upd-progress.is-error .upd-pct {
+  color: var(--color-danger);
+}
+
+.upd-progress.is-paused .upd-pct {
+  color: var(--color-warning);
+}
+
 .upd-bar {
-  height: 6px;
-  border-radius: var(--radius-xs);
+  height: 8px;
+  border-radius: var(--radius-pill);
   background: var(--surface-hover);
   overflow: hidden;
 }
 
 .upd-bar-fill {
   height: 100%;
-  border-radius: var(--radius-xs);
-  background: var(--color-brand);
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-gradient, var(--color-brand));
   transition: width 0.25s ease;
 }
 
@@ -620,19 +779,76 @@ async function handleResetDir() {
   background: var(--color-danger);
 }
 
+.upd-progress.is-paused .upd-bar-fill {
+  background: var(--color-warning);
+}
+
+/* 总长未知：往返滑块，避免一直停在 0% 像卡死 */
+.upd-bar.indeterminate .upd-bar-fill {
+  width: 35%;
+  animation: upd-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes upd-indeterminate {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(320%); }
+}
+
 .upd-progress-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  align-items: center;
+  gap: 4px 10px;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
+.upd-progress-meta > span + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--border-strong);
+}
+
 .upd-progress-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.upd-error-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.upd-error-box > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.upd-error-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.upd-error-summary {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.upd-error-box .upd-error-detail {
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 
 .upd-error {
@@ -672,14 +888,28 @@ async function handleResetDir() {
 
 .upd-hint {
   margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   font-size: var(--fs-xs);
   line-height: 1.5;
   color: var(--text-tertiary);
 }
 
+.upd-hint-icon {
+  flex: none;
+  margin-top: 1px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .upd-bar-fill {
     transition: none;
+  }
+
+  .upd-bar.indeterminate .upd-bar-fill {
+    width: 35%;
+    animation: none;
+    transform: none;
   }
 }
 </style>
