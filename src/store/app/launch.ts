@@ -294,7 +294,7 @@ export async function doLaunch(
           outcome.exited.code === 0
             ? t("launch.error.exitedNoWindow", { code: 0, version: label })
             : crashMessage(label, outcome.exited.code, outcome.exited.report, outcome.exited.cause),
-          { copyable: true, actions: crashActions(label, outcome.exited.report) },
+          { copyable: true, title: crashAlertTitle(outcome.exited.cause), actions: crashActions(label, outcome.exited.report) },
         );
       } else {
         showError(t("launch.error.windowTimeout", { version: label }), {
@@ -416,6 +416,12 @@ function crashMessage(
   return lines.join("\n");
 }
 
+function crashAlertTitle(cause: string | null): string {
+  if (cause?.includes("errors.launch.mod_mixin")) return t("launch.alert.modIncompatible");
+  if (cause?.includes("errors.launch.missing_files")) return t("launch.alert.filesIncomplete");
+  return t("launch.alert.launchFailed");
+}
+
 let gameExitListenerReady = false;
 
 function waitGameWindow(label: string): Promise<WindowWait> {
@@ -464,7 +470,7 @@ export async function ensureGameExitListener() {
     // 取消启动会终止已拉起的进程（非零退出码）：不算崩溃
     if (exitCode !== null && exitCode !== 0 && !cancelledLabels.has(label)) {
       const message = crashMessage(label, exitCode, crashReport, cause);
-      showError(message, { copyable: true, actions: crashActions(label, crashReport) });
+      showError(message, { copyable: true, title: crashAlertTitle(cause), actions: crashActions(label, crashReport) });
       void notifyIfUnfocused(t("common.notify.gameCrashed"), errMsg(message));
     }
   });

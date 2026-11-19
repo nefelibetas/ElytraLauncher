@@ -7,7 +7,9 @@ export default {
   dialog: {
     downloadFailed: "Download failed",
     downloadFailedBody: "The task failed and its downloaded files were cleaned up. Please try again.",
-    autoTaskFailed: "Auto tasks failed",
+    loaderInstallFailed: "ModLoader installation failed",
+    upgradeFailed: "Instance upgrade failed",
+    autoTaskFailed: "Automated task failed",
     autoTaskFailedBody: "Some auto task actions did not succeed (game launch/exit is unaffected).",
     openTaskCenter: "Open task center",
     viewLog: "View log",

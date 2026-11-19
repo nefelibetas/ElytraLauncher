@@ -2,9 +2,11 @@
 // 资源详情页（Mod/光影/资源包/数据包/整合包共用）：信息卡片 + 版本文件列表（本地过滤）；仅 Mod 显示 ModLoader 筛选。
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, RefreshCw } from "@lucide/vue";
 import { showToast } from "../utils/toast";
+import { showError } from "../store/app/alert";
 import { errMsg } from "../utils/error";
 import { resourceDetail, openResourceDetail } from "../store/community/resourceDetail";
 import { goBack } from "../store/app/nav";
@@ -36,6 +38,7 @@ import IconImage from "../component/common/IconImage.vue";
 
 const item = computed(() => resourceDetail.item);
 const { t } = useI18n();
+const router = useRouter();
 
 const sourceLabel = computed(() =>
   item.value?.source === "modrinth" ? "Modrinth" : "CurseForge",
@@ -675,6 +678,21 @@ function onDependencyMainOnly() {
 
 const downloadSubmitting = ref(false);
 
+/** ModLoader / MC 版本不匹配用弹窗（只给提示的 toast 会被漏看）；可直接跳实例设置处理。 */
+function showDownloadCompatError(title: string, message: string, targetVersion: string) {
+  showError(message, {
+    title,
+    actions: [
+      {
+        label: t("download.detail.openVersionSettings"),
+        primary: true,
+        run: () => { void router.push({ path: "/version-setup", query: { name: targetVersion } }); },
+      },
+      { label: t("common.action.close"), run: () => undefined },
+    ],
+  });
+}
+
 /** 提交选中版本下载任务（任务中心自动注册）；落盘 versions/{版本目录}/{kind_dir}/{filename}（后端兜底 _{n} 冲突）。 */
 async function submitDownload() {
   if (downloadSubmitting.value) return;
@@ -728,24 +746,36 @@ async function submitDownloadInner() {
       return;
     }
     if (!isModLoader(target.loader)) {
-      showToast(t("download.detail.modLoaderRequired", { loader: loaderName(target.loader) }));
+      showDownloadCompatError(
+        t("download.detail.modLoaderRequiredTitle"),
+        t("download.detail.modLoaderRequired", { loader: loaderName(target.loader) }),
+        targetVersion,
+      );
       return;
     }
     if (!v.loaders.some(loader => loader.toLowerCase() === target.loader.toLowerCase())) {
-      showToast(t("download.detail.modLoaderMismatch", {
-        loader: loaderName(target.loader),
-        loaders: v.loaders.map(loaderName).join(" / ") || "—",
-      }));
+      showDownloadCompatError(
+        t("download.detail.modLoaderMismatchTitle"),
+        t("download.detail.modLoaderMismatch", {
+          loader: loaderName(target.loader),
+          loaders: v.loaders.map(loaderName).join(" / ") || "—",
+        }),
+        targetVersion,
+      );
       return;
     }
     if (depDisposed) return;
     if (!v.game_versions.includes(target.mc_version)) {
       const versions = v.game_versions.slice(0, 5).join(" / ")
         + (v.game_versions.length > 5 ? " …" : "");
-      showToast(t("download.detail.modGameVersionMismatch", {
-        mc: target.mc_version,
-        versions: versions || "—",
-      }));
+      showDownloadCompatError(
+        t("download.detail.modGameVersionMismatchTitle"),
+        t("download.detail.modGameVersionMismatch", {
+          mc: target.mc_version,
+          versions: versions || "—",
+        }),
+        targetVersion,
+      );
       return;
     }
     await openModDownload(v, targetVersion);

@@ -48,7 +48,17 @@ watch(currentLocale, () => {
 
 /** body 只放短提示，完整错误由复制按钮带走。 */
 const errorDialog = ref(false);
+const errorTitle = ref(t("task.dialog.downloadFailed"));
 const errorMessage = ref("");
+const errorSummary = ref("");
+
+function taskErrorTitle(error: string): string {
+  if (error.includes("errors.loader.") || error.includes("errors.install.loader")) {
+    return t("task.dialog.loaderInstallFailed");
+  }
+  if (error.includes("errors.upgrade.")) return t("task.dialog.upgradeFailed");
+  return t("task.dialog.downloadFailed");
+}
 
 /** 自动任务失败（pre_launch / on_crash / post_exit）：跨页面提示，避免用户错过。 */
 const autoTaskFailDialog = ref(false);
@@ -77,6 +87,8 @@ dlState.onTaskDone = (message: string, kind?: TaskKind, versionDir?: string) => 
 };
 
 dlState.onTaskError = (_taskName: string, error: string) => {
+  errorTitle.value = taskErrorTitle(error);
+  errorSummary.value = errMsg(error);
   errorMessage.value = error;
   errorDialog.value = true;
   void flashTaskbarAttention("critical");
@@ -389,8 +401,8 @@ onUnmounted(() => {
         </button>
       </div>
     </TransitionGroup>
-    <AlertDialog v-model="errorDialog" :title="t('task.dialog.downloadFailed')" :message="errorMessage" copyable>
-      <p>{{ t("task.dialog.downloadFailedBody") }}</p>
+    <AlertDialog v-model="errorDialog" :title="errorTitle" :message="errorMessage" copyable>
+      <p>{{ errorSummary }}</p>
       <template #actions>
         <button class="dialog-btn primary" @click="openTaskCenter">{{ t("task.dialog.openTaskCenter") }}</button>
       </template>

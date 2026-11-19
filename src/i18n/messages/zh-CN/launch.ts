@@ -1,6 +1,8 @@
 export default {
   alert: {
     launchFailed: "启动失败",
+    modIncompatible: "Mod 不兼容",
+    filesIncomplete: "启动文件不完整",
     loginFailed: "登录失败",
     downloadJava: "下载 Java {major}",
     useJava: "使用已安装的 Java {version}",

@@ -1,6 +1,8 @@
 export default {
   alert: {
     launchFailed: "Launch Failed",
+    modIncompatible: "Incompatible mods",
+    filesIncomplete: "Incomplete launch files",
     loginFailed: "Sign-in Failed",
     downloadJava: "Download Java {major}",
     useJava: "Use installed Java {version}",

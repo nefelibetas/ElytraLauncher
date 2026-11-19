@@ -7,6 +7,8 @@ export default {
   dialog: {
     downloadFailed: "下载失败",
     downloadFailedBody: "下载失败，已清理该任务下载的文件，请重试",
+    loaderInstallFailed: "ModLoader 安装失败",
+    upgradeFailed: "实例升级失败",
     autoTaskFailed: "自动任务执行失败",
     autoTaskFailedBody: "部分自动任务动作未成功（游戏启动/退出不受影响）",
     openTaskCenter: "打开任务中心",
