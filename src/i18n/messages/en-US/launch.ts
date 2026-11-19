@@ -101,6 +101,7 @@ export default {
     windowTimeout: "Launch timed out: no game window within 90s (the process is still running)\nVersion: {version}\nLog: .minecraft/logs/elytra-launch.log\nKeep waiting, or cancel this launch",
     exitedNoWindow: "The game process exited (code {code}) without showing a window\nVersion: {version}\nLog: .minecraft/logs/elytra-launch.log",
     crashed: "The game exited unexpectedly (code {code}): {cause}",
+    crashedWithMod: "The game exited unexpectedly (code {code}): {cause} (incompatible mod: {mod})",
     causeUnknown: "cause not identified — see the log",
     detailVersion: "Version: {version}",
     detailLog: "Log: .minecraft/logs/elytra-launch.log",

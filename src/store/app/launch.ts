@@ -395,6 +395,14 @@ interface WindowWait {
   exited: { code: number | null; report: string | null; cause: string | null } | null;
 }
 
+/** 从 Mixin fatal 行提取失败 Mod id；显示时首字母大写，至少比只写“Mixin 失败”可定位。 */
+function failingMixinMod(cause: string | null): string {
+  const match = cause?.match(/Mixin apply for mod ([^\s]+)/i);
+  if (!match) return "";
+  const id = match[1].replace(/[^\w.-]/g, "");
+  return id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
+}
+
 /** 启动失败弹窗正文：首行给结论，其余为可复制的排查详情（弹窗正文只显示首行）。 */
 function crashMessage(
   version: string,
@@ -403,13 +411,19 @@ function crashMessage(
   cause: string | null,
 ): string {
   const c = cause ? formatError(cause) : null;
-  const lines = [
-    t("launch.error.crashed", {
-      code: code === null ? "?" : code,
-      cause: c?.summary ?? t("launch.error.causeUnknown"),
-    }),
-    t("launch.error.detailVersion", { version }),
-  ];
+  const failedMod = failingMixinMod(cause);
+  const causeSummary = c?.summary ?? t("launch.error.causeUnknown");
+  const summary = failedMod
+    ? t("launch.error.crashedWithMod", {
+        code: code === null ? "?" : code,
+        cause: causeSummary,
+        mod: failedMod,
+      })
+    : t("launch.error.crashed", {
+        code: code === null ? "?" : code,
+        cause: causeSummary,
+      });
+  const lines = [summary, t("launch.error.detailVersion", { version })];
   if (c?.detail) lines.push(c.detail);
   lines.push(t("launch.error.detailLog"));
   if (report) lines.push(t("launch.error.detailReport", { report }));

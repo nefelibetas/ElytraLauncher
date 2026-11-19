@@ -101,6 +101,7 @@ export default {
     windowTimeout: "启动超时：90 秒内未检测到游戏窗口（进程仍在运行）\n版本：{version}\n日志：.minecraft/logs/elytra-launch.log\n可继续等待，或取消本次启动",
     exitedNoWindow: "游戏进程已退出（退出码 {code}）但未检测到窗口\n版本：{version}\n日志：.minecraft/logs/elytra-launch.log",
     crashed: "游戏异常退出（退出码 {code}）：{cause}",
+    crashedWithMod: "游戏异常退出（退出码 {code}）：{cause}（不兼容 Mod：{mod}）",
     causeUnknown: "原因未识别，详情见日志",
     detailVersion: "版本：{version}",
     detailLog: "日志：.minecraft/logs/elytra-launch.log",
