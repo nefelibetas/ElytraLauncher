@@ -157,7 +157,10 @@ pub async fn download_plan() -> Result<LauncherUpdatePlan, String> {
             };
             let mut assets: Vec<LauncherUpdateAsset> = assets
                 .into_iter()
-                .filter_map(|asset| build_asset(asset.name, asset.url, asset.size))
+                .filter_map(|asset| {
+                    let url = canonical_asset_url(&asset.url, &version);
+                    build_asset(asset.name, url, asset.size)
+                })
                 .collect();
             if assets.is_empty() {
                 assets = fallback_assets(&version);
@@ -249,6 +252,21 @@ fn fallback_assets(version: &str) -> Vec<LauncherUpdateAsset> {
         recommended: false,
     })
     .collect()
+}
+
+/// 草稿 Release 的产物链接形如 `/releases/download/untagged-<hash>/<name>`，发布后该段 404；
+/// 按发布版本改写成规范 tag 路径（发布工作流保证 tag = `v{version}`）。
+fn canonical_asset_url(url: &str, version: &str) -> String {
+    let Some((head, rest)) = url.split_once("/releases/download/") else {
+        return url.to_string();
+    };
+    let Some((tag, name)) = rest.split_once('/') else {
+        return url.to_string();
+    };
+    if !tag.starts_with("untagged-") {
+        return url.to_string();
+    }
+    format!("{head}/releases/download/v{version}/{name}")
 }
 
 fn build_asset(name: String, url: String, size: u64) -> Option<LauncherUpdateAsset> {
@@ -634,6 +652,21 @@ mod tests {
         assert_eq!(assets[0].kind, "setup");
         assert_eq!(assets[1].kind, "msi");
         assert_eq!(assets[2].kind, "portable");
+    }
+
+    #[test]
+    fn draft_untagged_asset_urls_are_canonicalized() {
+        const NAME: &str = "Elytra-Launcher_1.7.1_windows-x64_portable.zip";
+        let untagged = format!(
+            "https://github.com/nefelibetas/ElytraLauncher/releases/download/untagged-9befde7b2ea7048c0518/{NAME}"
+        );
+        let tagged = format!(
+            "https://github.com/nefelibetas/ElytraLauncher/releases/download/v1.7.1/{NAME}"
+        );
+        assert_eq!(canonical_asset_url(&untagged, "1.7.1"), tagged);
+        assert_eq!(canonical_asset_url(&tagged, "1.7.1"), tagged);
+        let other = "https://mirror.example.com/file.zip";
+        assert_eq!(canonical_asset_url(other, "1.7.1"), other);
     }
 
     #[test]

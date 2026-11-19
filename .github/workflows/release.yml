@@ -236,21 +236,24 @@ jobs:
           # 避免客户端匿名 API 限流
           RELEASE_ID="$(gh release view "$TAG" --json databaseId -q .databaseId -R "$GITHUB_REPOSITORY")"
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$RELEASE_API"
-          python3 - "$BODY" "$VERSION" "$PUBLISHED" "$PAGE" "$RELEASE_API" <<'PY'
+          python3 - "$BODY" "$VERSION" "$PUBLISHED" "$PAGE" "$RELEASE_API" "$TAG" "$GITHUB_REPOSITORY" <<'PY'
           import json, sys
-          body_path, version, published, page, api_path = sys.argv[1:6]
+          from urllib.parse import quote
+          body_path, version, published, page, api_path, tag, repo = sys.argv[1:8]
           with open(body_path, encoding="utf-8") as f:
               notes = f.read().strip()
           with open(api_path, encoding="utf-8") as f:
               release = json.load(f)
+          # 草稿 Release 的 browser_download_url 带 untagged-<hash> 段，发布后 404；
+          # 不取该字段，按 tag 拼规范链接。
           assets = [
               {
                   "name": asset["name"],
-                  "url": asset["browser_download_url"],
+                  "url": f"https://github.com/{repo}/releases/download/{quote(tag)}/{quote(asset['name'])}",
                   "size": asset.get("size", 0),
               }
               for asset in release.get("assets", [])
-              if asset.get("name") and asset.get("browser_download_url")
+              if asset.get("name")
           ]
           with open("release.json", "w", encoding="utf-8") as f:
               json.dump({
