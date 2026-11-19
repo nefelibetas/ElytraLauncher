@@ -856,7 +856,7 @@ async function copyName() {
                 v-if="fileKind || isModpack"
                 class="mv-dl"
                 :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload || depResolving }"
-                :disabled="depResolving"
+                :disabled="!selectedVersionId || selectedWithoutDownload || depResolving"
                 v-tooltip="downloadButtonTooltip"
                 @click="submitDownload"
               >{{ depResolving ? t("download.detail.modDepsLoading") : isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
@@ -1098,6 +1098,14 @@ async function copyName() {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+/* 窄窗口改为上下排列后，依赖卡占位会让版本卡 flex:1 缩到 0；给版本列表明确高度。 */
+@media (max-width: 980px) {
+  .md-versions {
+    flex: 0 0 auto;
+    min-height: 240px;
+    max-height: 50vh;
+  }
 }
 .md-versions .mv-head { flex-shrink: 0; }
 .md-versions .mv-list,
