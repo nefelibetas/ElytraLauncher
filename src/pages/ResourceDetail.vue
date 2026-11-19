@@ -1077,20 +1077,6 @@ async function copyName() {
   display: flex;
   gap: 12px;
 }
-@media (max-width: 980px) {
-  .md-cards-row {
-    flex-direction: column;
-    overflow-y: auto;
-  }
-  .md-deps-card {
-    flex: 0 0 auto;
-    max-height: 240px;
-  }
-  .mv-side-enter-to,
-  .mv-side-leave-from {
-    width: 100%;
-  }
-}
 
 .md-versions {
   flex: 1;
@@ -1098,14 +1084,6 @@ async function copyName() {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-/* 窄窗口改为上下排列后，依赖卡占位会让版本卡 flex:1 缩到 0；给版本列表明确高度。 */
-@media (max-width: 980px) {
-  .md-versions {
-    flex: 0 0 auto;
-    min-height: 240px;
-    max-height: 50vh;
-  }
 }
 .md-versions .mv-head { flex-shrink: 0; }
 .md-versions .mv-list,
