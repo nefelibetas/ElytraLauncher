@@ -123,6 +123,7 @@ mod tests {
             title: format!("title-{id}"),
             description: String::new(),
             icon_url: None,
+            loaders: Vec::new(),
             translated: None,
         }
     }

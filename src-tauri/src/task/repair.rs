@@ -15,6 +15,7 @@ use super::progress::{
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::fetcher;
 use crate::downloader::hash::file_sha1_matches;
+use crate::downloader::path_lock::PathLock;
 use crate::downloader::progress;
 use crate::game::resource::assets::AssetIndexRef;
 use crate::game::resource::{assets, extract, library};
@@ -176,6 +177,7 @@ struct RepairCtx<'a> {
     config: DownloaderConfig,
     sources: Vec<DownloadSource>,
     vdir: PathBuf,
+    _lock: PathLock,
     lib_dir: PathBuf,
     vj: VersionJson,
     /// 提交时缺失快照（驱动步骤索引与总量）
@@ -238,6 +240,23 @@ fn prepare_repair<'a>(
         return None;
     }
 
+    // 与完整下载/整合包安装共用版本目录互斥：补齐期间第三方写同一目录会造成 jar/资源损坏。
+    let lock = match PathLock::try_acquire(&vdir) {
+        Some(lock) => lock,
+        None => {
+            set_error(
+                app,
+                progress,
+                keyed_msg!(
+                    "errors.task.busy",
+                    "该版本正在被其他任务下载\n{}",
+                    vdir.display()
+                ),
+            );
+            return None;
+        }
+    };
+
     let (jar_idx, libs_idx, asst_idx, natives_idx) = repair_step_indices(report);
 
     set_total(app, progress, total_files, 0);
@@ -261,6 +280,7 @@ fn prepare_repair<'a>(
         config,
         sources,
         vdir,
+        _lock: lock,
         lib_dir: mc.join("libraries"),
         vj,
         jar_missing,
@@ -283,11 +303,8 @@ fn close_repair_noop(app: &dyn EventSink, progress: &Arc<Mutex<TaskProgress>>) {
         p.current_phase_key = Some("task.backend.phase.no_repair".into());
         p.current_phase_params = None;
     });
-    if let Some(p) = progress.try_lock() {
-        let task_id = p.task_id.clone();
-        drop(p); // 先释放 progress 锁再 fail（fail 内部读 progress，防死锁）
-        task::global().fail(&task_id);
-    }
+    let task_id = progress.lock().task_id.clone();
+    task::global().fail(&task_id);
 }
 
 /// 进度上报循环（EmitLoop）。repair 无 ModLoader 安装步骤，安装字段全为占位。
@@ -500,11 +517,8 @@ pub async fn run_repair_task(
         p.current_phase_key = Some("task.backend.phase.repair_done".into());
         p.current_phase_params = None;
     });
-    if let Some(p) = progress.try_lock() {
-        let task_id = p.task_id.clone();
-        drop(p); // 先释放 progress 锁再 fail（fail 内部读 progress，防死锁）
-        task::global().fail(&task_id);
-    }
+    let task_id = progress.lock().task_id.clone();
+    task::global().fail(&task_id);
 }
 
 /// 生成修复步骤索引（顺序与 repair_steps 一致：jar → libs → assets → natives；natives 恒最后一位）。

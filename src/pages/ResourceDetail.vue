@@ -3,14 +3,16 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, RefreshCw } from "@lucide/vue";
 import { showToast } from "../utils/toast";
 import { showError } from "../store/app/alert";
-import { errMsg } from "../utils/error";
+import { errMsg, formatError } from "../utils/error";
 import { resourceDetail, openResourceDetail } from "../store/community/resourceDetail";
 import { goBack } from "../store/app/nav";
 import { selectedVersion } from "../store/app/selectedVersion";
+import { VERSION_DIR_CHANGED, type VersionDirChanged } from "../store/app/events";
 import { dlShowReleaseOnly } from "../store/config/downloaderConfig";
 import {
   communityTranslationEnabled, fetchVersions, fetchCommunityDetails,
@@ -22,10 +24,22 @@ import {
   type DownloadFileInput,
   type DownloadFileKind,
 } from "../store/task/download";
-import { resolveModDependencies, type ModDependencyPlan } from "../store/community/modDependencies";
+import {
+  resolveModDependencies,
+  fetchModConflicts,
+  type ModDependencyPlan,
+  type ModConflictReport,
+} from "../store/community/modDependencies";
+import type { InstanceModTarget } from "../types/game/InstanceModTarget";
+import {
+  dependencyAppliesToInstance,
+  fileAppliesToInstance,
+  hasDeclaredIncompat,
+} from "../store/community/resourceCompat";
 import {
   displayLoadersForKind,
   isModLoader,
+  loaderAccepts,
   versionMatchesKind,
 } from "../store/community/resourceKind";
 import { installModpack } from "../store/task/modpack";
@@ -93,7 +107,7 @@ function shownGameVersions(gvs: string[]): string[] {
 
 const loaderScopedVersions = computed(() =>
   loaderFilter.value
-    ? versions.value.filter(v => v.loaders.includes(loaderFilter.value))
+    ? versions.value.filter(v => v.loaders.some(loader => loaderAccepts(loaderFilter.value, loader)))
     : versions.value,
 );
 
@@ -149,7 +163,7 @@ const filteredVersions = computed(() => {
   const rows = versions.value
     .filter(
       v =>
-        (!loaderFilter.value || v.loaders.includes(loaderFilter.value)) &&
+        (!loaderFilter.value || v.loaders.some(loader => loaderAccepts(loaderFilter.value, loader))) &&
         (!gameVersionFilter.value || shownGameVersions(v.game_versions).some(gv => majorVersion(gv) === gameVersionFilter.value)),
     )
     .map(version => ({ version, mc: highestReleaseVersion(version) }));
@@ -204,16 +218,51 @@ function onDocKeydown(event: KeyboardEvent) {
   openFilter.value = "";
 }
 
+let unlistenVersionDir: UnlistenFn | null = null;
+let modsChangedWhileHidden = false;
+
+/** 目标实例的 mods/ 增删后重新判定冲突；不可见时置脏，恢复可见再刷新。 */
+function onVersionDirChanged(ev: { payload: VersionDirChanged }) {
+  if (ev.payload.version !== selectedVersion.value) return;
+  if (!ev.payload.kinds.includes("mods")) return;
+  if (document.visibilityState !== "visible") {
+    modsChangedWhileHidden = true;
+    return;
+  }
+  void loadConflicts(true);
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState !== "visible" || !modsChangedWhileHidden) return;
+  modsChangedWhileHidden = false;
+  void loadConflicts(true);
+}
+
 onMounted(() => {
   document.addEventListener("pointerdown", onDocPointerDown);
   window.addEventListener("keydown", onDocKeydown, true);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  void listen<VersionDirChanged>(VERSION_DIR_CHANGED, onVersionDirChanged)
+    .then(unlisten => {
+      if (depDisposed) unlisten();
+      else unlistenVersionDir = unlisten;
+    })
+    .catch(() => {
+      // 事件系统不可用时仅失去自动刷新，手动刷新仍可用。
+    });
 });
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocPointerDown);
   window.removeEventListener("keydown", onDocKeydown, true);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
+  unlistenVersionDir?.();
+  unlistenVersionDir = null;
   // 离开详情页后，未完成的依赖解析不得再自动提交/导航。
   depDisposed = true;
+  versionsSeq++;
+  depsSeq++;
   depDialogSeq++;
+  conflictSeq++;
   depDialogOpen.value = false;
   depSubmitting.value = false;
   pendingMain = null;
@@ -234,6 +283,8 @@ const selectedWithoutDownload = computed(
 
 /** 版本请求序号：自增；响应返回时与当前值不符即过期（项目已切换/返回/重试）→ 丢弃。 */
 let versionsSeq = 0;
+/** 组件是否已卸载；immediate watcher 在 setup 期就会调用 loadConflicts，声明必须早于 watcher。 */
+let depDisposed = false;
 
 async function loadVersions(refresh = false) {
   const seq = ++versionsSeq;
@@ -254,6 +305,11 @@ async function loadVersions(refresh = false) {
     versions.value = dlShowReleaseOnly.value
       ? applicable.filter(v => v.game_versions.some(gv => !isSnapshot(gv)))
       : applicable;
+    // 刷新/重进后旧选中文件可能已被作者删除；清掉避免右侧残留与下载时报“文件不存在”。
+    if (selectedVersionId.value && !versions.value.some(v => v.version_id === selectedVersionId.value)) {
+      selectedVersionId.value = "";
+      resourceDetail.pendingSelectedVersion = "";
+    }
   } catch (e) {
     if (seq !== versionsSeq) return;
     versionError.value = errMsg(e);
@@ -271,6 +327,7 @@ function onItemChange() {
   inheritedVersion = majorVersion(resourceDetail.pendingGameVersion);
   gameVersionFilter.value = inheritedVersion;
   selectedVersionId.value = resourceDetail.pendingSelectedVersion;
+  void loadInstanceTarget();
   if (resourceDetail.pendingVersions !== null) {
     // 返回还原：恢复快照，不重新请求
     versions.value = resourceDetail.pendingVersions;
@@ -278,12 +335,12 @@ function onItemChange() {
     loadingVersions.value = false;
     resourceDetail.pendingVersions = null;
     resourceDetail.pendingVersionError = "";
+    void loadConflicts();
     return;
   }
   void loadVersions();
+  void loadConflicts();
 }
-
-watch(item, onItemChange, { immediate: true });
 
 // ── 前置依赖（选中版本的 required 依赖；不同版本可能不同）──
 
@@ -306,31 +363,145 @@ const selectedDepIds = computed(() => {
   return order;
 });
 
-/** 选中版本的 incompatible 冲突项目 ID（去重保序；只读警示，不拦截安装）。 */
-const selectedIncompatIds = computed(() => {
-  const v = versions.value.find(x => x.version_id === selectedVersionId.value);
-  if (!v) return [];
-  const seen = new Set<string>();
-  const order: string[] = [];
-  for (const dep of v.dependencies) {
-    if (dep.relation === "incompatible" && dep.project_id && !seen.has(dep.project_id)) {
-      seen.add(dep.project_id);
-      order.push(dep.project_id);
+// ── 目标实例（下载落点）：依赖与冲突都必须按该实例的 MC / loader 判定 ──
+
+const instanceTarget = ref<InstanceModTarget | null>(null);
+/** `instanceTarget` 对应的版本名；选中实例切换后旧 target 不得参与判定。 */
+const instanceTargetFor = ref("");
+let instanceTargetKey = "";
+let instanceTargetSeq = 0;
+
+async function loadInstanceTarget(force = false) {
+  const version = selectedVersion.value;
+  if (!version || !isMod.value) {
+    instanceTargetSeq++;
+    instanceTargetKey = "";
+    instanceTargetFor.value = "";
+    instanceTarget.value = null;
+    return;
+  }
+  if (!force && version === instanceTargetKey && instanceTarget.value) return;
+  const seq = ++instanceTargetSeq;
+  instanceTargetKey = version;
+  try {
+    const target = await getInstanceModTarget(version);
+    if (seq !== instanceTargetSeq || depDisposed) return;
+    if (selectedVersion.value === version) {
+      instanceTarget.value = target;
+      instanceTargetFor.value = version;
+      // 目标 loader/MC 到达后重新判定一次；已发出请求时由 conflictKey 去重。
+      void loadConflicts();
+    }
+  } catch {
+    if (seq !== instanceTargetSeq) return;
+    if (selectedVersion.value === version) {
+      instanceTargetKey = "";
+      instanceTargetFor.value = "";
+      instanceTarget.value = null;
     }
   }
-  return order;
+}
+
+/** 依赖项目是否适用于目标实例；文件自身不适用（loader 或 MC）时按声明原样展示。 */
+function depAppliesToInstance(dep: CommunityDependencyItem): boolean {
+  if (instanceTargetFor.value !== selectedVersion.value) return true;
+  const target = instanceTarget.value;
+  const file = selectedFile.value;
+  if (!target || !file) return true;
+  return dependencyAppliesToInstance(dep.loaders, file, target);
+}
+
+/** 选中文件能否装入目标实例（loader + MC）；任一未知时视为可用，避免请求未返回时闪隐。 */
+const selectedFileApplies = computed(() => {
+  const target = instanceTarget.value;
+  const file = selectedFile.value;
+  if (!target || instanceTargetFor.value !== selectedVersion.value || !file) return true;
+  return fileAppliesToInstance(file, target);
 });
 
 const requiredIdSet = computed(() => new Set(selectedDepIds.value));
-const incompatIdSet = computed(() => new Set(selectedIncompatIds.value));
-const requiredItems = computed(() => depItems.value.filter(d => requiredIdSet.value.has(d.id)));
-const incompatItems = computed(() => depItems.value.filter(d => incompatIdSet.value.has(d.id)));
+const requiredItems = computed(() =>
+  depItems.value.filter(d => requiredIdSet.value.has(d.id) && depAppliesToInstance(d)),
+);
+
+// ── 已安装冲突（作者声明 incompatible 且目标实例 mods/ 中确实存在）──
+
+const conflictReport = ref<ModConflictReport | null>(null);
+const loadingConflicts = ref(false);
+const conflictError = ref("");
+const conflicts = computed(() => conflictReport.value?.conflicts ?? []);
+const conflictNotices = computed(() => conflictReport.value?.notices ?? []);
+const conflictErrors = computed(() => {
+  const errors = conflictReport.value?.errors ?? [];
+  return conflictError.value ? [conflictError.value, ...errors] : errors;
+});
+let conflictSeq = 0;
+let conflictKey = "";
+
+async function loadConflicts(force = false) {
+  if (depDisposed) return;
+  const key = `${item.value?.key ?? ""}:${selectedVersionId.value}:${selectedVersion.value}:${isMod.value}`;
+  if (!force && key === conflictKey) return;
+  const seq = ++conflictSeq;
+  conflictReport.value = null;
+  conflictError.value = "";
+  const it = item.value;
+  const versionId = selectedVersionId.value;
+  const targetVersion = selectedVersion.value;
+  if (!it || !versionId || !targetVersion || !isMod.value) {
+    conflictKey = "";
+    loadingConflicts.value = false;
+    return;
+  }
+  if (!selectedFileApplies.value) {
+    conflictKey = "";
+    loadingConflicts.value = false;
+    return;
+  }
+  const file = selectedFile.value;
+  if (file && !hasDeclaredIncompat(file.dependencies)) {
+    // 没有 incompatible 声明时后端只会白跑一次主项目版本查询；直接记 key 防止重复进入。
+    conflictKey = key;
+    loadingConflicts.value = false;
+    return;
+  }
+  conflictKey = key;
+  loadingConflicts.value = true;
+  try {
+    const report = await fetchModConflicts({
+      source: it.source,
+      projectId: it.id,
+      versionId,
+      versionDirName: targetVersion,
+    });
+    if (seq !== conflictSeq) return;
+    conflictReport.value = report;
+  } catch (e) {
+    if (seq !== conflictSeq) return;
+    conflictError.value = errMsg(e);
+    conflictKey = "";
+  } finally {
+    if (seq === conflictSeq) loadingConflicts.value = false;
+  }
+}
+
+/** 面板可见性：声明了前置、详情加载中/失败、或存在已安装冲突时都应保持可见。 */
+const depsPanelVisible = computed(() => {
+  if (!selectedVersionId.value) return false;
+  if (conflicts.value.length > 0 || conflictErrors.value.length > 0 || depError.value) return true;
+  if (loadingDeps.value) return selectedDepIds.value.length > 0;
+  if (missingDepDetailCount.value > 0) return true;
+  return requiredItems.value.length > 0;
+});
+
+const displayedDepCount = computed(() =>
+  loadingDeps.value ? selectedDepIds.value.length : requiredItems.value.length,
+);
 
 /** 请求的依赖项中未能取到详情的数量（项目被删/不可见时 API 会静默省略）。 */
 const missingDepDetailCount = computed(() => {
   if (loadingDeps.value || depError.value) return 0;
-  const requested = new Set([...selectedDepIds.value, ...selectedIncompatIds.value]);
-  return Math.max(0, requested.size - depItems.value.length);
+  return Math.max(0, requiredIdSet.value.size - depItems.value.length);
 });
 
 /** 依赖请求序号：自增；响应返回时与当前值不符即过期（选中版本已切换/返回）→ 丢弃。 */
@@ -340,10 +511,13 @@ async function loadDeps(force = false) {
   const seq = ++depsSeq;
   const it = item.value;
   const reqIds = selectedDepIds.value;
-  const incIds = selectedIncompatIds.value;
-  if (!it || (reqIds.length === 0 && incIds.length === 0)) {
+  if (!it || reqIds.length === 0) {
     depItems.value = [];
     depError.value = "";
+    loadingDeps.value = false;
+    // 无前置时快照没有归属版本，留到下次选择会串到别的版本。
+    resourceDetail.pendingDepItems = null;
+    resourceDetail.pendingDepError = "";
     return;
   }
   // 返回还原：恢复依赖快照，不重新请求（手动刷新时跳过快照强制回源）
@@ -360,11 +534,7 @@ async function loadDeps(force = false) {
   loadingDeps.value = true;
   depError.value = "";
   try {
-    const items = await fetchCommunityDetails(
-      it.source,
-      Array.from(new Set([...reqIds, ...incIds])),
-      force,
-    );
+    const items = await fetchCommunityDetails(it.source, reqIds, force);
     if (seq !== depsSeq) return; // 过期响应丢弃
     depItems.value = items;
   } catch (e) {
@@ -375,7 +545,25 @@ async function loadDeps(force = false) {
   }
 }
 
+/** 面板刷新：目标实例元数据、前置详情与已安装冲突都重新取。 */
+function refreshDependencyPanel() {
+  if (loadingDeps.value || loadingConflicts.value) return;
+  void loadInstanceTarget(true);
+  void loadDeps(true);
+  void loadConflicts(true);
+}
+
 watch(selectedDepIds, () => void loadDeps());
+watch(selectedVersionId, () => void loadConflicts());
+watch(selectedVersion, () => {
+  void loadInstanceTarget();
+  void loadConflicts();
+});
+watch(isMod, () => {
+  void loadInstanceTarget();
+  void loadConflicts();
+});
+watch(item, onItemChange, { immediate: true });
 
 function pickVersion(v: CommunityVersion) {
   selectedVersionId.value = v.version_id;
@@ -392,7 +580,7 @@ function depToItem(d: CommunityDependencyItem): CommunityDisplayItem {
     mcmod_id: null,
     description: d.description,
     translated: d.translated,
-    loaders: [],
+    loaders: d.loaders,
     game_version_range: null,
     author: "",
     downloads: 0,
@@ -479,7 +667,6 @@ const depModFilename = ref("");
 const depModLoaders = ref<string[]>([]);
 const depVersionOverrides = ref<Record<string, string>>({});
 let depDialogSeq = 0;
-let depDisposed = false;
 let pendingMain: { version: CommunityVersion; target: string } | null = null;
 
 function mainDownloadFile(
@@ -753,7 +940,7 @@ async function submitDownloadInner() {
       );
       return;
     }
-    if (!v.loaders.some(loader => loader.toLowerCase() === target.loader.toLowerCase())) {
+    if (!v.loaders.some(loader => loaderAccepts(target.loader, loader))) {
       showDownloadCompatError(
         t("download.detail.modLoaderMismatchTitle"),
         `${item.value?.title ?? v.filename} · ${t("download.detail.modLoaderMismatch", {
@@ -949,16 +1136,23 @@ async function copyName() {
               >
                 <div class="mv-info">
                   <span class="mv-name-row">
-                    <span v-for="ld in displayLoadersForKind(resourceDetail.backTab, v.loaders)" :key="ld" class="md-ld" :class="`md-ld-${ld}`">{{ ld }}</span>
                     <span class="mv-name" v-tooltip="v.filename">{{ v.filename }}</span>
                     <span v-if="v.version_type === 'alpha'" class="mv-type alpha">alpha</span>
                     <span v-else-if="v.version_type === 'beta'" class="mv-type beta">beta</span>
                   </span>
-                  <span class="mv-tags">
-                    <span v-if="v.game_version_range" class="mv-tag gv">{{ v.game_version_range }}</span>
-                    <template v-else>
-                      <span v-for="gv in v.game_versions.slice(0, 3)" :key="gv" class="mv-tag gv">{{ gv }}</span>
-                    </template>
+                  <span
+                    class="mv-tags"
+                    :class="{ 'mv-tags-split': displayLoadersForKind(resourceDetail.backTab, v.loaders).length > 0 }"
+                  >
+                    <span v-if="displayLoadersForKind(resourceDetail.backTab, v.loaders).length > 0" class="mv-tags-loaders">
+                      <span v-for="ld in displayLoadersForKind(resourceDetail.backTab, v.loaders)" :key="ld" class="md-ld" :class="`md-ld-${ld}`">{{ ld }}</span>
+                    </span>
+                    <span class="mv-tags-gv">
+                      <span v-if="v.game_version_range" class="mv-tag gv">{{ v.game_version_range }}</span>
+                      <template v-else>
+                        <span v-for="gv in v.game_versions.slice(0, 3)" :key="gv" class="mv-tag gv">{{ gv }}</span>
+                      </template>
+                    </span>
                   </span>
                 </div>
                 <span class="mv-meta">
@@ -970,25 +1164,38 @@ async function copyName() {
           </div>
 
           <Transition name="mv-side">
-            <div v-if="selectedVersionId && (selectedDepIds.length > 0 || selectedIncompatIds.length > 0)" class="md-card md-deps-card">
+            <div v-if="selectedVersionId && depsPanelVisible" class="md-card md-deps-card">
               <div class="mv-head">
-                <span class="mv-title">{{ t("download.detail.dependencies") }}<span v-if="!loadingDeps" class="mv-count"> | {{ t("download.detail.dependencyCount", { count: selectedDepIds.length }, selectedDepIds.length) }}</span></span>
+                <span class="mv-title">{{ t("download.detail.dependencies") }}<span v-if="!loadingDeps" class="mv-count"> | {{ t("download.detail.dependencyCount", { count: displayedDepCount }, displayedDepCount) }}</span></span>
                 <span class="mv-spacer"></span>
                 <button
                   type="button"
                   class="mv-icon-btn"
-                  :disabled="loadingDeps"
+                  :disabled="loadingDeps || loadingConflicts"
                   v-tooltip="t('download.detail.refreshDependencies')"
-                  @click="loadDeps(true)"
+                  @click="refreshDependencyPanel"
                 >
-                  <RefreshCw :size="13" :class="{ 'mv-spin': loadingDeps }" />
+                  <RefreshCw :size="13" :class="{ 'mv-spin': loadingDeps || loadingConflicts }" />
                 </button>
               </div>
-              <div v-if="!loadingDeps && incompatItems.length > 0" class="md-dep-warn">
-                <div class="md-dep-warn-title">{{ t("download.detail.incompatibleTitle", { count: incompatItems.length }) }}</div>
-                <div v-for="d in incompatItems" :key="d.id" class="md-dep-warn-item">{{ d.title }}</div>
+              <div v-if="!loadingConflicts && conflicts.length > 0" class="md-dep-warn">
+                <div class="md-dep-warn-title">{{ t("download.detail.incompatibleTitle", { count: conflicts.length }) }}</div>
+                <div v-for="d in conflicts" :key="d.project_id" class="md-dep-warn-item">{{ d.name }}<span v-if="d.version_label" class="md-dep-warn-ver"> · {{ d.version_label }}</span></div>
                 <div class="md-dep-warn-tip">{{ t("download.detail.incompatibleTip") }}</div>
               </div>
+              <div v-if="conflictNotices.length > 0" class="md-dep-note">
+                <span v-for="notice in conflictNotices" :key="notice">{{ formatError(notice).summary }}</span>
+              </div>
+              <button
+                v-if="!loadingConflicts && conflictErrors.length > 0"
+                type="button"
+                class="md-dep-partial"
+                v-tooltip="formatError(conflictErrors[0]).full"
+                @click="refreshDependencyPanel"
+              >
+                <AlertCircle :size="14" />
+                <span>{{ t("download.detail.conflictsPartial", { count: conflictErrors.length }) }}</span>
+              </button>
               <button
                 v-if="missingDepDetailCount > 0"
                 type="button"
@@ -1016,11 +1223,11 @@ async function copyName() {
                   <span class="md-dep-error-desc">{{ depError }}</span>
                 </span>
               </button>
-              <div v-else-if="depItems.length === 0" class="md-dep-empty">{{ t("download.detail.noDependencies") }}</div>
+              <div v-else-if="depItems.length === 0 && conflicts.length === 0" class="md-dep-empty">{{ t("download.detail.noDependencies") }}</div>
               <div v-else class="md-dep-list">
                 <div v-for="d in requiredItems" :key="d.id" class="md-dep-item" @click="openResourceDetail(
                   depToItem(d),
-                  { loader: loaderFilter, gameVersion: gameVersionFilter, selectedVersion: '' },
+                  { loader: loaderFilter, gameVersion: gameVersionFilter, selectedVersion: selectedVersionId },
                   { versions, versionError, depItems, depError },
                 )">
                   <IconImage :src="d.icon_url" :size="28" />
@@ -1504,13 +1711,12 @@ async function copyName() {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 .mv-item:hover { background-color: var(--surface-hover); }
 .mv-item.active {
   background: var(--color-brand-bg);
-  border: 1px solid var(--color-brand);
-  padding: 7px 9px;
   box-shadow: inset 0 0 0 1px var(--color-brand);
 }
 
@@ -1555,9 +1761,20 @@ async function copyName() {
 .mv-tags {
   display: flex;
   align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mv-tags-loaders,
+.mv-tags-gv {
+  display: flex;
+  align-items: center;
   gap: 4px;
   min-width: 0;
   flex-wrap: wrap;
+}
+.mv-tags-split .mv-tags-gv {
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .mv-tag {
@@ -1694,6 +1911,18 @@ async function copyName() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.md-dep-warn-ver {
+  font-weight: 400;
+  opacity: 0.8;
+}
+.md-dep-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
 }
 .md-dep-warn-tip {
   font-size: var(--fs-xs);

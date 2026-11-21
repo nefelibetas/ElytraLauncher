@@ -248,7 +248,7 @@ pub fn extract_jar(
             continue;
         }
 
-        let target = out_dir.join(&name);
+        let target = out_dir.join(safe_relative_path(&name)?);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(common_err_ctx_key!(
                 "errors.file.createDir",
@@ -395,6 +395,18 @@ mod tests {
             writer.write_all(content).unwrap();
         }
         writer.finish().unwrap();
+    }
+
+    /// 旧式 natives 解压同样必须拒绝 `../`，不能只保护第三方世界压缩包。
+    #[test]
+    fn extract_jar_rejects_path_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let jar_path = tmp.path().join("natives.jar");
+        make_zip(&jar_path, &[("../evil.dll", b"boom")]);
+        let dest = tmp.path().join("natives");
+        let err = extract_jar(&jar_path, &dest, None).unwrap_err();
+        assert!(err.contains("非法"), "应报路径非法，实际: {err}");
+        assert!(!tmp.path().join("evil.dll").exists());
     }
 
     /// zip slip：`../` 条目必须被拒，且不落目标根之外。

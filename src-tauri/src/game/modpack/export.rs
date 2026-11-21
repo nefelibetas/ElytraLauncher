@@ -195,7 +195,7 @@ pub(crate) fn export_pack_totals(vdir: &Path) -> (u32, u64) {
 }
 
 /// 读取整合包安装标记里的真实 MC；旧标记无该字段时回查计划缓存。
-fn pack_mc_version(vdir: &Path) -> Option<String> {
+pub(super) fn pack_mc_version(vdir: &Path) -> Option<String> {
     let marker: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(vdir.join("elytra-pack.json")).ok()?).ok()?;
     if let Some(mc) = marker["mc_version"].as_str() {

@@ -68,7 +68,8 @@ export function openResourceDetail(
   }
   resourceDetail.pendingLoader = filters?.loader ?? "";
   resourceDetail.pendingGameVersion = filters?.gameVersion ?? "";
-  resourceDetail.pendingSelectedVersion = filters?.selectedVersion ?? "";
+  // selectedVersion 只用于压栈还原上一层；新打开的项目/依赖没有自己的选中文件。
+  resourceDetail.pendingSelectedVersion = "";
   resourceDetail.item = item;
   resourceDetail.backTab = downloadTabState.current;
   router.push({

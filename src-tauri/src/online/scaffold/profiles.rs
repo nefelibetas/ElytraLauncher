@@ -10,6 +10,15 @@ use serde::{Deserialize, Serialize};
 
 /// 心跳超时：5s 心跳，10s 无包视为离线（参考 Terracotta 行为，协议未规定）。
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
+/// 单个档案字段上限：防止恶意 ping 用超长 name/vendor 撑大每次列表克隆。
+pub const MAX_PROFILE_FIELD_CHARS: usize = 128;
+/// guest 数量上限（HOST 槽另算）；正常局域网远低于此。
+pub const MAX_GUESTS: usize = 64;
+
+/// 档案字符串截断到协议上限（按字符而非字节，避免切坏 UTF-8）。
+pub fn clip_profile_field(value: &str) -> String {
+    value.chars().take(MAX_PROFILE_FIELD_CHARS).collect()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -88,6 +97,13 @@ impl ProfileTable {
             entry.last_seen = now;
             changed
         } else {
+            // 先清超时项腾位置；仍满则拒绝新 guest（协议没有错误响应，丢失一次心跳可接受）。
+            if self.entries.len() > MAX_GUESTS {
+                self.purge_expired();
+                if self.entries.len() > MAX_GUESTS {
+                    return false;
+                }
+            }
             self.entries.push(OnlineProfile {
                 profile,
                 last_seen: now,
@@ -153,6 +169,20 @@ mod tests {
         assert_eq!(t.profiles().len(), 1, "仅剩 host");
         assert_eq!(t.profiles()[0].kind, ProfileKind::Host);
         assert!(!t.purge_expired());
+    }
+
+    #[test]
+    fn guest_table_is_capped() {
+        let host = Profile::new("host".into(), "m0".into(), "v".into(), ProfileKind::Host);
+        let mut t = ProfileTable::with_host(host);
+        for i in 0..(MAX_GUESTS + 10) {
+            t.upsert_guest(profile("guest", &format!("m{i}")));
+        }
+        assert_eq!(
+            t.profiles().len(),
+            MAX_GUESTS + 1,
+            "guest 数量应被上限截断（HOST 另算）"
+        );
     }
 
     #[test]

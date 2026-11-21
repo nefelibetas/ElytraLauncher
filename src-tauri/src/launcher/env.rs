@@ -1,6 +1,7 @@
 //! 启动前置（commands/launch.rs 调用）：加载配置、解析版本 JSON、完整性检查、JDK 匹配、游戏语言。
 
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use crate::commands::version::VersionServer;
 use crate::config::downloader::DownloaderConfig;
@@ -112,19 +113,28 @@ pub fn load_launch_config(
             .find(|e| e.path == path)
             .cloned()
             .ok_or_else(|| keyed_msg!("errors.launch.jdkNotFound", "未找到指定的 JDK"))?,
-        JdkSelection::Auto => auto_pick_jdk(&jdk_cache.jdks, required).ok_or_else(|| {
-            if required > 0 {
-                keyed_msg!(
-                    "errors.launch.jdkRequired?required={required}",
-                    "需要 Java {required}+，请在设置中选择或刷新 JDK"
-                )
-            } else {
-                keyed_msg!(
-                    "errors.launch.jdkNotConfigured",
-                    "未配置 JDK，请先在设置中选择 Java 路径"
-                )
-            }
-        })?,
+        JdkSelection::Auto => {
+            // 缓存条目可能已被用户删除/移动；Auto 不能选到不存在的路径。
+            let usable: Vec<JdkInfo> = jdk_cache
+                .jdks
+                .iter()
+                .filter(|env| jdk_available(env))
+                .cloned()
+                .collect();
+            auto_pick_jdk(&usable, required).ok_or_else(|| {
+                if required > 0 {
+                    keyed_msg!(
+                        "errors.launch.jdkRequired?required={required}",
+                        "需要 Java {required}+，请在设置中选择或刷新 JDK"
+                    )
+                } else {
+                    keyed_msg!(
+                        "errors.launch.jdkNotConfigured",
+                        "未配置 JDK，请先在设置中选择 Java 路径"
+                    )
+                }
+            })?
+        }
     };
     // java_env.path 是 JAVA_HOME（目录），需要拼上 bin/java.exe
     let java_home = PathBuf::from(&java_env.path);
@@ -186,7 +196,16 @@ fn load_version_json_with_inheritance(
         common_err_ctx_key!("errors.version.parse", "解析版本 JSON 失败"),
     )?;
 
+    let mut expanded: HashSet<String> = HashSet::new();
+    expanded.insert(version_dir_name.to_string());
     while let Some(parent_id) = vj_value.get("inheritsFrom").and_then(|v| v.as_str()) {
+        // 自引用/环会让 expand_inheritance 永远保留 inheritsFrom；在追加下一层前拦截。
+        if !expanded.insert(parent_id.to_string()) {
+            bail_key!(
+                "errors.launch.inheritanceCycle",
+                "版本继承链存在循环\n{parent_id}"
+            );
+        }
         let parent_path = mc_dir
             .join("versions")
             .join(parent_id)
@@ -372,6 +391,11 @@ pub fn apply_game_language(game_dir: &std::path::Path, language: &str) {
     }
 }
 
+/// 缓存里的 JDK 可能已被删除/移动；Auto 只能选实际存在的 java 可执行文件。
+fn jdk_available(env: &JdkInfo) -> bool {
+    java_bin_path(Path::new(&env.path)).is_file()
+}
+
 /// 从已扫描 JDK 列表选最合适者：优先精确匹配，否则最低但满足需求，再不行取最高（列表可空 → None）；pub(crate) 与 ModLoader 安装器 processors 共用。
 pub(crate) fn auto_pick_jdk(discovered: &[JdkInfo], required: u32) -> Option<JdkInfo> {
     let mut candidates: Vec<(u32, &JdkInfo)> = discovered
@@ -432,6 +456,22 @@ mod tests {
         assert_eq!(auto_pick_jdk(&list, 11).unwrap().path, "/jdk17");
         assert_eq!(auto_pick_jdk(&list, 22).unwrap().path, "/jdk21");
         assert!(auto_pick_jdk(&[], 8).is_none());
+    }
+
+    #[test]
+    fn jdk_available_requires_existing_java_binary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let info = JdkInfo {
+            path: tmp.path().display().to_string(),
+            version: "17.0.8".into(),
+            vendor: "OpenJDK".into(),
+            bits: 64,
+        };
+        assert!(!jdk_available(&info), "bin/java 缺失时应判不可用");
+        std::fs::write(bin.join(JDK_BIN), b"").unwrap();
+        assert!(jdk_available(&info), "bin/java 存在时应判可用");
     }
 
     /// 造临时 mc 目录（含指定版本 JSON）+ 只列一个 JDK 的缓存与 mc_dir，跑真实 `load_launch_config` 后
@@ -538,6 +578,23 @@ mod tests {
         std::fs::remove_dir_all(&parent).unwrap();
         let err = load_version_json_with_inheritance(&tmp, "1.20.1-forge-47.1.0").unwrap_err();
         assert!(err.contains("父版本 JSON"), "应提示父版本缺失: {err}");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// inheritsFrom 自引用/环必须终止，不能无限合并父版本。
+    #[test]
+    fn version_json_rejects_inheritance_cycle() {
+        let tmp = std::env::temp_dir().join(format!("elytra_inh_cycle_{}", std::process::id()));
+        let a = tmp.join("versions/a");
+        let b = tmp.join("versions/b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("a.json"), r#"{"id":"a","inheritsFrom":"b"}"#).unwrap();
+        std::fs::write(b.join("b.json"), r#"{"id":"b","inheritsFrom":"a"}"#).unwrap();
+
+        let err = load_version_json_with_inheritance(&tmp, "a").unwrap_err();
+        assert!(err.contains("循环"), "应识别继承环: {err}");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

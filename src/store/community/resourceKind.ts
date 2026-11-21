@@ -33,6 +33,13 @@ export function isModLoader(loader: string): boolean {
   return LOADER_FAMILY[loader.toLowerCase()] === "mod";
 }
 
+/** 目标实例能否直接使用该加载器的文件：Quilt 兼容 Fabric，其余按名称精确匹配。 */
+export function loaderAccepts(instanceLoader: string, fileLoader: string): boolean {
+  const target = instanceLoader.toLowerCase();
+  const loader = fileLoader.toLowerCase();
+  return loader === target || (target === "quilt" && loader === "fabric");
+}
+
 /** 各入口允许的加载器族；null = 不按加载器过滤（项目类型本身已限定）。 */
 const ALLOWED_FAMILIES: Record<DownloadTab, FamilyMap | null> = {
   vanilla: null,

@@ -65,6 +65,7 @@ fn vanilla_task(version_id: &str, version_url: String) -> DownloadTask {
         loader: None,
         optifine_patch: None,
         version_dir_name: Some(version_id.to_string()),
+        display_name: None,
         fabric_api: None,
     }
 }

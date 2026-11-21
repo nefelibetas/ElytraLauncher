@@ -25,6 +25,15 @@ pub struct ModUpdate {
     pub file_sha1: String,
 }
 
+/// Modrinth `loaders` 查询参数：必须是单个 JSON 数组；Quilt 实例同时接受 Fabric 构建。
+pub(crate) fn modrinth_loader_filter(loader: &str) -> String {
+    if loader.eq_ignore_ascii_case("quilt") {
+        serde_json::json!(["quilt", "fabric"]).to_string()
+    } else {
+        serde_json::json!([loader]).to_string()
+    }
+}
+
 /// 查询兼容 MC 版本 + loader 的最新版本（按 date_published 降序，过滤后首个即最新）；
 /// 返回 (version_number, file_url, file_sha1)。
 async fn latest_version(
@@ -33,7 +42,7 @@ async fn latest_version(
     loader: &str,
 ) -> Option<(String, String, String)> {
     let game_versions = serde_json::json!([mc_version]).to_string();
-    let loaders = serde_json::json!([loader]).to_string();
+    let loaders = modrinth_loader_filter(loader);
     let urls: Vec<String> = api_urls(
         ApiPlatform::Modrinth,
         &format!("/v2/project/{project_id}/version"),
@@ -229,6 +238,13 @@ pub async fn update_mod_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loader_filter_is_a_single_json_array() {
+        assert_eq!(modrinth_loader_filter("forge"), r#"["forge"]"#);
+        assert_eq!(modrinth_loader_filter("quilt"), r#"["quilt","fabric"]"#);
+        assert_eq!(modrinth_loader_filter("fabric"), r#"["fabric"]"#);
+    }
 
     #[test]
     fn toggle_mod_file_disables_and_enables() {

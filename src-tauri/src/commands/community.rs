@@ -77,6 +77,37 @@ pub async fn resolve_mod_dependencies(
     .await
 }
 
+/// 检查选中 Mod 版本与目标实例已安装 Mod 的冲突（仅作者声明 incompatible 且实际安装的项）。
+#[tauri::command]
+pub async fn get_mod_conflicts(
+    source: String,
+    project_id: String,
+    version_id: String,
+    version_dir_name: String,
+) -> Result<community::ModConflictReport, String> {
+    let vdir = version_dir_path(&version_dir_name)?;
+    let (mc_version, kind, _) = resolve_version_meta(&vdir, &version_dir_name);
+    if !matches!(kind.as_str(), "fabric" | "forge" | "neoforge" | "quilt") {
+        return Ok(community::ModConflictReport {
+            instance_mc: mc_version,
+            instance_loader: kind,
+            version_applicable: false,
+            conflicts: Vec::new(),
+            errors: Vec::new(),
+            notices: Vec::new(),
+        });
+    }
+    community::resolve_mod_conflicts(
+        &source,
+        &project_id,
+        &version_id,
+        &mc_version,
+        &kind,
+        &vdir.join("mods"),
+    )
+    .await
+}
+
 #[tauri::command]
 pub fn get_curseforge_key_source() -> community::CurseForgeKeySource {
     community::curseforge_key_source()

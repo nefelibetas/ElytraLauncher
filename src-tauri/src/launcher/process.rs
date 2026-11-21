@@ -476,6 +476,8 @@ where
 
 /// 启动代际：每次 begin_launch 递增；取消只作用于对应代际。
 static LAUNCH_SEQ: AtomicU64 = AtomicU64::new(0);
+/// 启动状态迁移串行化：begin_launch / request_cancel / note_launched 的“检查+写入”必须原子。
+static LAUNCH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 static CANCELLED_GENS: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 /// 本次启动已拉起的游戏进程 pid 与代际（0 = 尚未拉起）：取消时按 pid 终止。
 static LAUNCH_PID: AtomicU32 = AtomicU32::new(0);
@@ -483,6 +485,7 @@ static LAUNCH_PID_GEN: AtomicU64 = AtomicU64::new(0);
 
 /// 新一次启动开始：分配新代际，并取消/终止上一代（旧 pre-launch 可能仍在运行）。
 pub fn begin_launch() -> u64 {
+    let _guard = LAUNCH_LOCK.lock().unwrap();
     let generation = LAUNCH_SEQ.fetch_add(1, Ordering::SeqCst) + 1;
     if generation > 1 {
         let previous = generation - 1;
@@ -507,6 +510,7 @@ pub fn cancel_requested(generation: u64) -> bool {
 
 /// 请求取消：先登记代际再取 pid，故与 `note_launched` 竞争时不会漏杀。
 pub fn request_cancel(generation: u64) {
+    let _guard = LAUNCH_LOCK.lock().unwrap();
     CANCELLED_GENS.lock().unwrap().insert(generation);
     if LAUNCH_PID_GEN.load(Ordering::SeqCst) == generation {
         let pid = LAUNCH_PID.swap(0, Ordering::SeqCst);
@@ -518,6 +522,7 @@ pub fn request_cancel(generation: u64) {
 
 /// 登记已拉起的游戏进程；非当前代际或已取消则立即终止。
 pub fn note_launched(generation: u64, pid: u32) -> bool {
+    let _guard = LAUNCH_LOCK.lock().unwrap();
     if LAUNCH_SEQ.load(Ordering::SeqCst) != generation {
         kill_process(pid);
         return true;
@@ -541,6 +546,7 @@ pub fn is_game_running() -> bool {
 
 /// 进程退出后注销 pid：否则后续取消可能误杀复用同一 pid 的其他进程。
 pub fn clear_launched(generation: u64, pid: u32) {
+    let _guard = LAUNCH_LOCK.lock().unwrap();
     if LAUNCH_PID_GEN.load(Ordering::SeqCst) == generation
         && LAUNCH_PID.load(Ordering::SeqCst) == pid
     {

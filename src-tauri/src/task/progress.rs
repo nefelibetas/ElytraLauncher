@@ -427,11 +427,8 @@ pub fn set_done(sink: &dyn EventSink, progress: &Arc<Mutex<TaskProgress>>, phase
         p.current_phase_params = None;
     });
     // 终态统一移除任务注册（remove 同清挂起登记）；先释放 progress 锁再 remove，防死锁。
-    if let Some(p) = progress.try_lock() {
-        let task_id = p.task_id.clone();
-        drop(p);
-        global().remove(&task_id);
-    }
+    let task_id = progress.lock().task_id.clone();
+    global().remove(&task_id);
 }
 
 /// 失败收口：Error 终态事件 + 移除任务注册。此前 set_cleanup_path 登记过清理路径（如新建版本目录）则取走并后台整删——同步 remove_dir_all 会阻塞任务线程（大目录数十秒）。
@@ -443,10 +440,7 @@ pub fn set_error(sink: &dyn EventSink, progress: &Arc<Mutex<TaskProgress>>, msg:
         p.current_phase_params = None;
     });
     // 先释放 progress 锁再 take_cleanup_path（后者持 inner 锁），保持 inner→progress 锁序。
-    let task_id = progress.try_lock().map(|p| p.task_id.clone());
-    let Some(task_id) = task_id else {
-        return;
-    };
+    let task_id = progress.lock().task_id.clone();
     if let Some(path) = global().take_cleanup_path(&task_id) {
         tauri::async_runtime::spawn_blocking(move || {
             if let Err(e) = std::fs::remove_dir_all(&path) {
@@ -498,11 +492,8 @@ pub fn set_cancelled(sink: &dyn EventSink, progress: &Arc<Mutex<TaskProgress>>) 
         p.current_phase_key = Some("task.backend.phase.cancelled".into());
         p.current_phase_params = None;
     });
-    if let Some(p) = progress.try_lock() {
-        let task_id = p.task_id.clone();
-        drop(p); // 先释放 progress 锁再 fail（fail 内部读 progress，防死锁）
-        global().fail(&task_id);
-    }
+    let task_id = progress.lock().task_id.clone();
+    global().fail(&task_id);
 }
 
 // ── 共享简易心跳（files / modpack 等顺序+块式任务复用）──
@@ -583,21 +574,17 @@ pub fn spawn_heartbeat(
             let mut sampler = SpeedSampler::new();
             loop {
                 tick.tick().await;
-                // 终态由任务侧收口发出，心跳不得覆写（否则 cancel 置位后卡片会复活）
-                match progress.lock().status {
-                    TaskStatus::Pending => {
-                        if let Some(mut p) = progress.try_lock() {
-                            p.status = TaskStatus::Running;
-                        }
-                    }
-                    TaskStatus::Running => {}
-                    _ => return,
-                }
                 let cur = bytes.load(Ordering::Relaxed);
                 let total_bytes = est.load(Ordering::Relaxed);
                 let (speed_bps, eta) = sampler.sample(cur, total_bytes);
-                update_and_emit(sink.as_ref(), &progress, |p| {
-                    p.status = TaskStatus::Running;
+                // 状态检查与字段更新必须在同一把锁内：分开会允许终态写入后又被这里改回 Running。
+                let snapshot = {
+                    let mut p = progress.lock();
+                    match p.status {
+                        TaskStatus::Pending => p.status = TaskStatus::Running,
+                        TaskStatus::Running => {}
+                        _ => return,
+                    }
                     p.completed_files = done_files.load(Ordering::Relaxed);
                     p.total_files = total_files;
                     p.completed_bytes = cur;
@@ -618,11 +605,26 @@ pub fn spawn_heartbeat(
                         }
                     }
                     if percent_by_steps {
-                        p.progress = steps_percent(p);
+                        p.progress = steps_percent(&p);
                     } else {
-                        update_progress(p);
+                        update_progress(&mut p);
                     }
-                });
+                    p.clone()
+                };
+                emit(sink.as_ref(), &snapshot);
+                // 终态可能发生在“快照→投递”之间；补投终态帧，避免被随后合并覆盖。
+                let terminal = {
+                    let p = progress.lock();
+                    matches!(
+                        p.status,
+                        TaskStatus::Done | TaskStatus::Error | TaskStatus::Cancelled
+                    )
+                    .then(|| p.clone())
+                };
+                if let Some(p) = terminal {
+                    emit(sink.as_ref(), &p);
+                    return;
+                }
             }
         }
     })
@@ -660,6 +662,220 @@ mod tests {
         // 无运行中步骤（idx = usize::MAX）→ None
         step.idx.store(usize::MAX, Ordering::Relaxed);
         assert_eq!(step.percent(), None);
+    }
+
+    #[test]
+    fn terminal_removal_survives_progress_lock_contention() {
+        use crate::task::{StepKind, StepSpec, TaskText};
+        use std::sync::mpsc;
+        use std::thread;
+
+        struct BlockingSink {
+            entered: mpsc::Sender<()>,
+            release: parking_lot::Mutex<mpsc::Receiver<()>>,
+        }
+        impl EventSink for BlockingSink {
+            fn send(&self, _event: &'static str, _payload: serde_json::Value) {
+                let _ = self.entered.send(());
+                let _ = self.release.lock().recv();
+            }
+        }
+
+        let (task_id, _cancel, progress) = global().create(
+            "终态锁竞争",
+            &TaskText::default(),
+            &[StepSpec {
+                name: "步骤".into(),
+                kind: StepKind::File,
+            }],
+        );
+        progress.lock().status = TaskStatus::Running;
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let sink = Arc::new(BlockingSink {
+            entered: entered_tx,
+            release: parking_lot::Mutex::new(release_rx),
+        });
+        let progress_for_thread = Arc::clone(&progress);
+        let sink_for_thread = Arc::clone(&sink);
+        let handle = thread::spawn(move || {
+            set_done(sink_for_thread.as_ref(), &progress_for_thread, "完成");
+        });
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("update_and_emit 应已进入 sink");
+        // 在 emit 已释放 progress 锁、终态函数即将做收口查询时重新占住锁。
+        let guard = progress.lock();
+        release_tx.send(()).expect("释放 sink");
+        thread::sleep(Duration::from_millis(100));
+        drop(guard);
+        handle.join().expect("终态线程不应 panic");
+
+        assert!(
+            !global().exists(&task_id),
+            "progress 锁竞争时终态收口不得跳过注销"
+        );
+    }
+
+    #[test]
+    fn error_cleanup_survives_progress_lock_contention() {
+        use crate::task::{StepKind, StepSpec, TaskText};
+        use std::sync::mpsc;
+        use std::thread;
+
+        struct BlockingSink {
+            entered: mpsc::Sender<()>,
+            release: parking_lot::Mutex<mpsc::Receiver<()>>,
+        }
+        impl EventSink for BlockingSink {
+            fn send(&self, _event: &'static str, _payload: serde_json::Value) {
+                let _ = self.entered.send(());
+                let _ = self.release.lock().recv();
+            }
+        }
+
+        let (task_id, _cancel, progress) = global().create(
+            "失败锁竞争",
+            &TaskText::default(),
+            &[StepSpec {
+                name: "步骤".into(),
+                kind: StepKind::File,
+            }],
+        );
+        let tmp = tempfile::tempdir().unwrap();
+        let cleanup_path = tmp.path().join("half-created");
+        std::fs::create_dir_all(&cleanup_path).unwrap();
+        global().set_cleanup_path(&task_id, cleanup_path.clone());
+        progress.lock().status = TaskStatus::Running;
+
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let sink = Arc::new(BlockingSink {
+            entered: entered_tx,
+            release: parking_lot::Mutex::new(release_rx),
+        });
+        let progress_for_thread = Arc::clone(&progress);
+        let sink_for_thread = Arc::clone(&sink);
+        let handle = thread::spawn(move || {
+            set_error(
+                sink_for_thread.as_ref(),
+                &progress_for_thread,
+                "boom".into(),
+            );
+        });
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("update_and_emit 应已进入 sink");
+        let guard = progress.lock();
+        release_tx.send(()).expect("释放 sink");
+        thread::sleep(Duration::from_millis(100));
+        drop(guard);
+        handle.join().expect("终态线程不应 panic");
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while cleanup_path.exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!global().exists(&task_id), "失败收口不得跳过注销");
+        assert!(!cleanup_path.exists(), "失败收口必须删除登记的清理目录");
+    }
+
+    /// 心跳发出 Running 帧后状态被置终态：必须补发终态帧，不能让 Running 成为最后一帧。
+    #[tokio::test(flavor = "multi_thread")]
+    async fn heartbeat_emits_terminal_after_running_snapshot() {
+        use std::sync::mpsc;
+
+        struct BlockFirstSink {
+            first: AtomicBool,
+            entered: mpsc::Sender<()>,
+            release: parking_lot::Mutex<mpsc::Receiver<()>>,
+            events: parking_lot::Mutex<Vec<String>>,
+        }
+        impl EventSink for BlockFirstSink {
+            fn send(&self, _event: &'static str, payload: serde_json::Value) {
+                let status = payload
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                self.events.lock().push(status);
+                if !self.first.swap(true, Ordering::SeqCst) {
+                    let _ = self.entered.send(());
+                    let _ = self.release.lock().recv();
+                }
+            }
+        }
+
+        let progress = Arc::new(Mutex::new(TaskProgress {
+            task_id: "heartbeat-terminal".into(),
+            name: "测试".into(),
+            name_key: None,
+            name_params: None,
+            status: TaskStatus::Pending,
+            progress: 0.0,
+            speed_bps: 0.0,
+            eta_seconds: None,
+            completed_files: 0,
+            total_files: 0,
+            completed_bytes: 0,
+            total_bytes: 0,
+            current_phase: "测试".into(),
+            current_phase_key: None,
+            current_phase_params: None,
+            steps: Vec::new(),
+            error: None,
+        }));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let sink = Arc::new(BlockFirstSink {
+            first: AtomicBool::new(false),
+            entered: entered_tx,
+            release: parking_lot::Mutex::new(release_rx),
+            events: parking_lot::Mutex::new(Vec::new()),
+        });
+        let handle = spawn_heartbeat(
+            Arc::clone(&sink) as Arc<dyn EventSink>,
+            &progress,
+            HeartbeatStats {
+                done_files: Arc::new(AtomicU32::new(0)),
+                total_files: 0,
+                bytes: Arc::new(AtomicU64::new(0)),
+                est_total_bytes: Arc::new(AtomicU64::new(0)),
+                percent_by_steps: false,
+                step: None,
+            },
+        );
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("心跳应发出第一帧");
+        progress.lock().status = TaskStatus::Done;
+        release_tx.send(()).expect("释放第一帧");
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if sink.events.lock().iter().any(|status| status == "done") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        handle.abort();
+
+        let events = sink.events.lock().clone();
+        assert_eq!(
+            events.last().map(String::as_str),
+            Some("done"),
+            "终态帧必须是最后一帧，实际: {events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .skip_while(|status| *status != "done")
+                .all(|status| status == "done"),
+            "终态之后不得再出现 Running 帧，实际: {events:?}"
+        );
     }
 
     #[tokio::test]

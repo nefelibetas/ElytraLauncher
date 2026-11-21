@@ -76,6 +76,8 @@ export interface CommunityDependencyItem {
   title: string;
   description: string;
   icon_url: string | null;
+  /** 项目支持的 ModLoader（用于按目标实例裁掉不相关的前置） */
+  loaders: string[];
   translated: string | null;
 }
 

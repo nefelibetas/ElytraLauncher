@@ -14,7 +14,9 @@ use crate::game::loader::{LoaderChoice, LoaderKind};
 use crate::game::version::dir::find_version_json;
 use crate::util::{loader_from_dir, mc_version_from_dir};
 
-use super::export::{add_dir_to_zip, mod_candidates, ExportObserver, ExportPhase, PACK_SUBDIRS};
+use super::export::{
+    add_dir_to_zip, mod_candidates, pack_mc_version, ExportObserver, ExportPhase, PACK_SUBDIRS,
+};
 use super::version_meta::loader_from_version_json;
 
 /// CurseForge 指纹：MurmurHash2（seed 1），哈希前剔除 ASCII 空白。
@@ -194,27 +196,29 @@ pub(crate) async fn pack_curseforge_with(
     Ok(())
 }
 
-/// 版本元数据：版本 JSON 优先（libraries 提取 loader），目录名兜底。
+/// 版本元数据：整合包标记（真实 MC）优先，其次版本 JSON，最后目录名兜底。
 fn resolve_meta(vdir: &Path, version_name: &str) -> (String, Option<LoaderChoice>) {
+    let marker_mc = pack_mc_version(vdir);
     let text =
         find_version_json(vdir, version_name).and_then(|path| std::fs::read_to_string(path).ok());
-    let Some(text) = text else {
-        return (
-            mc_version_from_dir(version_name).to_string(),
-            loader_from_dir_choice(version_name),
-        );
-    };
-    let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    let mc_version = value["inheritsFrom"]
-        .as_str()
-        .map(str::to_string)
+    let loader = text
+        .as_deref()
+        .and_then(loader_from_version_json)
+        .or_else(|| loader_from_dir_choice(version_name));
+    let mc_version = marker_mc
         .or_else(|| {
-            value["id"]
+            let value: Value = serde_json::from_str(text.as_deref()?).ok()?;
+            value["inheritsFrom"]
                 .as_str()
-                .map(|id| mc_version_from_dir(id).to_string())
+                .map(str::to_string)
+                .or_else(|| {
+                    value["id"]
+                        .as_str()
+                        .map(|id| mc_version_from_dir(id).to_string())
+                })
         })
         .unwrap_or_else(|| mc_version_from_dir(version_name).to_string());
-    (mc_version, loader_from_version_json(&text))
+    (mc_version, loader)
 }
 
 /// 版本 JSON 缺失时按目录名解析 loader（`1.20.1-forge-47.2.0`）。
@@ -242,6 +246,24 @@ mod tests {
     struct Noop;
 
     impl ExportObserver for Noop {}
+
+    #[test]
+    fn resolve_meta_prefers_pack_marker_mc() {
+        let dir = tempfile::tempdir().unwrap();
+        let vdir = dir.path();
+        std::fs::write(
+            vdir.join("elytra-pack.json"),
+            r#"{"cache_key":"k","mc_version":"1.20.1"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            vdir.join("PackName-1.20.1.json"),
+            r#"{"id":"PackName-1.20.1","libraries":[]}"#,
+        )
+        .unwrap();
+        let (mc, _) = resolve_meta(vdir, "PackName-1.20.1");
+        assert_eq!(mc, "1.20.1", "整合包标记里的 MC 应优先于目录名");
+    }
 
     #[test]
     fn fingerprint_ignores_ascii_whitespace() {

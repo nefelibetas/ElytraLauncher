@@ -112,10 +112,8 @@ fn begin_jdk_install(
 
     // 取消/失败时整删半截 runtime 目录：半截残留会误导 auto_install 幂等检查（bin/java.exe 存在即误判已装）。先取 task_id
     // 释放 progress 守卫再调 set_cleanup_path（后者取 inner 锁），否则构成 progress→inner 反向锁序（与 fail/list 的 inner→progress 成 ABBA）。
-    let cleanup_task_id = progress.try_lock().map(|p| p.task_id.clone());
-    if let Some(task_id) = cleanup_task_id {
-        task::global().set_cleanup_path(&task_id, dest_dir.to_path_buf());
-    }
+    let cleanup_task_id = progress.lock().task_id.clone();
+    task::global().set_cleanup_path(&cleanup_task_id, dest_dir.to_path_buf());
 
     set_phase(
         app,
@@ -239,11 +237,8 @@ fn settle_jdk_install(
                 p.current_phase_key = Some("task.backend.phase.done".into());
                 p.current_phase_params = None;
             });
-            if let Some(p) = progress.try_lock() {
-                let task_id = p.task_id.clone();
-                drop(p);
-                task::global().fail(&task_id);
-            }
+            let task_id = progress.lock().task_id.clone();
+            task::global().fail(&task_id);
         }
         Err(e) => {
             emit_handle.abort();

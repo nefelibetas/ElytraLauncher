@@ -7,7 +7,7 @@ use super::mc_discover::MinecraftScanner;
 use super::model::{OnlineSnapshot, OnlineStatus, DEFAULT_SCAFFOLD_PORT, DISCOVER_POLL};
 use super::scaffold::codec::{Request, Response};
 use super::scaffold::identity::get_machine_id;
-use super::scaffold::profiles::{Profile, ProfileKind, ProfileTable};
+use super::scaffold::profiles::{clip_profile_field, Profile, ProfileKind, ProfileTable};
 use super::scaffold::room::{create_room, RoomCredential};
 use super::scaffold::server::{start, Handlers, InfoServer};
 use super::service::{
@@ -32,7 +32,14 @@ pub async fn start_host(sink: Arc<dyn EventSink>) -> Result<OnlineSnapshot, Stri
         session.stop().await;
         bail_key!("errors.task.cancelled", "联机启动已取消");
     }
-    let (profiles, shared, info_server) = start_info_server(scaffold_port);
+    let (profiles, shared, info_server) = match start_info_server(scaffold_port) {
+        Ok(started) => started,
+        Err(error) => {
+            drop(svc);
+            session.stop().await;
+            return Err(error);
+        }
+    };
     let snap = publish_host_ready(
         sink.as_ref(),
         &mut svc,
@@ -87,8 +94,10 @@ async fn prepare_host_session() -> Result<(u64, u16, RoomCredential, SessionConf
 }
 
 /// 阶段二：构建房主玩家表 + 起信息服务器。
-/// 返回服务器句柄（None = 启动失败），调用方须存进单例以便停止时释放端口。
-fn start_info_server(scaffold_port: u16) -> (ProfileTable, Arc<HostShared>, Option<InfoServer>) {
+/// 返回服务器句柄；失败必须让 start_host 收口，否则 UI 会发布一个没人监听的房间。
+fn start_info_server(
+    scaffold_port: u16,
+) -> Result<(ProfileTable, Arc<HostShared>, InfoServer), String> {
     let host_profile = Profile::new(
         online_player_name(),
         get_machine_id(),
@@ -102,20 +111,17 @@ fn start_info_server(scaffold_port: u16) -> (ProfileTable, Arc<HostShared>, Opti
     });
     // 起信息服务器（OS 监听 0.0.0.0:scaffold_port，blocking 线程）
     let handlers = build_host_handlers(shared.clone());
-    let info_server = match start(handlers, scaffold_port) {
-        Ok(server) => {
-            eprintln!(
-                "[online] Scaffolding 信息服务器监听 0.0.0.0:{}",
-                server.port()
-            );
-            Some(server)
-        }
-        Err(e) => {
-            eprintln!("[online] Scaffolding 信息服务器启动失败: {e}");
-            None
-        }
-    };
-    (profiles, shared, info_server)
+    let server = start(handlers, scaffold_port).map_err(|e| {
+        keyed_msg!(
+            "errors.online.infoServerStartFailed",
+            "联机信息服务器启动失败\n{e}"
+        )
+    })?;
+    eprintln!(
+        "[online] Scaffolding 信息服务器监听 0.0.0.0:{}",
+        server.port()
+    );
+    Ok((profiles, shared, server))
 }
 
 fn publish_host_ready(
@@ -125,14 +131,14 @@ fn publish_host_ready(
     room: RoomCredential,
     scaffold_port: u16,
     profiles: ProfileTable,
-    info_server: Option<InfoServer>,
+    info_server: InfoServer,
 ) -> OnlineSnapshot {
     svc.session = Some(session);
     svc.status = OnlineStatus::Waiting;
     svc.room = Some(room);
     svc.scaffold_port = Some(scaffold_port);
     svc.profiles = Some(profiles);
-    svc.info_server = info_server;
+    svc.info_server = Some(info_server);
     let snap = snapshot_inner(svc);
     emit_snapshot(sink, &snap);
     snap
@@ -344,6 +350,7 @@ fn build_host_handlers(shared: Arc<HostShared>) -> Handlers {
                         )
                     })?
                     .to_string();
+                let name = clip_profile_field(&name);
                 let machine_id = value
                     .get("machine_id")
                     .and_then(|v| v.as_str())
@@ -354,11 +361,9 @@ fn build_host_handlers(shared: Arc<HostShared>) -> Handlers {
                         )
                     })?
                     .to_string();
-                let vendor = value
-                    .get("vendor")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                let machine_id = clip_profile_field(&machine_id);
+                let vendor =
+                    clip_profile_field(value.get("vendor").and_then(|v| v.as_str()).unwrap_or(""));
                 let guest = Profile::new(name, machine_id, vendor, ProfileKind::Guest);
                 shared.profiles.lock().upsert_guest(guest);
                 Ok(Response::ok(Vec::new()))
@@ -464,6 +469,51 @@ mod tests {
         };
         let resp = handlers.dispatch(&req).unwrap();
         assert_eq!(resp.status, 255);
+    }
+
+    #[test]
+    fn player_ping_clips_long_fields() {
+        use crate::online::scaffold::profiles::MAX_PROFILE_FIELD_CHARS;
+
+        let shared = Arc::new(HostShared {
+            mc_port: parking_lot::RwLock::new(None),
+            profiles: parking_lot::Mutex::new(ProfileTable::with_host(Profile::new(
+                "host".into(),
+                "m0".into(),
+                "test".into(),
+                ProfileKind::Host,
+            ))),
+        });
+        let handlers = build_host_handlers(shared.clone());
+        let long = "x".repeat(MAX_PROFILE_FIELD_CHARS + 100);
+        let body = serde_json::json!({
+            "name": long,
+            "machine_id": long,
+            "vendor": long,
+        })
+        .to_string();
+        let req = Request {
+            namespace: "c".into(),
+            value: "player_ping".into(),
+            body: body.into_bytes(),
+        };
+        assert_eq!(handlers.dispatch(&req).unwrap().status, 0);
+
+        let profiles = shared.profiles.lock().profiles();
+        let guest = profiles.last().unwrap();
+        assert_eq!(guest.name.chars().count(), MAX_PROFILE_FIELD_CHARS);
+        assert_eq!(guest.machine_id.chars().count(), MAX_PROFILE_FIELD_CHARS);
+        assert_eq!(guest.vendor.chars().count(), MAX_PROFILE_FIELD_CHARS);
+    }
+
+    /// 信息服务器绑定失败必须返回错误，不能发布一个没人监听的房间。
+    #[test]
+    fn info_server_bind_failure_is_reported() {
+        let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let result = start_info_server(port);
+        assert!(result.is_err(), "端口被占用时 start_info_server 应失败");
+        drop(listener);
     }
 
     /// 抓的是「信息服务器写 shared、快照读 svc」两表不同步：guest 加入后房主面板必须出现该玩家。

@@ -79,6 +79,8 @@ pub struct CommunityDependencyItem {
     pub title: String,
     pub description: String,
     pub icon_url: Option<String>,
+    /// 项目支持的 ModLoader（用于按目标实例裁掉不相关的前置）
+    pub loaders: Vec<String>,
     /// MCIM 中文简介翻译（translate=false 或未命中时为 None，UI 降级显示原文）
     pub translated: Option<String>,
 }

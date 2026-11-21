@@ -337,6 +337,14 @@ pub(super) async fn modrinth_details(
                 title: p["title"].as_str()?.to_string(),
                 description: p["description"].as_str().unwrap_or("").to_string(),
                 icon_url: p["icon_url"].as_str().map(str::to_string),
+                loaders: p["loaders"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|loader| loader.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 translated: None,
             })
         })

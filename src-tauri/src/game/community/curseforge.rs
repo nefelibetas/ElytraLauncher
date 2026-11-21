@@ -1,5 +1,8 @@
 //! CurseForge 平台实现（需要 x-api-key）：搜索 / 版本列表 / 详情 / 批量文件换链。
 
+use std::collections::HashSet;
+
+use futures_util::stream::{self, StreamExt};
 use serde::Serialize;
 
 use super::cache;
@@ -18,8 +21,42 @@ use crate::downloader::fetcher::http;
 use crate::persist::secrets;
 
 const CURSEFORGE_GAME_ID: &str = "432";
+/// CurseForge files 接口单页上限（API 允许更大，但 30 足够且降低单次响应体）。
+const CURSEFORGE_VERSION_PAGE_SIZE: usize = 30;
+/// 版本列表最多翻多少页：避免异常 totalCount 触发无界请求。
+const MAX_CURSEFORGE_VERSION_PAGES: usize = 10;
+/// 分页并发：CF 限流按 key 计，2 页并发（每个 GET 还可能降级镜像）已能明显降延迟且不冲击接口。
+const CURSEFORGE_PAGE_CONCURRENCY: usize = 2;
 const CURSEFORGE_KEY_SECRET: &str = "curseforge_api_key";
 const CURSEFORGE_KEY_LEN: usize = 60;
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// 测试用野生并发计数：验证分页并发上限（生产构建不编译）。
+#[cfg(test)]
+static CF_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static CF_MAX_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+struct CfActiveGuard;
+
+#[cfg(test)]
+impl CfActiveGuard {
+    fn new() -> Self {
+        let active = CF_ACTIVE.fetch_add(1, Ordering::SeqCst) + 1;
+        CF_MAX_ACTIVE.fetch_max(active, Ordering::SeqCst);
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for CfActiveGuard {
+    fn drop(&mut self) {
+        CF_ACTIVE.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 
 /// CurseForge Key 来源（只暴露状态，不返回 key 本身）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
@@ -109,6 +146,19 @@ fn curseforge_loader_id(loader: &str) -> Option<i64> {
     }
 }
 
+/// CurseForge FileRelationType → 统一关系名。
+fn curseforge_relation(relation_type: u64) -> &'static str {
+    match relation_type {
+        1 => "embedded",
+        2 => "optional",
+        3 => "required",
+        4 => "tool",
+        5 => "incompatible",
+        6 => "include",
+        _ => "unknown",
+    }
+}
+
 /// CurseForge 项目大类 classId（光影包等非 mod 类别走 classId 过滤）。
 fn curseforge_class_id(category: &str) -> Option<i64> {
     match category {
@@ -190,6 +240,8 @@ pub(crate) async fn curseforge_get(
     path: &str,
     params: &[(&str, String)],
 ) -> Result<serde_json::Value, String> {
+    #[cfg(test)]
+    let _active = CfActiveGuard::new();
     let key = api_key()?;
     let mut all: Vec<(&str, String)> = vec![("gameId", CURSEFORGE_GAME_ID.to_string())];
     all.extend_from_slice(params);
@@ -391,35 +443,15 @@ pub(super) async fn search_curseforge(
     Ok(page)
 }
 
-pub(super) async fn curseforge_versions(
-    project_id: &str,
-    game_version: Option<&str>,
-    loader: Option<&str>,
-    refresh: bool,
-) -> Result<Vec<CommunityVersion>, String> {
-    if !refresh {
-        if let Some(hit) = cache::get_version("curseforge", project_id, game_version, loader) {
-            return Ok(hit);
-        }
-    }
-    let mut params: Vec<(&str, String)> = vec![("pageSize", "30".into())];
-    if let Some(gv) = game_version {
-        params.push(("gameVersion", gv.to_string()));
-    }
-    if let Some(ld) = loader {
-        if let Some(id) = curseforge_loader_id(ld) {
-            params.push(("modLoaderType", id.to_string()));
-        }
-    }
-    let data = curseforge_get(&format!("/mods/{}/files", project_id), &params).await?;
-
+/// 解析单页 `data` 数组；分页与单页共用，确保字段归一化只在一个地方。
+fn parse_curseforge_files(data: &serde_json::Value) -> Result<Vec<CommunityVersion>, String> {
     let arr = data["data"].as_array().ok_or_else(|| {
         keyed_msg!(
             "errors.community.curseforgeFilesDataMissing",
             "文件响应缺少 data"
         )
     })?;
-    let versions: Vec<CommunityVersion> = arr
+    Ok(arr
         .iter()
         .filter_map(|f| {
             let tags: Vec<String> = f["gameVersions"]
@@ -462,13 +494,10 @@ pub(super) async fn curseforge_versions(
                     .map(|arr| {
                         arr.iter()
                             .filter_map(|d| {
-                                // CurseForge relationType：1=embedded、2=optional、3=required（归一化）
-                                let relation = match d["relationType"].as_u64() {
-                                    Some(1) => "embedded",
-                                    Some(2) => "optional",
-                                    Some(3) => "required",
-                                    _ => "unknown",
-                                };
+                                let relation = d["relationType"]
+                                    .as_u64()
+                                    .map(curseforge_relation)
+                                    .unwrap_or("unknown");
                                 Some(CommunityDependency {
                                     project_id: d["modId"].as_u64()?.to_string(),
                                     relation: relation.to_string(),
@@ -480,7 +509,71 @@ pub(super) async fn curseforge_versions(
                     .unwrap_or_default(),
             })
         })
-        .collect();
+        .collect())
+}
+
+pub(super) async fn curseforge_versions(
+    project_id: &str,
+    game_version: Option<&str>,
+    loader: Option<&str>,
+    refresh: bool,
+) -> Result<Vec<CommunityVersion>, String> {
+    if !refresh {
+        if let Some(hit) = cache::get_version("curseforge", project_id, game_version, loader) {
+            return Ok(hit);
+        }
+    }
+    let mut params: Vec<(&str, String)> =
+        vec![("pageSize", CURSEFORGE_VERSION_PAGE_SIZE.to_string())];
+    if let Some(gv) = game_version {
+        params.push(("gameVersion", gv.to_string()));
+    }
+    if let Some(ld) = loader {
+        if let Some(id) = curseforge_loader_id(ld) {
+            params.push(("modLoaderType", id.to_string()));
+        }
+    }
+    let path = format!("/mods/{}/files", project_id);
+
+    // 第 1 页必须先取：totalCount 决定后续页数；多半项目 ≤30 个文件，此时不会产生任何并发请求。
+    let mut first_params = params.clone();
+    first_params.push(("index", "0".to_string()));
+    let first_data = curseforge_get(&path, &first_params).await?;
+    let first = parse_curseforge_files(&first_data)?;
+    let total = first_data["pagination"]["totalCount"]
+        .as_u64()
+        .unwrap_or(first.len() as u64);
+    let page_count = (total.div_ceil(CURSEFORGE_VERSION_PAGE_SIZE as u64) as usize)
+        .clamp(1, MAX_CURSEFORGE_VERSION_PAGES);
+
+    let mut pages: Vec<(usize, Vec<CommunityVersion>)> = vec![(0, first)];
+    if page_count > 1 {
+        let fetched: Vec<(usize, Result<Vec<CommunityVersion>, String>)> =
+            stream::iter(1..page_count)
+                .map(|page| {
+                    let mut page_params = params.clone();
+                    page_params.push(("index", (page * CURSEFORGE_VERSION_PAGE_SIZE).to_string()));
+                    let path = path.clone();
+                    async move {
+                        let data = curseforge_get(&path, &page_params).await;
+                        let parsed = data.and_then(|data| parse_curseforge_files(&data));
+                        (page, parsed)
+                    }
+                })
+                .buffer_unordered(CURSEFORGE_PAGE_CONCURRENCY)
+                .collect()
+                .await;
+        for (page, result) in fetched {
+            pages.push((page, result?));
+        }
+    }
+
+    // 按页号还原 API 原本的倒序，再做 dedupe；并发完成顺序不会影响列表顺序。
+    pages.sort_by_key(|(page, _)| *page);
+    let mut versions: Vec<CommunityVersion> =
+        pages.into_iter().flat_map(|(_, page)| page).collect();
+    let mut seen = HashSet::new();
+    versions.retain(|version| seen.insert(version.version_id.clone()));
     cache::put_version("curseforge", project_id, game_version, loader, &versions);
     Ok(versions)
 }
@@ -522,11 +615,13 @@ pub(super) async fn curseforge_details(
     let fetched: Vec<CommunityDependencyItem> = arr
         .iter()
         .filter_map(|m| {
+            let (loaders, _) = curseforge_support_fields(m);
             Some(CommunityDependencyItem {
                 id: m["id"].as_u64()?.to_string(),
                 title: m["name"].as_str()?.to_string(),
                 description: m["summary"].as_str().unwrap_or("").to_string(),
                 icon_url: m["logo"]["url"].as_str().map(str::to_string),
+                loaders,
                 translated: None,
             })
         })
@@ -549,6 +644,75 @@ mod tests {
         tag: Option<&str>,
     ) -> SearchQuery {
         SearchQuery::new(query, game_version, None, category, tag, 0, 30)
+    }
+
+    #[test]
+    fn curseforge_relation_maps_incompatible() {
+        assert_eq!(curseforge_relation(1), "embedded");
+        assert_eq!(curseforge_relation(2), "optional");
+        assert_eq!(curseforge_relation(3), "required");
+        assert_eq!(curseforge_relation(5), "incompatible");
+        assert_eq!(curseforge_relation(99), "unknown");
+    }
+
+    #[test]
+    fn parse_version_page_normalizes_fields() {
+        let data = serde_json::json!({
+            "data": [{
+                "id": 42,
+                "fileName": "a.jar",
+                "downloadUrl": "https://x/a.jar",
+                "fileLength": 123,
+                "fileDate": "2026-01-01T00:00:00Z",
+                "downloadCount": 7,
+                "gameVersions": ["1.20.1", "Fabric"],
+                "hashes": [{"algo": 1, "value": "abc"}],
+                "dependencies": [{"modId": 9, "relationType": 5}],
+                "releaseType": 1
+            }]
+        });
+        let versions = parse_curseforge_files(&data).unwrap();
+        assert_eq!(versions.len(), 1);
+        let version = &versions[0];
+        assert_eq!(version.version_id, "42");
+        assert_eq!(version.filename, "a.jar");
+        assert_eq!(version.sha1.as_deref(), Some("abc"));
+        assert_eq!(version.game_versions, vec!["1.20.1"]);
+        assert_eq!(version.loaders, vec!["fabric"]);
+        assert_eq!(version.dependencies[0].relation, "incompatible");
+        assert_eq!(version.dependencies[0].project_id, "9");
+    }
+
+    /// 真实 CurseForge 分页：JEI 文件数远超单页 30；若只取首页，该断言会失败。
+    #[tokio::test]
+    #[ignore = "真实 CurseForge API，消耗配额"]
+    async fn curseforge_versions_pages_beyond_first_page() {
+        let _g = CF_LOCK.lock().await;
+        if curseforge_key_source() == CurseForgeKeySource::None {
+            eprintln!("跳过: 未配置 CurseForge API Key");
+            return;
+        }
+        CF_MAX_ACTIVE.store(0, Ordering::SeqCst);
+        let versions = curseforge_versions("238222", None, None, true)
+            .await
+            .expect("CurseForge 版本分页应成功");
+        let max_active = CF_MAX_ACTIVE.load(Ordering::SeqCst);
+        assert!(
+            max_active <= CURSEFORGE_PAGE_CONCURRENCY,
+            "分页并发不得超过 {CURSEFORGE_PAGE_CONCURRENCY}，实际 {max_active}"
+        );
+        assert!(
+            versions.len() > CURSEFORGE_VERSION_PAGE_SIZE,
+            "应翻页取回多于首页 30 个文件，实际 {}",
+            versions.len()
+        );
+        assert!(
+            versions.len() <= MAX_CURSEFORGE_VERSION_PAGES * CURSEFORGE_VERSION_PAGE_SIZE,
+            "分页必须受上限约束，实际 {}",
+            versions.len()
+        );
+        let unique: HashSet<&str> = versions.iter().map(|v| v.version_id.as_str()).collect();
+        assert_eq!(unique.len(), versions.len(), "跨页版本 ID 不得重复");
     }
 
     #[test]

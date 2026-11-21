@@ -64,6 +64,8 @@ const PLACEHOLDER_ASSETS_ROOT: &str = "${assets_root}";
 const PLACEHOLDER_ASSETS_INDEX_NAME: &str = "${assets_index_name}";
 const PLACEHOLDER_AUTH_UUID: &str = "${auth_uuid}";
 const PLACEHOLDER_AUTH_ACCESS_TOKEN: &str = "${auth_access_token}";
+const PLACEHOLDER_AUTH_SESSION: &str = "${auth_session}";
+const PLACEHOLDER_GAME_ASSETS: &str = "${game_assets}";
 const PLACEHOLDER_AUTH_XUID: &str = "${auth_xuid}";
 const PLACEHOLDER_USER_TYPE: &str = "${user_type}";
 const PLACEHOLDER_USER_PROPERTIES: &str = "${user_properties}";
@@ -131,6 +133,8 @@ fn substitute<'a>(template: &str, ctx: &TemplateContext<'a>) -> String {
     s = s.replace(PLACEHOLDER_ASSETS_INDEX_NAME, ctx.assets_index_name);
     s = s.replace(PLACEHOLDER_AUTH_UUID, ctx.auth_uuid);
     s = s.replace(PLACEHOLDER_AUTH_ACCESS_TOKEN, ctx.auth_access_token);
+    s = s.replace(PLACEHOLDER_AUTH_SESSION, ctx.auth_access_token);
+    s = s.replace(PLACEHOLDER_GAME_ASSETS, ctx.assets_root);
     s = s.replace(PLACEHOLDER_AUTH_XUID, ctx.auth_xuid);
     s = s.replace(PLACEHOLDER_USER_TYPE, ctx.user_type);
     s = s.replace(PLACEHOLDER_USER_PROPERTIES, ctx.user_properties);
@@ -1150,7 +1154,7 @@ mod tests {
                 "assets": "legacy",
                 "assetIndex": { "id": "legacy", "url": "x", "sha1": "y", "size": 1, "totalSize": 1 },
                 "downloads": { "client": { "url": "x", "sha1": "y", "size": 1 } },
-                "minecraftArguments": "--username ${auth_player_name} --gameDir ${game_directory} --assetsDir ${assets_root} --assetIndex ${assets_index_name} --userProperties ${user_properties}",
+                "minecraftArguments": "--username ${auth_player_name} --gameDir ${game_directory} --assetsDir ${assets_root} --assetIndex ${assets_index_name} --userProperties ${user_properties} --session ${auth_session} --gameAssets ${game_assets}",
                 "complianceLevel": 0,
                 "minimumLauncherVersion": 4,
                 "javaVersion": { "majorVersion": 8 },
@@ -1196,6 +1200,14 @@ mod tests {
             "含空格的 --assetsDir 路径必须保持单个 argv 元素: {args:?}"
         );
         assert!(!args.iter().any(|a| a == "San"), "路径被截断: {args:?}");
+        let sidx = args.iter().position(|a| a == "--session").unwrap();
+        assert_eq!(args[sidx + 1], "t", "auth_session 应展开为 access token");
+        let gaidx = args.iter().position(|a| a == "--gameAssets").unwrap();
+        assert_eq!(
+            args[gaidx + 1],
+            assets_dir,
+            "game_assets 应展开为 assets 根"
+        );
         // `${user_properties}` 展开为空 → 必须丢弃空 token，而不是塞一个空 argv 元素
         assert!(
             !args.iter().any(|a| a.is_empty()),

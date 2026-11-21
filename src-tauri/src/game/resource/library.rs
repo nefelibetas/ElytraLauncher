@@ -172,15 +172,11 @@ pub async fn download_libraries(
                 Some(&artifact.sha1),
             )
         });
-        // 每源一个 URL（主源过慢/失败自动降级）；复用命中则无需网络候选
-        let urls: Vec<String> = if local.is_some() {
-            Vec::new()
-        } else {
-            sources
-                .iter()
-                .map(|s| s.mirror_url(&artifact.url))
-                .collect()
-        };
+        // 每源一个 URL（主源过慢/失败自动降级）；本地复用命中时仍保留候选，复制失败可降级网络
+        let urls: Vec<String> = sources
+            .iter()
+            .map(|s| s.mirror_url(&artifact.url))
+            .collect();
         let label = dest.display().to_string();
         items.push(BatchItem {
             urls,

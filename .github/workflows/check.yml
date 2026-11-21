@@ -34,6 +34,8 @@ jobs:
         run: pnpm lint:css
       - name: 语言包校验
         run: pnpm i18n:check
+      - name: 前端纯逻辑回归（node:test）
+        run: pnpm test:frontend
       - name: Rust 格式检查
         working-directory: src-tauri
         run: cargo fmt --check
@@ -70,6 +72,9 @@ jobs:
       - name: cargo test（串行：persist 共用 Settings.toml、网络测试抖动）
         working-directory: src-tauri
         run: cargo test --lib -- --test-threads=1
+      - name: cargo test（工具箱下载器集成：本地 HTTP，无外网）
+        working-directory: src-tauri
+        run: cargo test --test tool_download
 
   rust-cross:
     name: Rust（${{ matrix.name }} clippy）

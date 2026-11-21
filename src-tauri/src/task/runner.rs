@@ -135,10 +135,8 @@ async fn stage_fetch_version(
     // 仅新建目录登记清理；补全已有版本取消时不删，避免误删用户文件。
     if !runtime.vdir_existed_before {
         // 先取 task_id 释放 progress 守卫再调 set_cleanup_path（后者取 inner 锁），否则 ABBA。
-        let cleanup_task_id = progress.try_lock().map(|p| p.task_id.clone());
-        if let Some(task_id) = cleanup_task_id {
-            task::global().set_cleanup_path(&task_id, vdir.clone());
-        }
+        let cleanup_task_id = progress.lock().task_id.clone();
+        task::global().set_cleanup_path(&cleanup_task_id, vdir.clone());
     }
     Ok((vj, parent_text))
 }
@@ -553,6 +551,15 @@ async fn install_optifine_step(
     Ok(())
 }
 
+/// URL → 安全的 Fabric API 文件名：percent-decode 后再过 Windows 保留名/非法字符清洗。
+fn fabric_api_filename(url: &str) -> String {
+    let raw =
+        percent_encoding::percent_decode_str(util::url_file_name(url).unwrap_or("fabric-api.jar"))
+            .decode_utf8_lossy()
+            .into_owned();
+    util::sanitize_fs_name(&raw, "fabric-api.jar")
+}
+
 async fn download_fabric_api_step(
     ctx: &DownloadCtx<'_>,
     api: Option<&FabricApi>,
@@ -570,11 +577,7 @@ async fn download_fabric_api_step(
         ..
     } = *ctx;
     let url = api.url.as_str();
-    // URL 最后一段 percent-decode（文件名中的 `+` 被编码为 %2B）
-    let filename =
-        percent_encoding::percent_decode_str(util::url_file_name(url).unwrap_or("fabric-api.jar"))
-            .decode_utf8_lossy()
-            .into_owned();
+    let filename = fabric_api_filename(url);
     // 版本隔离：游戏从 gameDir/mods（= versions/<id>/mods）加载 mod
     let mods_dir = vdir.join("mods");
     std::fs::create_dir_all(&mods_dir).ok();
@@ -772,10 +775,8 @@ pub async fn run_task(
     if !errors.is_empty() {
         // 全新下载失败整删残缺目录；补全（目录已存在）不删。登记清理路径由 set_error 后台整删。
         if !vdir_existed_before {
-            let cleanup_id = progress.try_lock().map(|p| p.task_id.clone());
-            if let Some(id) = cleanup_id {
-                task::global().set_cleanup_path(&id, vdir.clone());
-            }
+            let cleanup_id = progress.lock().task_id.clone();
+            task::global().set_cleanup_path(&cleanup_id, vdir.clone());
         }
         eprintln!("[task] 失败: {}", errors.join("; "));
         return set_error(app, progress, errors.join("; "));
@@ -1053,6 +1054,21 @@ mod tests {
             fabric_api: None,
             display_name: None,
         }
+    }
+
+    #[test]
+    fn fabric_api_filename_sanitizes_traversal() {
+        assert_eq!(
+            fabric_api_filename("https://cdn.example.com/fabric-api-0.102.0.jar"),
+            "fabric-api-0.102.0.jar"
+        );
+        let evil = fabric_api_filename("https://cdn.example.com/%2e%2e%2f%2e%2e%2fevil.jar");
+        assert!(
+            !evil.contains('/') && !evil.contains('\\'),
+            "路径分隔符必须被清洗: {evil}"
+        );
+        let query = fabric_api_filename("https://cdn.example.com/file.jar?x=1");
+        assert!(!query.contains('?'), "query 字符必须被清洗: {query}");
     }
 
     #[test]

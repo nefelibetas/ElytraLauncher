@@ -624,11 +624,8 @@ fn finish_files(app: &dyn EventSink, progress: &Arc<Mutex<TaskProgress>>, total_
         p.current_phase_key = Some("task.backend.phase.done".into());
         p.current_phase_params = None;
     });
-    if let Some(p) = progress.try_lock() {
-        let task_id = p.task_id.clone();
-        drop(p); // 先释放 progress 锁再 remove（remove 内部读 progress，防死锁）
-        task::global().remove(&task_id);
-    }
+    let task_id = progress.lock().task_id.clone();
+    task::global().remove(&task_id);
 }
 
 pub(crate) fn spawn_files_task(app: AppHandle, task: DownloadFilesTask) -> Result<String, String> {

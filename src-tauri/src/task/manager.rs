@@ -139,9 +139,7 @@ impl TaskManager {
                 h.cancel.store(true, Ordering::SeqCst);
                 // 取走清理路径：暂停不清目录，恢复只补缺失文件
                 let _ = h.cleanup_path.take();
-                if let Some(mut p) = h.progress.try_lock() {
-                    p.status = TaskStatus::Paused;
-                }
+                h.progress.lock().status = TaskStatus::Paused;
                 true
             } else {
                 false
@@ -163,9 +161,7 @@ impl TaskManager {
                 h.cancel.store(true, Ordering::SeqCst);
                 // 目录清理移交任务侧 set_cancelled 收口：同步 remove_dir_all 会阻塞 worker（大目录数十秒）
                 // 且与仍在跑的下载竞争写文件。DB 写在 progress 锁外（DB 卡住不阻塞取消）。
-                if let Some(mut p) = h.progress.try_lock() {
-                    p.status = TaskStatus::Cancelled;
-                }
+                h.progress.lock().status = TaskStatus::Cancelled;
                 true
             } else {
                 false

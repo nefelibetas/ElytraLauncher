@@ -2,6 +2,7 @@
 //! `/v2/projects?ids=[...]` 批量补全元数据；网络失败不阻塞列表，降级为本地信息 + network_error。
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
@@ -120,6 +121,33 @@ pub async fn identify_one_file(dir: &Path, file_name: &str) -> Option<ModFileDet
     })
 }
 
+type IdentifyResult = Result<Option<(String, String)>, ()>;
+
+/// 并发识别但保持输入顺序：索引回填的 `buffer_unordered`，既避免队首慢请求阻塞补位，也不让结果与文件名错位。
+async fn identify_all<F, Fut>(inputs: Vec<(String, PathBuf)>, identify: F) -> Vec<IdentifyResult>
+where
+    F: Fn(String, PathBuf) -> Fut,
+    Fut: Future<Output = IdentifyResult>,
+{
+    let mut results: Vec<Option<IdentifyResult>> = vec![None; inputs.len()];
+    let completed: Vec<(usize, IdentifyResult)> =
+        futures_util::stream::iter(inputs.into_iter().enumerate())
+            .map(|(index, (file_name, dir))| {
+                let fut = identify(file_name, dir);
+                async move { (index, fut.await) }
+            })
+            .buffer_unordered(QUERY_CONCURRENCY)
+            .collect()
+            .await;
+    for (index, result) in completed {
+        results[index] = Some(result);
+    }
+    results
+        .into_iter()
+        .map(|result| result.expect("identify_all 必须为每个输入写入结果"))
+        .collect()
+}
+
 /// 扫描 + Modrinth 识别（sha1 → version_file → /v2/projects 批量详情）；mods(jar) 与资源目录(zip) 共用。
 /// 网络失败降级为本地列表并置 network_error。
 pub async fn list_dir_detailed(dir: &Path, filter: ScanFilter) -> ResourceListResult {
@@ -136,13 +164,9 @@ pub async fn list_dir_detailed(dir: &Path, filter: ScanFilter) -> ResourceListRe
         .iter()
         .map(|f| (f.file_name.clone(), dir.clone()))
         .collect();
-    let identified: Vec<Result<Option<(String, String)>, ()>> = futures_util::stream::iter(
-        inputs
-            .into_iter()
-            .map(|(file_name, dir)| async move { identify_mod(dir, file_name).await }),
-    )
-    .buffer_unordered(QUERY_CONCURRENCY)
-    .collect()
+    let identified = identify_all(inputs, |file_name, dir| async move {
+        identify_mod(dir, file_name).await
+    })
     .await;
 
     // 网络/服务错误 → 置降级标记；404 未命中是合法降级
@@ -236,4 +260,79 @@ async fn fetch_project_meta(
         }
     }
     Some(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// 网络完成顺序与输入顺序相反时，结果仍必须按文件名顺序返回（否则元数据会串行）。
+    #[tokio::test]
+    async fn identify_all_preserves_input_order() {
+        let inputs = vec![
+            ("a.jar".to_string(), PathBuf::from("a")),
+            ("b.jar".to_string(), PathBuf::from("b")),
+            ("c.jar".to_string(), PathBuf::from("c")),
+        ];
+        let results = identify_all(inputs, |name, dir| async move {
+            let delay = match name.as_str() {
+                "a.jar" => 30,
+                "b.jar" => 15,
+                _ => 1,
+            };
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            Ok(Some((name, dir.display().to_string())))
+        })
+        .await;
+        let order: Vec<String> = results
+            .into_iter()
+            .map(|result| result.unwrap().unwrap().0)
+            .collect();
+        assert_eq!(order, vec!["a.jar", "b.jar", "c.jar"]);
+    }
+
+    /// 队首慢请求不能阻塞后续补位：这是 `buffered` 与“索引回填的 buffer_unordered”的关键差异。
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn identify_all_refills_slot_before_slow_item_finishes() {
+        use std::sync::Arc;
+        use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
+
+        let (release_tx, release_rx) = oneshot::channel();
+        let release_rx = Arc::new(AsyncMutex::new(Some(release_rx)));
+        let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+        let inputs: Vec<(String, PathBuf)> = (0..9)
+            .map(|index| (index.to_string(), PathBuf::from(index.to_string())))
+            .collect();
+        let mut task = Box::pin(identify_all(inputs, move |name, _dir| {
+            let release_rx = Arc::clone(&release_rx);
+            let started_tx = started_tx.clone();
+            async move {
+                let index: usize = name.parse().expect("测试索引");
+                if index == 0 {
+                    if let Some(rx) = release_rx.lock().await.take() {
+                        let _ = rx.await;
+                    }
+                } else if index == 8 {
+                    let _ = started_tx.send(());
+                }
+                Ok(Some((name, String::new())))
+            }
+        }));
+
+        let refilled = tokio::select! {
+            _ = &mut task => false,
+            _ = tokio::time::sleep(Duration::from_millis(300)) => false,
+            _ = started_rx.recv() => true,
+        };
+        let _ = release_tx.send(());
+        let results = task.await;
+
+        assert!(refilled, "第 9 个识别应在慢任务完成前补位");
+        let order: Vec<usize> = results
+            .into_iter()
+            .map(|result| result.unwrap().unwrap().0.parse().unwrap())
+            .collect();
+        assert_eq!(order, (0..9).collect::<Vec<_>>());
+    }
 }

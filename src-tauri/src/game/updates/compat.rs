@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use super::identify::{file_sha1, QUERY_CONCURRENCY};
 use super::scan::LocalModFile;
+use super::update::modrinth_loader_filter;
 use crate::downloader::fetcher;
 use crate::game::community::{api_routes, api_urls, get_json_multi, ApiPlatform};
 
@@ -479,10 +480,7 @@ async fn modrinth_compatible_version(
     target_loader: &str,
 ) -> Result<Option<String>, ()> {
     let mut params = vec![("game_versions", serde_json::json!([target_mc]).to_string())];
-    params.push(("loaders", target_loader.to_string()));
-    if target_loader == "quilt" {
-        params.push(("loaders", "fabric".to_string()));
-    }
+    params.push(("loaders", modrinth_loader_filter(target_loader)));
     let urls = api_urls(
         ApiPlatform::Modrinth,
         &format!("/v2/project/{project_id}/version"),

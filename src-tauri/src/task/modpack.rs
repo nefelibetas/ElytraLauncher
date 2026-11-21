@@ -11,6 +11,7 @@ use parking_lot::Mutex;
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::fetcher;
 use crate::downloader::hash;
+use crate::downloader::path_lock::PathLock;
 use crate::downloader::progress::ProgressCounters;
 use crate::downloader::reuse::LocalRuntimeSource;
 use crate::game::loader::{self, LoaderEvent};
@@ -197,10 +198,8 @@ fn fail_or_cancel(
         // 先登记清理路径再 set_error（收口时取走并后台整删；同步 remove_dir_all 会阻塞任务线程数十秒）
         if let Some((vdir, existed_before)) = vdir_for_cleanup {
             if !existed_before {
-                let cleanup_id = progress.try_lock().map(|p| p.task_id.clone());
-                if let Some(id) = cleanup_id {
-                    global().set_cleanup_path(&id, vdir.to_path_buf());
-                }
+                let cleanup_id = progress.lock().task_id.clone();
+                global().set_cleanup_path(&cleanup_id, vdir.to_path_buf());
             }
         }
         set_error(app, progress, msg);
@@ -272,7 +271,15 @@ pub async fn run_install(
     };
     let PackPrep { c, emit, idx } = prepare_pack_install(&sink, progress, request, &plan, a_done);
 
-    let (vdir, vdir_existed_before) = prepare_version_dir(progress, &config, request, &plan);
+    let (vdir, vdir_existed_before, _lock) =
+        match prepare_version_dir(progress, &config, request, &plan) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                emit.abort();
+                set_error(app, progress, error);
+                return false;
+            }
+        };
     let lib_dir = config.minecraft_dir_abs().join("libraries");
     let reuse_root = LocalRuntimeSource::discover(&vdir);
 
@@ -291,6 +298,7 @@ pub async fn run_install(
         idx,
         vdir,
         vdir_existed_before,
+        _lock,
         lib_dir,
         reuse_root,
         parent_text: String::new(),
@@ -521,11 +529,19 @@ fn prepare_version_dir(
     config: &DownloaderConfig,
     request: &ModpackRequest,
     plan: &PackPlan,
-) -> (PathBuf, bool) {
+) -> Result<(PathBuf, bool, PathLock), String> {
     let vdir = config
         .minecraft_dir_abs()
         .join("versions")
         .join(&plan.version_dir_name);
+    // 与 runner/repair 共用同一版本目录互斥；失败后不再创建/标记目录。
+    let lock = PathLock::try_acquire(&vdir).ok_or_else(|| {
+        keyed_msg!(
+            "errors.task.busy",
+            "该版本正在被其他任务下载\n{}",
+            vdir.display()
+        )
+    })?;
     let vdir_existed_before = vdir.exists();
     std::fs::create_dir_all(&vdir).ok();
     if let Err(e) = std::fs::write(
@@ -543,7 +559,7 @@ fn prepare_version_dir(
         let tid = progress.lock().task_id.clone();
         global().set_cleanup_path(&tid, vdir.clone());
     }
-    (vdir, vdir_existed_before)
+    Ok((vdir, vdir_existed_before, lock))
 }
 
 struct PackInstall<'a> {
@@ -559,6 +575,7 @@ struct PackInstall<'a> {
     idx: StepIndex,
     vdir: PathBuf,
     vdir_existed_before: bool,
+    _lock: PathLock,
     lib_dir: PathBuf,
     reuse_root: Option<LocalRuntimeSource>,
     /// B1 版本清单原文（loader 安装需透传给 installer）
@@ -1110,20 +1127,19 @@ impl<'a> PackInstall<'a> {
         );
         let overrides = self.plan.overrides.clone();
         let vd = self.vdir.clone();
-        race_cancel(self.cancel, async move {
-            tokio::task::spawn_blocking(move || {
-                for ov in &overrides {
-                    extract_overrides(ov, &vd)?;
-                }
-                Ok::<(), String>(())
-            })
-            .await
-            .map_err(common_err_ctx_key!(
-                "errors.file.extract",
-                "解压工作线程异常"
-            ))?
+        let cancel_flag = Arc::clone(self.cancel);
+        // 必须等阻塞任务真正结束再返回：取消后 set_cancelled 会后台整删 vdir，不能与仍在写文件赛跑。
+        tokio::task::spawn_blocking(move || {
+            for ov in &overrides {
+                extract_overrides(ov, &vd, &cancel_flag)?;
+            }
+            Ok::<(), String>(())
         })
-        .await?;
+        .await
+        .map_err(common_err_ctx_key!(
+            "errors.file.extract",
+            "解压工作线程异常"
+        ))??;
         finish_step(self.app, self.progress, idx, &self.c);
         Ok(())
     }
@@ -1273,10 +1289,16 @@ fn extract_member(
 }
 
 /// 解压单个覆盖目录到版本目录根（词法穿越防护对齐 jdk safe_runtime_path）。
-fn extract_overrides(ov: &OverridesRef, vdir: &Path) -> Result<(), String> {
+fn extract_overrides(ov: &OverridesRef, vdir: &Path, cancel: &AtomicBool) -> Result<(), String> {
+    if cancel.load(Ordering::Relaxed) {
+        bail_key!("errors.task.cancelled", "任务已取消");
+    }
     // 文案与解析期一致：本地包的 zip_path 就是用户原文件，非"缓存"
     let mut archive = archive::open_zip(Path::new(&ov.zip_path), "整合包")?;
     for i in 0..archive.len() {
+        if cancel.load(Ordering::Relaxed) {
+            bail_key!("errors.task.cancelled", "任务已取消");
+        }
         let mut entry = archive
             .by_index(i)
             .map_err(common_err_ctx_key!("errors.file.read", "读取条目失败"))?;
@@ -1375,7 +1397,7 @@ mod tests {
             prefix: "overrides/".into(),
             skip: Vec::new(),
         };
-        let err = extract_overrides(&ov, vdir.path()).unwrap_err();
+        let err = extract_overrides(&ov, vdir.path(), &AtomicBool::new(false)).unwrap_err();
         assert!(err.contains(".."), "穿越条目应报错: {err}");
         // 前序合法条目已落盘；恶意条目未逃逸出版本目录
         assert!(vdir.path().join("mods").join("ok.jar").is_file());
@@ -1406,7 +1428,7 @@ mod tests {
                 prefix: prefix.into(),
                 skip: Vec::new(),
             };
-            extract_overrides(&ov, vdir.path()).unwrap();
+            extract_overrides(&ov, vdir.path(), &AtomicBool::new(false)).unwrap();
         }
         assert_eq!(
             std::fs::read_to_string(vdir.path().join("config/a.cfg")).unwrap(),
@@ -1438,11 +1460,35 @@ mod tests {
             prefix: "overrides/".into(),
             skip: vec!["libraries/".into()],
         };
-        extract_overrides(&ov, vdir.path()).unwrap();
+        extract_overrides(&ov, vdir.path(), &AtomicBool::new(false)).unwrap();
         assert!(vdir.path().join("mods").join("a.jar").is_file());
         assert!(
             !vdir.path().join("libraries").join("x.jar").exists(),
             "skip 命中目录不应落盘"
+        );
+    }
+
+    #[test]
+    fn extract_overrides_stops_when_cancelled() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = dir.path().join("pack.zip");
+        let file = std::fs::File::create(&zip_path).unwrap();
+        let mut w = zip::ZipWriter::new(file);
+        w.start_file("overrides/mods/a.jar", opts()).unwrap();
+        w.write_all(b"jar").unwrap();
+        w.finish().unwrap();
+
+        let vdir = tempfile::tempdir().unwrap();
+        let ov = OverridesRef {
+            zip_path: zip_path.display().to_string(),
+            prefix: "overrides/".into(),
+            skip: Vec::new(),
+        };
+        let err = extract_overrides(&ov, vdir.path(), &AtomicBool::new(true)).unwrap_err();
+        assert!(err.contains("取消"), "取消应中止解压: {err}");
+        assert!(
+            !vdir.path().join("mods").join("a.jar").exists(),
+            "取消后不应继续写入"
         );
     }
 
@@ -1472,6 +1518,54 @@ mod tests {
         assert!(idx.i_cfg.is_some());
         assert!(idx.i_lbs.is_some());
         assert_eq!(steps[idx.i_cfg.unwrap()].name, "OptiFine 配置");
+    }
+
+    #[test]
+    fn prepare_version_dir_acquires_lock() {
+        use crate::task::TaskText;
+
+        let mc = tempfile::tempdir().unwrap();
+        let config = DownloaderConfig {
+            minecraft_dir: mc.path().display().to_string(),
+            ..Default::default()
+        };
+        let request = ModpackRequest {
+            name: "P".into(),
+            icon_url: None,
+            source: PackSource::Local { path: "p".into() },
+        };
+        let plan = PackPlan {
+            name: "P".into(),
+            mc_version: "1.20.1".into(),
+            loader: None,
+            optifine: None,
+            version_url: "v".into(),
+            version_dir_name: "P-1.20.1".into(),
+            cache_key: "c".into(),
+            files: Vec::new(),
+            restricted: Vec::new(),
+            overrides: Vec::new(),
+            kind: None,
+            meta: None,
+        };
+        let vdir = mc.path().join("versions").join("P-1.20.1");
+        let (task_id, _cancel, progress) = global().create("lock-test", &TaskText::default(), &[]);
+
+        let held = PathLock::try_acquire(&vdir).expect("先占住目标目录");
+        let err = match prepare_version_dir(&progress, &config, &request, &plan) {
+            Ok(_) => panic!("目录已被占用时必须失败"),
+            Err(error) => error,
+        };
+        assert!(err.contains("正在被其他任务下载"), "{err}");
+        drop(held);
+
+        let (prepared, existed, lock) =
+            prepare_version_dir(&progress, &config, &request, &plan).expect("释放后应成功");
+        assert_eq!(prepared, vdir);
+        assert!(!existed);
+        assert!(vdir.join("elytra-pack.json").is_file());
+        drop(lock);
+        global().remove(&task_id);
     }
 
     #[test]

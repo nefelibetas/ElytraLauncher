@@ -53,6 +53,11 @@ const { t } = useI18n();
 const canNext = computed(
   () => props.search.hasMore ?? (props.search.page < props.totalPages),
 );
+
+/** 当前入口应展示的加载器徽章；与详情页共用同一过滤口径。 */
+function shownLoaders(item: CommunityDisplayItem): string[] {
+  return props.kind ? displayLoadersForKind(props.kind, item.loaders) : item.loaders;
+}
 </script>
 
 <template>
@@ -95,9 +100,16 @@ const canNext = computed(
                 <span class="cs-sub">{{ t("download.search.downloads", { count: fmtCount(m.downloads) }) }}</span>
               </span>
               <span class="cs-desc">{{ communityTranslationEnabled ? (m.translated ?? m.description) : m.description }}</span>
-              <span v-if="(kind ? displayLoadersForKind(kind, m.loaders).length : m.loaders.length) || m.game_version_range" class="cs-support">
-                <span v-for="ld in (kind ? displayLoadersForKind(kind, m.loaders) : m.loaders)" :key="ld" class="cs-ld" :class="ld">{{ ld }}</span>
-                <span v-if="m.game_version_range" class="cs-gv">{{ m.game_version_range }}</span>
+              <span
+                v-if="shownLoaders(m).length > 0 || m.game_version_range"
+                class="cs-support"
+              >
+                <span v-if="shownLoaders(m).length > 0" class="cs-support-loaders">
+                  <span v-for="ld in shownLoaders(m)" :key="ld" class="cs-ld" :class="ld">{{ ld }}</span>
+                </span>
+                <span v-if="m.game_version_range" class="cs-support-gv">
+                  <span class="cs-gv">{{ m.game_version_range }}</span>
+                </span>
               </span>
             </span>
           </div>
@@ -212,7 +224,14 @@ const canNext = computed(
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
-.cs-support { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.cs-support { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cs-support-loaders {
+  display: flex; align-items: center; gap: 5px; min-width: 0; flex-wrap: wrap;
+}
+.cs-support-gv {
+  display: flex; align-items: center; min-width: 0; flex: 0 0 auto;
+  margin-left: auto; justify-content: flex-end; max-width: 50%;
+}
 .cs-ld {
   flex-shrink: 0; font-size: var(--fs-2xs); font-weight: 600; padding: 0 5px;
   border-radius: var(--radius-sm); background: var(--color-brand-bg); color: var(--color-brand);
@@ -232,8 +251,10 @@ const canNext = computed(
   .cs-ld.optifine { background: color-mix(in srgb, var(--ld-optifine) 12%, transparent); }
 }
 .cs-gv {
-  font-size: var(--fs-2xs); color: var(--text-tertiary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: var(--fs-2xs); font-weight: 600; color: var(--text-secondary);
+  background: var(--surface-hover); border-radius: var(--radius-sm); padding: 0 5px;
+  line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* 分页器居中、计数固定最右；min-height 不能省：仅计数时 footer 会塌陷，绝对定位的计数紧贴末条目。 */

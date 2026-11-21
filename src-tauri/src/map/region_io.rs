@@ -444,9 +444,14 @@ pub fn list_region_files(dimension_dir: &Path) -> Vec<MapRegionInfo> {
         let Some((x, z)) = parse_region_name(&name) else {
             continue;
         };
-        let mtime = entry
-            .metadata()
-            .and_then(|m| m.modified())
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if !meta.is_file() || !region_file_usable(meta.len()) {
+            continue;
+        }
+        let mtime = meta
+            .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
@@ -551,18 +556,23 @@ fn parse_one(
 ) -> Option<ParsedChunk> {
     #[cfg(test)]
     PARSE_ONE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let raw = reader.chunk(x, z).ok()??;
-    // fastanvil 0.32 的 Block 反序列化只认 `{Name, ...}`，26.x 的字符串 palette
-    // 一定解析失败，故先按本模块模型解析；失败再回退旧格式三级回退。
-    // 两者皆失败（未生成/损坏 chunk）返回 None，不影响 region 内其余 chunk。
-    let chunk = match fastnbt::from_bytes::<ModernChunk>(raw) {
-        Ok(c) => ChunkData::Modern(c),
-        Err(_) => ChunkData::Legacy(Box::new(JavaChunk::from_bytes(raw).ok()?)),
-    };
-    Some(ParsedChunk {
-        chunk,
-        raw_nbt: keep_raw.then(|| raw.to_vec()),
-    })
+    // mca 的自定义压缩头未校验长度；损坏 chunk 可能 panic，按单个坏 chunk 跳过而非拖垮整张瓦片。
+    // 解析也在 guard 内完成：RegionReader::chunk 返回借用，不能跨 catch_unwind 逃逸。
+    let parsed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = reader.chunk(x, z).ok()??;
+        // fastanvil 0.32 的 Block 反序列化只认 `{Name, ...}`，26.x 的字符串 palette
+        // 一定解析失败，故先按本模块模型解析；失败再回退旧格式三级回退。
+        // 两者皆失败（未生成/损坏 chunk）返回 None，不影响 region 内其余 chunk。
+        let chunk = match fastnbt::from_bytes::<ModernChunk>(raw) {
+            Ok(c) => ChunkData::Modern(c),
+            Err(_) => ChunkData::Legacy(Box::new(JavaChunk::from_bytes(raw).ok()?)),
+        };
+        Some(ParsedChunk {
+            chunk,
+            raw_nbt: keep_raw.then(|| raw.to_vec()),
+        })
+    }));
+    parsed.ok().flatten()
 }
 
 /// 世界方块坐标 → 所属 region 文件路径（不含验证；跨 dimension_dir 布局）。
@@ -723,6 +733,13 @@ impl CacheKey for RegionKey {
     }
 }
 
+/// 单个 region 文件上限：正常 region 至多数 MB；超大文件拒绝读入，避免一次性分配导致 OOM。
+const MAX_REGION_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+fn region_file_usable(len: u64) -> bool {
+    len <= MAX_REGION_FILE_BYTES
+}
+
 /// 64MB ≈ 1–6 个典型 region（10–50MB）；按字节而非条目数。
 const MAX_CACHED_REGION_BYTES: usize = 64 * 1024 * 1024;
 static REGION_CACHE: LazyLock<Mutex<LruCache<RegionKey, Arc<Vec<u8>>>>> =
@@ -739,6 +756,9 @@ fn region_cache() -> &'static Mutex<LruCache<RegionKey, Arc<Vec<u8>>>> {
 /// 返回 Arc 以便调用方在锁外安全使用，淘汰不影响已持有的 Arc。
 fn cached_region_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     let meta = fs::metadata(path).ok()?;
+    if !region_file_usable(meta.len()) {
+        return None;
+    }
     let mtime = meta
         .modified()
         .ok()
@@ -839,6 +859,12 @@ mod tests {
         assert_eq!(got[0].x, 0, "按 (x,z) 排序");
         assert!(got[0].mtime > 0, "region mtime 应为有效 unix 秒");
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn region_file_size_cap_rejects_oversized() {
+        assert!(region_file_usable(MAX_REGION_FILE_BYTES));
+        assert!(!region_file_usable(MAX_REGION_FILE_BYTES + 1));
     }
 
     #[test]

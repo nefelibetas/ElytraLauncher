@@ -61,9 +61,14 @@ pub fn enqueue(
         if !(url.starts_with("http://") || url.starts_with("https://")) {
             bail_key!("errors.tooldl.badUrl", "仅支持 http/https 链接\n{url}");
         }
-        let task = Arc::new(build_task(url, &dir, segments));
+        let task = {
+            let mut tasks = TASKS.lock();
+            // 建任务与占用目标路径必须在同一把锁内；否则两个同名 URL 会拿到同一个 dest。
+            let task = Arc::new(build_task(url, &dir, segments, &tasks));
+            tasks.push(Arc::clone(&task));
+            task
+        };
         created.push(task.id.clone());
-        TASKS.lock().push(Arc::clone(&task));
         let waiter_sink = Arc::clone(&sink);
         spawn_waiter(waiter_sink, Arc::clone(&task));
         // 入队即推一帧 Queued：调用方（工具箱/更新对话框）无需猜测任务是否已创建
@@ -217,9 +222,9 @@ fn finish_queued(task: &Arc<ToolDlTask>, sink: &Arc<dyn EventSink>) {
     runner::emit_snapshot(sink, task);
 }
 
-fn build_task(url: String, dir: &Path, segments: u32) -> ToolDlTask {
+fn build_task(url: String, dir: &Path, segments: u32, tasks: &[Arc<ToolDlTask>]) -> ToolDlTask {
     let file_name = file_name_from_url(&url);
-    let dest = unique_dest(dir, &file_name);
+    let dest = unique_dest(dir, &file_name, tasks);
     ToolDlTask {
         id: next_id(),
         url,
@@ -247,10 +252,26 @@ fn file_name_from_url(url: &str) -> String {
     util::sanitize_fs_name(raw, "download.bin")
 }
 
-/// 目标路径去重：同名文件已存在时追加 `_1`、`_2`…，兜底追加内容哈希。
-fn unique_dest(dir: &Path, file_name: &str) -> PathBuf {
+/// 目标路径去重：已存在、被活跃任务占用、或存在可续传中间产物时追加 `_1`、`_2`…，兜底追加内容哈希。
+fn unique_dest(dir: &Path, file_name: &str, tasks: &[Arc<ToolDlTask>]) -> PathBuf {
+    let taken = |candidate: &Path| {
+        if candidate.exists() {
+            return true;
+        }
+        if tasks.iter().any(|task| {
+            task.dest == candidate
+                && matches!(
+                    task.status(),
+                    ToolDlStatus::Queued | ToolDlStatus::Downloading | ToolDlStatus::Paused
+                )
+        }) {
+            return true;
+        }
+        let (part, meta) = segmented::partial_paths(candidate);
+        part.exists() || meta.exists()
+    };
     let candidate = dir.join(file_name);
-    if !candidate.exists() {
+    if !taken(&candidate) {
         return candidate;
     }
     let path = Path::new(file_name);
@@ -265,7 +286,7 @@ fn unique_dest(dir: &Path, file_name: &str) -> PathBuf {
             None => format!("{stem}_{n}"),
         };
         let candidate = dir.join(&name);
-        if !candidate.exists() {
+        if !taken(&candidate) {
             return candidate;
         }
     }
@@ -283,4 +304,42 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_dest_reserves_active_tasks_and_partials() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = Arc::new(build_task(
+            "https://example.com/file.jar".into(),
+            dir.path(),
+            4,
+            &[],
+        ));
+        assert_eq!(task.dest, dir.path().join("file.jar"));
+
+        // 活跃任务已占用同名目标：即使最终文件尚未落盘，也必须让位。
+        assert_eq!(
+            unique_dest(dir.path(), "file.jar", &[Arc::clone(&task)]),
+            dir.path().join("file_1.jar")
+        );
+
+        // 终态任务且文件不存在：可以复用原名。
+        task.set_status(ToolDlStatus::Done);
+        assert_eq!(
+            unique_dest(dir.path(), "file.jar", &[task]),
+            dir.path().join("file.jar")
+        );
+
+        // 可续传中间产物同样视为占用。
+        let (part, _) = segmented::partial_paths(&dir.path().join("file.jar"));
+        std::fs::write(&part, b"x").unwrap();
+        assert_eq!(
+            unique_dest(dir.path(), "file.jar", &[]),
+            dir.path().join("file_1.jar")
+        );
+    }
 }

@@ -9,11 +9,14 @@ use std::path::Path;
 
 use super::api::CommunityVersion;
 use super::{curseforge, modrinth};
+use crate::downloader::hash::file_sha1_matches_streaming;
 
 /// 节点上限：正常整合包远低于此；仅拦截异常/恶意元数据。
 const MAX_DEPENDENCY_NODES: usize = 512;
 /// 候选上限：控制宽依赖树的计划体积；当前选中版本始终保留。
 const MAX_DEPENDENCY_CANDIDATES: usize = 40;
+/// 冲突项目检查上限：异常元数据不应触发数百次网络请求。
+const MAX_CONFLICT_PROJECTS: usize = 64;
 /// 请求最大并发数量
 const FETCH_CONCURRENCY: usize = 4;
 
@@ -62,6 +65,30 @@ pub struct ModDependencyPlan {
     pub errors: Vec<String>,
     /// 目标 mods 目录当前文件名；前端据此识别主 Mod 的旧版本。
     pub installed_files: Vec<String>,
+}
+
+/// 已安装的冲突 Mod（作者在版本元数据中声明 incompatible，且目标实例 mods/ 中确实存在）。
+#[derive(Debug, Clone, Serialize)]
+pub struct ModConflictItem {
+    pub project_id: String,
+    /// 项目标题；详情查询失败时回退为项目 ID。
+    pub name: String,
+    /// 命中的已安装版本号（多个文件时取最新发布）。
+    pub version_label: String,
+    pub installed_files: Vec<String>,
+}
+
+/// 目标实例的冲突检查结果；`version_applicable=false` 表示选中文件不适用于该实例。
+#[derive(Debug, Clone, Serialize)]
+pub struct ModConflictReport {
+    pub instance_mc: String,
+    pub instance_loader: String,
+    pub version_applicable: bool,
+    pub conflicts: Vec<ModConflictItem>,
+    /// 单个冲突项目查询失败；非空表示结果不完整（不能当作“无冲突”）。
+    pub errors: Vec<String>,
+    /// 非失败提示（如冲突项被截断）；只展示，不触发重试。
+    pub notices: Vec<String>,
 }
 
 struct Pending {
@@ -194,6 +221,221 @@ pub(crate) async fn resolve_mod_dependencies(
             "errors.community.dependencyTooLarge",
             "依赖链过大，已停止解析"
         ))
+    }
+}
+
+/// 检查选中版本在目标实例中已安装的冲突 Mod：作者声明 incompatible 的项目必须同时
+/// 在 mods/ 中存在（按版本文件名匹配），未安装的冲突项不提示。
+pub(crate) async fn resolve_mod_conflicts(
+    source: &str,
+    project_id: &str,
+    version_id: &str,
+    mc_version: &str,
+    loader: &str,
+    mods_dir: &Path,
+) -> Result<ModConflictReport, String> {
+    let installed = InstalledFiles::from_mods_dir(mods_dir);
+    // 没有启用的 Mod 时不可能存在冲突；先返回，省掉主项目/冲突项目两组 API 请求。
+    if !installed
+        .exact
+        .iter()
+        .any(|name| !name.to_ascii_lowercase().ends_with(".disabled"))
+    {
+        return Ok(ModConflictReport {
+            instance_mc: mc_version.to_string(),
+            instance_loader: loader.to_string(),
+            version_applicable: true,
+            conflicts: Vec::new(),
+            errors: Vec::new(),
+            notices: Vec::new(),
+        });
+    }
+    let root_versions = fetch_versions(source, project_id, mc_version, loader).await?;
+    let Some(root) = root_versions
+        .iter()
+        .find(|version| version.version_id == version_id)
+    else {
+        return Ok(ModConflictReport {
+            instance_mc: mc_version.to_string(),
+            instance_loader: loader.to_string(),
+            version_applicable: false,
+            conflicts: Vec::new(),
+            errors: Vec::new(),
+            notices: Vec::new(),
+        });
+    };
+
+    let mut seen = HashSet::new();
+    let mut conflict_ids: Vec<String> = root
+        .dependencies
+        .iter()
+        .filter(|dependency| {
+            dependency.relation == "incompatible" && seen.insert(dependency.project_id.clone())
+        })
+        .map(|dependency| dependency.project_id.clone())
+        .collect();
+    let mut errors = Vec::new();
+    let mut notices = Vec::new();
+    if conflict_ids.len() > MAX_CONFLICT_PROJECTS {
+        conflict_ids.truncate(MAX_CONFLICT_PROJECTS);
+        notices.push(keyed_msg!(
+            format!("errors.community.conflictTooMany?count={MAX_CONFLICT_PROJECTS}"),
+            "冲突项过多，仅检查前 {MAX_CONFLICT_PROJECTS} 个"
+        ));
+    }
+    if conflict_ids.is_empty() {
+        return Ok(ModConflictReport {
+            instance_mc: mc_version.to_string(),
+            instance_loader: loader.to_string(),
+            version_applicable: true,
+            conflicts: Vec::new(),
+            errors,
+            notices,
+        });
+    }
+
+    let fetched: Vec<(String, Result<Vec<CommunityVersion>, String>)> = stream::iter(conflict_ids)
+        .map(|id| async move {
+            let versions = fetch_versions(source, &id, mc_version, loader).await;
+            (id, versions)
+        })
+        .buffer_unordered(FETCH_CONCURRENCY)
+        .collect()
+        .await;
+
+    let mut conflicts = Vec::new();
+    for (id, versions) in fetched {
+        let versions = match versions {
+            Ok(versions) => versions,
+            Err(error) => {
+                errors.push(keyed_msg!(
+                    "errors.community.conflictCheckFailed",
+                    "冲突检查失败\n{id}: {error}"
+                ));
+                continue;
+            }
+        };
+        let Some((version_label, installed_files)) = installed_conflict(&versions, &installed)
+            .or_else(|| installed_conflict_by_hash(&versions, mods_dir))
+        else {
+            continue;
+        };
+        conflicts.push(ModConflictItem {
+            project_id: id.clone(),
+            name: id,
+            version_label,
+            installed_files,
+        });
+    }
+    if !conflicts.is_empty() {
+        fill_conflict_names(source, &mut conflicts).await;
+    }
+    Ok(ModConflictReport {
+        instance_mc: mc_version.to_string(),
+        instance_loader: loader.to_string(),
+        version_applicable: true,
+        conflicts,
+        errors,
+        notices,
+    })
+}
+
+/// 冲突项目在磁盘上命中的文件与版本号；`.jar.disabled` 不计入（未启用不构成冲突）。
+fn installed_conflict(
+    versions: &[CommunityVersion],
+    installed: &InstalledFiles,
+) -> Option<(String, Vec<String>)> {
+    let mut matched: Vec<(&CommunityVersion, String)> = versions
+        .iter()
+        .filter_map(|version| {
+            installed
+                .actual_name(&version.filename)
+                .filter(|name| !name.to_ascii_lowercase().ends_with(".disabled"))
+                .map(|name| (version, name.to_string()))
+        })
+        .collect();
+    let (version, _) = matched
+        .iter()
+        .max_by(|a, b| a.0.date_published.cmp(&b.0.date_published))?;
+    let version_label = version.version_number.clone();
+    let mut installed_files: Vec<String> = matched.drain(..).map(|(_, name)| name).collect();
+    installed_files.sort();
+    installed_files.dedup();
+    Some((version_label, installed_files))
+}
+
+/// 文件名不一致（跨源/被重命名）时按 sha1 兜底；只对大小命中声明构件的文件做流式校验。
+fn installed_conflict_by_hash(
+    versions: &[CommunityVersion],
+    mods_dir: &Path,
+) -> Option<(String, Vec<String>)> {
+    let mut by_size: HashMap<u64, Vec<&CommunityVersion>> = HashMap::new();
+    for version in versions {
+        if version.sha1.as_deref().is_some_and(|sha| !sha.is_empty()) {
+            by_size.entry(version.file_size).or_default().push(version);
+        }
+    }
+    if by_size.is_empty() {
+        return None;
+    }
+    let entries = std::fs::read_dir(mods_dir).ok()?;
+    let mut matched: Vec<(&CommunityVersion, String)> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.to_ascii_lowercase().ends_with(".disabled") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let Some(candidates) = by_size.get(&meta.len()) else {
+            continue;
+        };
+        let path = entry.path();
+        if let Some(version) = candidates.iter().find(|version| {
+            version
+                .sha1
+                .as_deref()
+                .is_some_and(|sha| file_sha1_matches_streaming(&path, sha))
+        }) {
+            matched.push((version, name));
+        }
+    }
+    let (version, _) = matched
+        .iter()
+        .max_by(|a, b| a.0.date_published.cmp(&b.0.date_published))?;
+    let version_label = version.version_number.clone();
+    let mut installed_files: Vec<String> = matched.drain(..).map(|(_, name)| name).collect();
+    installed_files.sort();
+    installed_files.dedup();
+    Some((version_label, installed_files))
+}
+
+/// 冲突项标题（详情查询失败保留项目 ID，不阻塞提示）。
+async fn fill_conflict_names(source: &str, conflicts: &mut [ModConflictItem]) {
+    let ids: Vec<String> = conflicts
+        .iter()
+        .map(|conflict| conflict.project_id.clone())
+        .collect();
+    let details = match source {
+        "modrinth" => modrinth::modrinth_details(&ids, false).await,
+        "curseforge" => curseforge::curseforge_details(&ids, false).await,
+        _ => return,
+    };
+    let Ok(details) = details else {
+        return;
+    };
+    let names: HashMap<String, String> = details
+        .into_iter()
+        .map(|item| (item.id, item.title))
+        .collect();
+    for conflict in conflicts {
+        if let Some(name) = names.get(&conflict.project_id) {
+            conflict.name = name.clone();
+        }
     }
 }
 
@@ -512,36 +754,62 @@ async fn fetch_versions(
     mc_version: &str,
     loader: &str,
 ) -> Result<Vec<CommunityVersion>, String> {
-    let versions = match source {
-        "modrinth" => {
-            modrinth::modrinth_versions(project_id, Some(mc_version), Some(loader), false).await
+    let mut versions = fetch_platform_versions(source, project_id, mc_version, loader).await?;
+    // Quilt 可直接加载 Fabric 模组，但平台按 loader 精确过滤；补一份 Fabric 版本（按 id 去重）。
+    if loader.eq_ignore_ascii_case("quilt") {
+        if let Ok(fabric) = fetch_platform_versions(source, project_id, mc_version, "fabric").await
+        {
+            let known: HashSet<String> = versions
+                .iter()
+                .map(|version| version.version_id.clone())
+                .collect();
+            versions.extend(
+                fabric
+                    .into_iter()
+                    .filter(|version| !known.contains(version.version_id.as_str())),
+            );
         }
-        "curseforge" => {
-            curseforge::curseforge_versions(project_id, Some(mc_version), Some(loader), false).await
-        }
-        other => {
-            return Err(keyed_msg!(
-                "errors.community.unsupportedSource",
-                "不支持的资源来源\n{other}"
-            ))
-        }
-    }?;
+    }
     Ok(versions
         .into_iter()
         .filter(|version| version_supports(version, mc_version, loader))
         .collect())
 }
 
-/// 平台过滤之外再校验一次，确保候选只属于实例的 MC/loader 组合。
+async fn fetch_platform_versions(
+    source: &str,
+    project_id: &str,
+    mc_version: &str,
+    loader: &str,
+) -> Result<Vec<CommunityVersion>, String> {
+    match source {
+        "modrinth" => {
+            modrinth::modrinth_versions(project_id, Some(mc_version), Some(loader), false).await
+        }
+        "curseforge" => {
+            curseforge::curseforge_versions(project_id, Some(mc_version), Some(loader), false).await
+        }
+        other => Err(keyed_msg!(
+            "errors.community.unsupportedSource",
+            "不支持的资源来源\n{other}"
+        )),
+    }
+}
+
+/// 平台过滤之外再校验一次，确保候选只属于实例的 MC/loader 组合；Quilt 接受 Fabric 条目。
 fn version_supports(version: &CommunityVersion, mc_version: &str, loader: &str) -> bool {
     version
         .game_versions
         .iter()
         .any(|value| value == mc_version)
-        && version
-            .loaders
-            .iter()
-            .any(|value| value.eq_ignore_ascii_case(loader))
+        && version_supports_loader(version, loader)
+}
+
+fn version_supports_loader(version: &CommunityVersion, loader: &str) -> bool {
+    let quilt = loader.eq_ignore_ascii_case("quilt");
+    version.loaders.iter().any(|value| {
+        value.eq_ignore_ascii_case(loader) || (quilt && value.eq_ignore_ascii_case("fabric"))
+    })
 }
 
 /// 版本覆盖优先，其次精确 `version_hint`；否则 release 优先，最后取第一个。
@@ -664,6 +932,10 @@ impl InstalledFiles {
             return Self { exact, normalized };
         };
         for entry in entries.flatten() {
+            // mods/ 可能混有配置目录/临时目录；只把文件当作已安装 Mod。
+            if !entry.metadata().is_ok_and(|meta| meta.is_file()) {
+                continue;
+            }
             let Some(name) = entry.file_name().to_str().map(str::to_string) else {
                 continue;
             };
@@ -1041,8 +1313,76 @@ mod tests {
         assert!(version_supports(&item, "1.20.1", "fabric"));
         assert!(!version_supports(&item, "1.21.1", "fabric"));
         assert!(!version_supports(&item, "1.20.1", "forge"));
+        assert!(
+            version_supports(&item, "1.20.1", "quilt"),
+            "Quilt 可直接使用 Fabric 版本"
+        );
         item.loaders.push("Quilt".into());
         assert!(version_supports(&item, "1.20.1", "quilt"));
+    }
+
+    #[tokio::test]
+    async fn empty_mods_dir_skips_conflict_fetch() {
+        let dir = tempfile::tempdir().unwrap();
+        // source 非法：若未走空 mods 快速返回，这里会因 API 源错误而失败。
+        let report = resolve_mod_conflicts(
+            "unsupported-source",
+            "project",
+            "version",
+            "1.20.1",
+            "fabric",
+            dir.path(),
+        )
+        .await
+        .expect("空 mods 目录应直接返回");
+        assert!(report.version_applicable);
+        assert!(report.conflicts.is_empty());
+        assert!(report.errors.is_empty());
+    }
+
+    #[test]
+    fn installed_conflict_ignores_missing_and_disabled_files() {
+        let mut active = version("active", "release", Vec::new());
+        active.version_number = "1.0".into();
+        active.date_published = "2026-01-01".into();
+        active.filename = "sodium-dynamic-lights-1.0.jar".into();
+        let mut disabled = version("disabled", "release", Vec::new());
+        disabled.filename = "ryoamiclights-2.0.jar".into();
+        let installed = InstalledFiles::for_test(&[
+            "sodium-dynamic-lights-1.0.jar",
+            "ryoamiclights-2.0.jar.disabled",
+        ]);
+
+        let (label, files) = installed_conflict(&[active, disabled], &installed).unwrap();
+        assert_eq!(label, "1.0");
+        assert_eq!(files, vec!["sodium-dynamic-lights-1.0.jar"]);
+
+        let versions = vec![version("missing", "release", Vec::new())];
+        assert!(
+            installed_conflict(&versions, &InstalledFiles::for_test(&[])).is_none(),
+            "未安装的冲突项目不应产生提示"
+        );
+    }
+
+    #[test]
+    fn installed_conflict_matches_renamed_file_by_sha1() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("renamed.jar"), b"abc").unwrap();
+        std::fs::write(dir.path().join("renamed.jar.disabled"), b"abc").unwrap();
+        let mut item = version("hash", "release", Vec::new());
+        item.version_number = "1.0".into();
+        item.date_published = "2026-01-01".into();
+        item.filename = "original-name.jar".into();
+        item.file_size = 3;
+        item.sha1 = Some("a9993e364706816aba3e25717850c26c9cd0d89d".into());
+
+        let (label, files) = installed_conflict_by_hash(&[item], dir.path()).unwrap();
+        assert_eq!(label, "1.0");
+        assert_eq!(
+            files,
+            vec!["renamed.jar"],
+            "文件名不同时应按 sha1 命中，且忽略 .disabled"
+        );
     }
 
     #[test]
@@ -1118,7 +1458,7 @@ mod real_tests {
     use std::collections::HashMap;
 
     use super::super::modrinth::modrinth_versions;
-    use super::resolve_mod_dependencies;
+    use super::{resolve_mod_conflicts, resolve_mod_dependencies};
 
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "需要真实 Modrinth API"]
@@ -1146,5 +1486,92 @@ mod real_tests {
         assert!(plan.errors.is_empty(), "{}", plan.errors.join("; "));
         assert!(!plan.items.is_empty(), "Iris 应有前置 Mod");
         println!("items: {:#?}", plan.items);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "需要真实 Modrinth API"]
+    async fn conflicts_only_when_installed_and_applicable() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = resolve_mod_conflicts(
+            "modrinth",
+            "yBW8D80W",
+            "ksaGCvSu",
+            "1.21.1",
+            "fabric",
+            dir.path(),
+        )
+        .await
+        .expect("检查冲突");
+        assert!(report.version_applicable);
+        assert!(
+            report.conflicts.is_empty(),
+            "未安装冲突 Mod 时不应提示: {:?}",
+            report.conflicts
+        );
+
+        std::fs::write(
+            dir.path()
+                .join("sodiumdynamiclights-fabric-1.0.10-1.21.1.jar"),
+            b"x",
+        )
+        .unwrap();
+        let report = resolve_mod_conflicts(
+            "modrinth",
+            "yBW8D80W",
+            "ksaGCvSu",
+            "1.21.1",
+            "fabric",
+            dir.path(),
+        )
+        .await
+        .expect("检查冲突");
+        assert_eq!(report.conflicts.len(), 1);
+        assert_eq!(report.conflicts[0].name, "Sodium Dynamic Lights");
+        assert!(
+            report.conflicts[0]
+                .installed_files
+                .contains(&"sodiumdynamiclights-fabric-1.0.10-1.21.1.jar".to_string()),
+            "应报告命中的磁盘文件: {:?}",
+            report.conflicts[0].installed_files
+        );
+
+        let report = resolve_mod_conflicts(
+            "modrinth",
+            "yBW8D80W",
+            "rylKnJ4M",
+            "26.3",
+            "fabric",
+            dir.path(),
+        )
+        .await
+        .expect("检查冲突");
+        assert!(report.version_applicable);
+        assert!(
+            report.conflicts.is_empty(),
+            "冲突 Mod 没有目标 MC 版本时不应提示: {:?}",
+            report.conflicts
+        );
+
+        let plan = resolve_mod_dependencies(
+            "modrinth",
+            "yBW8D80W",
+            "ksaGCvSu",
+            "1.21.1",
+            "quilt",
+            &HashMap::new(),
+            dir.path(),
+        )
+        .await
+        .expect("Quilt 解析前置");
+        let fabric_api = plan
+            .items
+            .iter()
+            .find(|item| item.project_id == "P7dR8mSH")
+            .expect("LambDynamicLights 应有 Fabric API 前置");
+        assert!(
+            fabric_api.error.is_none(),
+            "Quilt 应能使用 Fabric 版前置: {:?}",
+            fabric_api.error
+        );
     }
 }

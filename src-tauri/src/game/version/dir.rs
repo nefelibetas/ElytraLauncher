@@ -57,6 +57,12 @@ pub fn auto_activate_first_version() -> Result<AutoActivate, String> {
 
 /// 版本目录绝对路径（versions/{name}）。目录不存在时返回错误（读操作不该静默创建）。
 pub fn version_dir_path(version_name: &str) -> Result<PathBuf, String> {
+    if !is_simple_name(version_name) {
+        bail_key!(
+            "errors.version.badName",
+            "版本名非法\n仅允许不含路径分隔符与 `..` 的名称"
+        );
+    }
     let dir = active_minecraft_dir().join("versions").join(version_name);
     if !dir.exists() {
         bail_key!(
@@ -252,6 +258,12 @@ pub fn list_installed() -> Result<Vec<InstalledVersionInfo>, String> {
 /// 确保版本文件夹存在（不存在则创建）并返回绝对路径（快捷方式按钮用）。
 /// 版本隔离：gameDir = versions/{name}，存档/mod 位于版本目录下。
 pub fn ensure_kind_folder(kind: &str, version_name: &str) -> Result<String, String> {
+    if !is_simple_name(version_name) {
+        bail_key!(
+            "errors.version.badName",
+            "版本名非法\n仅允许不含路径分隔符与 `..` 的名称"
+        );
+    }
     let base = active_minecraft_dir();
     let sub = match kind {
         "version" => format!("versions/{version_name}"),
@@ -323,7 +335,8 @@ pub fn resolve_version_dir(mc: &Path, version_id: &str) -> (String, PathBuf) {
     if !base.exists() {
         return (version_id.to_string(), base);
     }
-    if !base.join(format!("{version_id}.jar")).exists() {
+    // 目录内 jar 名可能不等于目录名（PCL/HMCL 导入）；任意 client jar 都算已占用。
+    if find_file_in_dir(&base, "jar").is_none() {
         return (version_id.to_string(), base);
     }
     for n in 1.. {
@@ -377,8 +390,33 @@ pub fn find_file_in_dir(dir: &Path, ext: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{list_installed_in, version_server_section};
+    use super::{
+        ensure_kind_folder, list_installed_in, resolve_version_dir, version_dir_path,
+        version_server_section,
+    };
     use std::fs;
+
+    #[test]
+    fn version_dir_and_folder_commands_reject_traversal() {
+        // 校验必须先于 active_minecraft_dir()，测试不依赖真实配置目录。
+        assert!(version_dir_path("../evil").is_err());
+        assert!(version_dir_path("a/b").is_err());
+        assert!(ensure_kind_folder("mods", "../evil").is_err());
+        assert!(ensure_kind_folder("mods", "a\\b").is_err());
+    }
+
+    #[test]
+    fn resolve_version_dir_treats_renamed_jar_as_occupied() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("versions").join("1.20.1");
+        fs::create_dir_all(&base).unwrap();
+        // 目录名与 jar 名不一致（PCL/HMCL 导入形态），仍应视为已占用。
+        fs::write(base.join("client.jar"), b"jar").unwrap();
+
+        let (name, path) = resolve_version_dir(dir.path(), "1.20.1");
+        assert_eq!(name, "1.20.1_1");
+        assert_eq!(path, dir.path().join("versions").join("1.20.1_1"));
+    }
 
     #[test]
     fn version_server_section_rejects_unsafe_names() {
