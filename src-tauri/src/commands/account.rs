@@ -216,7 +216,8 @@ pub async fn refresh_ms_account() -> Result<model::MsAccount, String> {
     let refreshed = microsoft::refresh_login(&account)
         .await
         .map_err(|e| e.to_string())?;
-    model::save(&refreshed)?;
+    // 续签不改变当前账号：并发切换时只更新原位置
+    model::update_in_place(&refreshed)?;
     Ok(refreshed)
 }
 

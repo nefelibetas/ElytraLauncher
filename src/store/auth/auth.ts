@@ -79,7 +79,11 @@ let authReadyPromise: Promise<void> | null = null;
 /** 等账号状态就绪（正版 + 第三方列表读完）；读取失败不留缓存，下次调用可重试。 */
 export function ensureAuthReady(): Promise<void> {
   authReadyPromise ??= Promise.all([loadMsAccounts(), loadExternalAccounts()]).then(([ms, ext]) => {
-    if (!ms || !ext) authReadyPromise = null;
+    if (!ms || !ext) {
+      authReadyPromise = null;
+      return;
+    }
+    warmUpMsAccount(); // 后台续签，不阻塞账号就绪
   });
   return authReadyPromise;
 }
@@ -137,6 +141,46 @@ export async function loadMsAccounts(): Promise<boolean> {
     msAccount.value = null;
     return false;
   }
+}
+
+/** 用后端返回的最新凭证原位覆盖列表同 uuid 项（缺失则追加）；不改变当前账号。 */
+function adoptMsAccount(account: MsAccountInfo) {
+  const idx = msAccounts.value.findIndex((a) => a.uuid === account.uuid);
+  msAccounts.value =
+    idx >= 0
+      ? msAccounts.value.map((a) => (a.uuid === account.uuid ? account : a))
+      : [...msAccounts.value, account];
+  // 续签在飞期间可能已切换/删除当前账号：此时只更新列表，不抢当前
+  if (msAccount.value?.uuid === account.uuid) msAccount.value = account;
+}
+
+/** 进行中的凭证续签（按账号 uuid 单飞）：切换/登录后不复用旧账号的在飞请求。 */
+const msEnsure = new Map<string, Promise<MsAccountInfo>>();
+
+/**
+ * 确保当前正版凭证可用：临近过期才触发后端续签（有效期内零网络开销），成功后同步账号列表。
+ * 失败时不在此处提示：启动预热静默吞掉，启动游戏由调用方展示错误。
+ */
+export function ensureMsAccount(): Promise<MsAccountInfo> {
+  const uuid = msAccount.value?.uuid ?? "";
+  const pending = msEnsure.get(uuid);
+  if (pending) return pending;
+  const promise = invoke<MsAccountInfo>("ensure_ms_account").then((account) => {
+    adoptMsAccount(account);
+    return account;
+  });
+  msEnsure.set(uuid, promise);
+  const clear = () => {
+    if (msEnsure.get(uuid) === promise) msEnsure.delete(uuid);
+  };
+  promise.then(clear, clear);
+  return promise;
+}
+
+/** 启动预热：后台续签当前正版账号；失败静默，等真正使用（启动游戏）时再提示。 */
+export function warmUpMsAccount() {
+  if (authMode.value !== "premium" || !msAccount.value) return;
+  void ensureMsAccount().catch(() => {});
 }
 
 /** 切换当前正版账号：后端按 uuid refresh_token 静默刷新后置为当前。 */

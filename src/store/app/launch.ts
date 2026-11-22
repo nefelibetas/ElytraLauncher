@@ -6,7 +6,7 @@ import type { StepStatus } from "../task/download";
 import type { InstalledVersionInfo } from "../config/gameDirs";
 import type { VersionState } from "../../types/game/VersionState";
 import { GAME_EXITED, GAME_WINDOW_VISIBLE } from "../app/events";
-import { authMode, msAccount, username, externalAccount, refreshExternalAccount, startMsLogin, type MsAccountInfo } from "../auth/auth";
+import { authMode, msAccount, username, externalAccount, refreshExternalAccount, startMsLogin, ensureMsAccount } from "../auth/auth";
 import { selectedVersion, setSelected, getSavedDir } from "../app/selectedVersion";
 import { showError, type AlertAction } from "../app/alert";
 import { t } from "../../i18n";
@@ -216,7 +216,7 @@ export async function doLaunch(
       }
     } else if (!isOffline) {
       try {
-        msAccount.value = await invoke<MsAccountInfo>("ensure_ms_account");
+        await ensureMsAccount();
       } catch (e) {
         if (seq !== launchSeq) return;
         msAccount.value = null;

@@ -45,6 +45,21 @@ pub fn save(account: &MsAccount) -> Result<(), String> {
     )
 }
 
+/// 原位更新账号凭证（不改变列表顺序，因此不会改变当前账号）；账号已被移除时忽略。
+/// 供静默续签使用：并发切换/删除账号时不得把旧账号重新置为当前。
+pub fn update_in_place(account: &MsAccount) -> Result<(), String> {
+    let account = account.clone();
+    persist::secrets::update_json_list(
+        constants::SECT_MS_ACCOUNTS,
+        move |list: &mut Vec<MsAccount>| {
+            if let Some(slot) = list.iter_mut().find(|a| a.uuid == account.uuid) {
+                *slot = account.clone();
+            }
+            Ok(())
+        },
+    )
+}
+
 /// 移除指定 uuid 的正版账号（连同其长期 refresh_token）。列表清空时删除存储键。
 pub fn remove(uuid: &str) -> Result<(), String> {
     let uuid = uuid.to_string();
@@ -98,6 +113,26 @@ mod tests {
         assert_eq!(all.last().unwrap().uuid, "uuid-a", "upsert 后应为当前");
         assert_eq!(all.last().unwrap().name, "Alice2");
         assert_eq!(all[0].name, "Bob");
+
+        cleanup();
+    }
+
+    #[test]
+    fn update_in_place_keeps_current_and_ignores_missing() {
+        cleanup();
+        save(&sample("uuid-a", "Alice")).unwrap();
+        save(&sample("uuid-b", "Bob")).unwrap();
+
+        let mut refreshed = sample("uuid-a", "Alice2");
+        refreshed.expires_at = 123_456;
+        update_in_place(&refreshed).unwrap();
+        let all = read_all();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].name, "Alice2", "同 uuid 应原位覆盖");
+        assert_eq!(all[1].uuid, "uuid-b", "原位更新不得改变当前账号");
+
+        update_in_place(&sample("uuid-c", "Carol")).unwrap();
+        assert_eq!(read_all().len(), 2, "不存在的账号不应被插入");
 
         cleanup();
     }

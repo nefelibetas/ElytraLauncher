@@ -54,7 +54,7 @@ pub async fn ensure_valid_account() -> Result<auth::model::MsAccount, String> {
             "errors.login.expired",
             "登录凭证已过期，自动刷新失败（请重新登录）"
         ))?;
-    auth::model::save(&refreshed)?;
+    auth::model::update_in_place(&refreshed)?;
     Ok(refreshed)
 }
 

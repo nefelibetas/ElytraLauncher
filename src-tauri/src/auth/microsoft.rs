@@ -156,7 +156,6 @@ pub fn build_auth_url(state: &str, pkce: &Pkce) -> Result<String, MsError> {
 struct MsTokens {
     access_token: String,
     refresh_token: String,
-    expires_in: u64,
 }
 
 fn extract_tokens(json: &serde_json::Value) -> Result<MsTokens, MsError> {
@@ -175,14 +174,9 @@ fn extract_tokens(json: &serde_json::Value) -> Result<MsTokens, MsError> {
         .get("refresh_token")
         .and_then(|v| v.as_str())
         .ok_or_else(|| MsError::Malformed("missing refresh_token".into()))?;
-    let expires_in = json
-        .get("expires_in")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(3600);
     Ok(MsTokens {
         access_token: access_token.to_string(),
         refresh_token: refresh_token.to_string(),
-        expires_in,
     })
 }
 
@@ -344,11 +338,36 @@ pub(crate) fn extract_api_error(json: &serde_json::Value, status: reqwest::Statu
     }
 }
 
+/// Minecraft access_token 有效期兜底（官方登录响应固定 expires_in=86400）。
+const MC_TOKEN_FALLBACK_SECS: u64 = 86_400;
+
+/// Minecraft 登录响应：短期 access_token + 其自身有效期（秒）。
+#[derive(Debug)]
+struct McLogin {
+    access_token: String,
+    expires_in: u64,
+}
+
+fn parse_mc_login(json: &serde_json::Value) -> Result<McLogin, MsError> {
+    let access_token = json
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| MsError::Malformed("Minecraft login missing access_token".into()))?;
+    let expires_in = json
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(MC_TOKEN_FALLBACK_SECS);
+    Ok(McLogin {
+        access_token: access_token.to_string(),
+        expires_in,
+    })
+}
+
 async fn minecraft_login(
     client: &reqwest::Client,
     uhs: &str,
     xsts_token: &str,
-) -> Result<String, MsError> {
+) -> Result<McLogin, MsError> {
     let json = post_oauth_json(
         client,
         MC_LOGIN_URL,
@@ -358,11 +377,7 @@ async fn minecraft_login(
         |_, _| None,
     )
     .await?;
-    let token = json
-        .get("access_token")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| MsError::Malformed("Minecraft login missing access_token".into()))?;
-    Ok(token.to_string())
+    parse_mc_login(&json)
 }
 
 /// 查 Minecraft profile（uuid + 游戏名）。404 = 未购买。
@@ -401,11 +416,11 @@ async fn complete_after_ms_token(
 ) -> Result<auth::model::MsAccount, MsError> {
     let (xbl_token, uhs) = authenticate_xbl(client, &tokens.access_token).await?;
     let (xsts_token, xuid) = authenticate_xsts(client, &xbl_token).await?;
-    let mc_token = minecraft_login(client, &uhs, &xsts_token).await?;
-    let (uuid, name) = minecraft_profile(client, &mc_token).await?;
+    let mc = minecraft_login(client, &uhs, &xsts_token).await?;
+    let (uuid, name) = minecraft_profile(client, &mc.access_token).await?;
     // XSTS 的 xid 字段部分账号缺失：从 Minecraft token 的 JWT payload 兜底提取 xuid
     let xuid = if xuid.is_empty() {
-        extract_xuid_from_jwt(&mc_token)
+        extract_xuid_from_jwt(&mc.access_token)
     } else {
         xuid
     };
@@ -413,11 +428,11 @@ async fn complete_after_ms_token(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
-        + tokens.expires_in;
+        + mc.expires_in;
     Ok(auth::model::MsAccount {
         uuid,
         name,
-        access_token: mc_token,
+        access_token: mc.access_token,
         refresh_token: tokens.refresh_token.clone(),
         xuid,
         expires_at,
@@ -521,6 +536,20 @@ mod tests {
         });
         let err = extract_tokens(&json).unwrap_err();
         assert!(matches!(err, MsError::OAuth(_)));
+    }
+
+    #[test]
+    fn test_parse_mc_login_uses_minecraft_token_expiry() {
+        let json = json!({ "access_token": "mc-token", "expires_in": 86_400 });
+        let parsed = parse_mc_login(&json).unwrap();
+        assert_eq!(parsed.access_token, "mc-token");
+        assert_eq!(parsed.expires_in, 86_400, "应取 Minecraft token 自身有效期");
+
+        let fallback = parse_mc_login(&json!({ "access_token": "mc-token" })).unwrap();
+        assert_eq!(fallback.expires_in, MC_TOKEN_FALLBACK_SECS);
+
+        let err = parse_mc_login(&json!({ "expires_in": 86_400 })).unwrap_err();
+        assert!(matches!(err, MsError::Malformed(_)));
     }
 
     #[test]
