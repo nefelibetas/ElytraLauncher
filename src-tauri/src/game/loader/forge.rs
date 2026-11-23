@@ -13,7 +13,7 @@ use super::{
 use crate::config::downloader::{DownloadSource, DownloaderConfig};
 use crate::downloader::endpoints;
 use crate::downloader::fetcher::{self, http};
-use crate::downloader::hash::file_sha1_matches;
+use crate::downloader::hash::{file_sha1_matches, reader_sha1_hex};
 use crate::downloader::progress::ProgressCounters;
 use crate::game::resource::library;
 use crate::game::version::model;
@@ -128,6 +128,7 @@ pub(super) async fn download_and_extract(
         client_jar,
     };
     forge_patch_client(&mut archive, &installer_path, &profile_ref, &files).await?;
+    reconcile_patched_client(&profile_ref, &lib_dir, &mc_dir, &json_path, &mut libraries)?;
     // NeoForge：universal 不在 version.json，须下载到 libraries 但不进 classpath（进了会因"找到
     // NeoForge 类而无 MC 类"误报 "The patched Minecraft jar is missing"）；同时跑 installertools
     // PROCESS_MINECRAFT_JAR 生成 minecraft-client-patched（新式安装优先用它，缺 client-srg.jar 会报 corrupted）
@@ -587,6 +588,86 @@ fn forge_patch_client<'a>(
     })
 }
 
+/// processors 产物（data.PATCHED）的声明 sha1/size 是官方预构建口径，与本机生成字节必然不同；
+/// 落盘后把 version.json 与库清单改写为实际值，否则空 url 条目在下载阶段被判「内嵌库缺失」，
+/// 启动预检（size-first）与修复（sha1 强校验）也会因同一口径不一致失败。
+fn reconcile_patched_client(
+    profile_json: &serde_json::Value,
+    lib_dir: &Path,
+    mc_dir: &Path,
+    json_path: &Path,
+    libraries: &mut [model::Library],
+) -> Result<(), String> {
+    let Ok(profile) = processors::parse_profile_value(profile_json) else {
+        return Ok(());
+    };
+    if profile.processors.is_empty() {
+        return Ok(());
+    }
+    let Ok(patched) = processors::output_path(&profile, "PATCHED", lib_dir, mc_dir) else {
+        return Ok(());
+    };
+    let Ok(rel) = patched.strip_prefix(lib_dir) else {
+        return Ok(());
+    };
+    if !patched.is_file() {
+        return Ok(());
+    }
+    let rel = rel.to_string_lossy().replace('\\', "/");
+    let file = std::fs::File::open(&patched).map_err(common_err_ctx_key!(
+        "errors.file.read",
+        "读取 patched client 失败"
+    ))?;
+    let size = file
+        .metadata()
+        .map_err(common_err_ctx_key!(
+            "errors.file.read",
+            "读取 patched client 失败"
+        ))?
+        .len();
+    let sha1 = reader_sha1_hex(file)
+        .ok_or_else(|| keyed_msg!("errors.file.read", "计算 patched client sha1 失败"))?;
+    for lib in libraries.iter_mut() {
+        if let Some(a) = lib.downloads.as_mut().and_then(|d| d.artifact.as_mut()) {
+            if a.path == rel {
+                a.sha1.clone_from(&sha1);
+                a.size = size;
+            }
+        }
+    }
+    let text = std::fs::read_to_string(json_path).map_err(common_err_ctx_key!(
+        "errors.file.read",
+        "读取 version.json 失败"
+    ))?;
+    let mut merged: serde_json::Value = serde_json::from_str(&text).map_err(
+        common_err_ctx_key!("errors.version.parse", "解析 version.json 失败"),
+    )?;
+    let mut changed = false;
+    if let Some(arr) = merged.get_mut("libraries").and_then(|v| v.as_array_mut()) {
+        for lib in arr {
+            let Some(a) = lib.get_mut("downloads").and_then(|d| d.get_mut("artifact")) else {
+                continue;
+            };
+            if a.get("path").and_then(|p| p.as_str()) == Some(rel.as_str()) {
+                a["sha1"] = serde_json::Value::String(sha1.clone());
+                a["size"] = serde_json::Value::from(size);
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        let out = serde_json::to_string_pretty(&merged).map_err(common_err_ctx_key!(
+            "errors.loader.serializeVersionJson",
+            "序列化失败"
+        ))?;
+        std::fs::write(json_path, out).map_err(common_err_ctx_key!(
+            "errors.file.write",
+            "写入 version.json 失败"
+        ))?;
+    }
+    Ok(())
+}
+
 /// 等待 runner 的 ClientJar 步骤下载完成（与 install 并行）。
 /// 有 `ClientJarWait` 时按真实下载进度判断停滞；仅在长时间无字节/文件增长时失败，不设固定总时长。
 pub(super) async fn wait_for_vanilla_client(
@@ -982,6 +1063,87 @@ mod tests {
 
     use super::*;
     use crate::downloader::hash::sha1_hex;
+
+    fn patched_fixture(dir: &Path) -> (PathBuf, PathBuf, Vec<model::Library>, String, usize) {
+        let lib_dir = dir.join("libraries");
+        let rel = "net/minecraftforge/forge/1.20.4-49.2.13/forge-1.20.4-49.2.13-client.jar";
+        let patched = lib_dir.join(rel);
+        std::fs::create_dir_all(patched.parent().unwrap()).unwrap();
+        let bytes = b"locally patched client".to_vec();
+        std::fs::write(&patched, &bytes).unwrap();
+        let sha1 = sha1_hex(&bytes);
+        let libs_json = serde_json::json!([
+            {"name": "net.minecraftforge:forge:1.20.4-49.2.13:client",
+             "downloads": {"artifact": {"path": rel, "url": "", "sha1": "0000000000000000000000000000000000000000", "size": 1}}},
+            {"name": "legacy:lib:1.0", "url": "https://example.com/legacy.jar"}
+        ]);
+        let json_path = dir.join("v.json");
+        std::fs::write(
+            &json_path,
+            serde_json::to_string_pretty(&serde_json::json!({"libraries": libs_json})).unwrap(),
+        )
+        .unwrap();
+        let libraries = serde_json::from_value(libs_json).unwrap();
+        (lib_dir, json_path, libraries, sha1, bytes.len())
+    }
+
+    /// processors 产物以本机为准：空 url 的 :client 条目 sha1/size 改写为落盘实际值；
+    /// 无 downloads 的 legacy 条目不得被插入 null 字段。
+    #[test]
+    fn reconcile_patched_client_rewrites_generated_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let (lib_dir, json_path, mut libraries, sha1, len) = patched_fixture(dir.path());
+        let profile = serde_json::json!({
+            "data": {"PATCHED": {"client": "[net.minecraftforge:forge:1.20.4-49.2.13:client]", "server": ""}},
+            "processors": [{"jar": "net.minecraftforge:installertools:1.4.0", "args": ["--task", "DOWNLOAD_MOJMAPS"]}],
+            "libraries": []
+        });
+        reconcile_patched_client(&profile, &lib_dir, dir.path(), &json_path, &mut libraries)
+            .unwrap();
+        let a = libraries[0]
+            .downloads
+            .as_ref()
+            .unwrap()
+            .artifact
+            .as_ref()
+            .unwrap();
+        assert_eq!(a.sha1, sha1);
+        assert_eq!(a.size, len as u64);
+        let on_disk: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&json_path).unwrap()).unwrap();
+        let arr = on_disk["libraries"].as_array().unwrap();
+        assert_eq!(
+            arr[0]["downloads"]["artifact"]["sha1"].as_str(),
+            Some(sha1.as_str())
+        );
+        assert_eq!(
+            arr[0]["downloads"]["artifact"]["size"].as_u64(),
+            Some(len as u64)
+        );
+        assert!(
+            arr[1].get("downloads").is_none(),
+            "legacy 条目不应被插入 downloads 字段"
+        );
+    }
+
+    /// 无 processors 的旧式安装器不改写任何声明哈希。
+    #[test]
+    fn reconcile_patched_client_skips_without_processors() {
+        let dir = tempfile::tempdir().unwrap();
+        let (lib_dir, json_path, mut libraries, _, _) = patched_fixture(dir.path());
+        let profile = serde_json::json!({"data": {}, "processors": [], "libraries": []});
+        reconcile_patched_client(&profile, &lib_dir, dir.path(), &json_path, &mut libraries)
+            .unwrap();
+        let a = libraries[0]
+            .downloads
+            .as_ref()
+            .unwrap()
+            .artifact
+            .as_ref()
+            .unwrap();
+        assert_eq!(a.sha1, "0000000000000000000000000000000000000000");
+        assert_eq!(a.size, 1);
+    }
 
     /// 下载完成标记存在时直接接受已写入的 jar，不再依赖“连续 3 次大小不变”。
     #[tokio::test]
