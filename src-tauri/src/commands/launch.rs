@@ -30,8 +30,7 @@ pub async fn check_launch_env(version_dir_name: String) -> Result<String, String
 
     process::ensure_game_ready(&version_json, &mc_dir, &version_dir_name)?;
 
-    let java_env = env::selected_jdk_version(&jdk::read(), &jdk::read_cache())
-        .unwrap_or_else(|| "自动选择".into());
+    let java_env = env::selected_jdk_version(&jdk::read(), &jdk::read_cache());
     let jdk_label = java_path.display().to_string();
     match compat::check(
         &version_json,
@@ -40,10 +39,14 @@ pub async fn check_launch_env(version_dir_name: String) -> Result<String, String
         launcher_config.disable_launch_wrapper,
     ) {
         JavaCompat::Warn(warning) => Ok(warning),
-        _ => Ok(keyed_msg!(
-            "errors.launch.envOk?java_env={java_env}",
-            "环境校验通过（JDK: {java_env}）"
-        )),
+        // 自动选择无具体 JDK 名：走无参 key，避免把中文兜底文案当参数传给 en-US。
+        _ => Ok(match java_env {
+            Some(v) => keyed_msg!(
+                "errors.launch.envOk?java_env={v}",
+                "环境校验通过（JDK: {v}）"
+            ),
+            None => keyed_msg!("errors.launch.envOkAuto", "环境校验通过（JDK: 自动选择）"),
+        }),
     }
 }
 

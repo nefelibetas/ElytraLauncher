@@ -484,6 +484,7 @@ export default {
       deleteConfirm: "确定要删除实例「{name}」吗？该操作会删除实例文件夹及其全部文件，且无法恢复。",
       vanilla: "原版",
       nameRequired: "名称不能为空",
+      defaultDirName: "当前文件夹",
       deleting: "正在删除实例…",
       deleted: "实例「{name}」已经删除",
     },

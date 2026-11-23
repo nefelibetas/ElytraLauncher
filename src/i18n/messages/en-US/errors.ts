@@ -76,6 +76,7 @@ export default {
     filesIncomplete: "Game files are incomplete",
     commandEmpty: "Launch command is empty",
     envOk: "Environment check passed (JDK: {java_env})",
+    envOkAuto: "Environment check passed (JDK: Automatic)",
     authlibMissing: "Third-party login component missing and auto-download failed",
     nativesCleanFailed: "Failed to clean old natives",
     nativesPrepareFailed: "Failed to prepare natives",

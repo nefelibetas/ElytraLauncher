@@ -76,6 +76,7 @@ export default {
     filesIncomplete: "游戏文件不完整",
     commandEmpty: "启动命令为空",
     envOk: "环境校验通过（JDK: {java_env}）",
+    envOkAuto: "环境校验通过（JDK: 自动选择）",
     authlibMissing: "第三方登录组件缺失且自动下载失败",
     nativesCleanFailed: "清理旧 natives 失败",
     nativesPrepareFailed: "natives 准备失败",

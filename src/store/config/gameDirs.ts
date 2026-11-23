@@ -20,6 +20,13 @@ export const dirs = ref<GameDir[]>([]);
 export const activePath = ref("");
 export const dirsError = ref("");
 
+// 后端默认目录名是持久化的固定中文哨兵（config/game_dirs.rs default_dir），展示层按语言映射。
+const DEFAULT_DIR_NAME = "当前文件夹"; // i18n-ignore: 后端持久化哨兵值，非展示文案
+
+export function dirDisplayName(d: GameDir): string {
+  return d.name === DEFAULT_DIR_NAME ? t("settings.version.select.defaultDirName") : d.name;
+}
+
 export async function loadDirs(keepActive = true) {
   try {
     dirs.value = await invoke<GameDir[]>("get_game_dirs");
@@ -131,7 +138,7 @@ export function menuRename() {
   closeItemMenu();
   if (!d) return;
   renameTarget.value = d;
-  renameInput.value = d.name;
+  renameInput.value = dirDisplayName(d);
   renameError.value = "";
   renameDialog.value = true;
 }
