@@ -22,6 +22,8 @@ mod update;
 pub mod util;
 mod window_state;
 
+#[cfg(target_os = "linux")]
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::menu::{Menu, MenuItem};
@@ -180,6 +182,33 @@ fn init_tray(app: &tauri::App) -> Result<(), String> {
     Ok(())
 }
 
+/// Linux 的 libappindicator-sys 在动态库缺失时直接 panic（不返回 Err），需收敛为降级错误。
+#[cfg(target_os = "linux")]
+fn init_tray_guarded(app: &tauri::App) -> Result<(), String> {
+    guard_tray_panic(|| init_tray(app))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn init_tray_guarded(app: &tauri::App) -> Result<(), String> {
+    init_tray(app)
+}
+
+/// 托盘初始化 panic → 降级错误：首行中文结论，panic payload 作技术细节。
+#[cfg(target_os = "linux")]
+fn guard_tray_panic<F>(f: F) -> Result<(), String>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|payload| {
+        let detail = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .unwrap_or("unknown panic");
+        Err(format!("托盘初始化 panic\n{detail}"))
+    })
+}
+
 /// 显示主窗口：恢复几何后显示；不铺原生底色，避免圆角外毛边与透明首帧。
 fn reveal_main_window(app: &tauri::AppHandle) {
     let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
@@ -261,7 +290,7 @@ pub fn run() {
                 let _ = handle.emit(events::CONFIG_RECOVERY, notice);
             });
             // 系统托盘：失败时仅记录，前端 has_tray 会回退为直接退出。
-            if let Err(e) = init_tray(app) {
+            if let Err(e) = init_tray_guarded(app) {
                 eprintln!("托盘初始化失败: {e}");
             }
             // 游戏目录变化监听（激活目录的 versions/ 与聚焦版本子目录 → 事件推送）
@@ -462,4 +491,30 @@ pub fn run() {
         tauri::RunEvent::ExitRequested { .. } => window_state::save(app_handle),
         _ => {}
     });
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::guard_tray_panic;
+
+    #[test]
+    fn guard_tray_panic_converts_str_payload() {
+        let err = guard_tray_panic(|| panic!("libappindicator missing")).unwrap_err();
+        assert_eq!(err, "托盘初始化 panic\nlibappindicator missing");
+    }
+
+    #[test]
+    fn guard_tray_panic_converts_string_payload() {
+        let err = guard_tray_panic(|| panic!("{}", "dynamic detail")).unwrap_err();
+        assert_eq!(err, "托盘初始化 panic\ndynamic detail");
+    }
+
+    #[test]
+    fn guard_tray_panic_passes_through_results() {
+        assert_eq!(guard_tray_panic(|| Ok(())).unwrap(), ());
+        assert_eq!(
+            guard_tray_panic(|| Err("plain".into())),
+            Err("plain".into())
+        );
+    }
 }

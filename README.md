@@ -183,7 +183,7 @@ cargo test --test tool_download                    # 工具箱下载器集成测
 | macOS | 未公证签名，首次打开需右键 → 打开；需要 macOS 13+。 |
 | Windows 卸载 | MSI 不清理 `%APPDATA%\Elytra`；NSIS 默认保留应用数据；两者都不会删除游戏目录。 |
 | Windows 便携版 | 依赖系统 WebView2（Windows 10/11 通常已内置）。 |
-| Linux | 构建于 Ubuntu 22.04（glibc 2.35+）；便携版依赖系统 WebKitGTK。 |
+| Linux | 构建于 Ubuntu 22.04（glibc 2.35+）；便携版依赖系统 WebKitGTK。系统托盘为可选功能，需 `libappindicator-gtk3` 或 `libayatana-appindicator-gtk3`，缺失时自动降级（关闭窗口即退出）。 |
 | 皮肤衣柜 | 仅微软账号可进入；离线模式使用固定默认皮肤。 |
 | CurseForge | 需要有效的 CurseForge API Key；内置 Key 失效时可在「设置 → 下载 → CurseForge Key」填入自己的 Key，未配置时该来源不可用，Modrinth 不受影响。 |
 | OptiFine | 官方无公开 API，部分版本/组合可能下载或安装失败。 |
