@@ -1075,9 +1075,11 @@ mod tests {
     }
 
     fn legacy_native_lib(name: &str, path: &str) -> String {
+        // natives map key 与 classifier 必须跟随当前平台，否则非 Windows 上选不中构件
         format!(
-            r#"{{ "name": "{name}", "natives": {{ "windows": "natives-windows" }},
-                 "downloads": {{ "classifiers": {{ "natives-windows": {{ "path": "{path}", "url": "u", "sha1": "s", "size": 1 }} }} }} }}"#
+            r#"{{ "name": "{name}", "natives": {{ "{os}": "natives-{os}" }},
+                 "downloads": {{ "classifiers": {{ "natives-{os}": {{ "path": "{path}", "url": "u", "sha1": "s", "size": 1 }} }} }} }}"#,
+            os = TARGET_OS
         )
     }
 
