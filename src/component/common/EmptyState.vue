@@ -29,5 +29,7 @@
   font-size: var(--fs-base);
   line-height: 1.7;
   margin: 0;
+  /* 文案含 \n（标题行 + 说明行），默认 HTML 折叠换行会连成一句 */
+  white-space: pre-line;
 }
 </style>
