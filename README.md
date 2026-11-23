@@ -158,7 +158,7 @@ cargo test --test tool_download                    # 工具箱下载器集成测
 
 ## 💻 运行时
 
-- 🪟 Windows · 🐧 Linux · 🍎 macOS 13+（窗口 1008×648、无边框透明、不可缩放）
+- 🪟 Windows · 🐧 Linux · 🍎 macOS 13+（窗口默认 1008×648、无边框透明、可缩放至最小 900×560，窗口状态持久化）
 - ⚙️ 配置目录（`Settings.toml` / `secrets.bin` / `tasks.db` / 日志）：
   - Windows：`%APPDATA%\Elytra`
   - macOS：`~/Library/Application Support/Elytra`

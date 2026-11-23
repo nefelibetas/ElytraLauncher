@@ -136,7 +136,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **包管理器必须 pnpm**：`beforeDevCommand` 硬编码 `pnpm dev`；`pnpm-lock.yaml` 入库；CI 与本地一律 `pnpm install --frozen-lockfile`
 - **工具链单一版本源 `mise.toml`**（node / pnpm / rust / protoc）：本地 `mise install`；CI 用 `jdx/mise-action` 读同一文件，不写死版本号。各 job 设 `MISE_RUSTUP_HOME` 指向 mise 数据目录（rust 实体在 rustup home，否则缓存命中但工具链缺失）
 - **工具链很新**：vite 8、typescript 6、vue-tsc 3、vue-router 5——新增依赖前确认兼容
-- **窗口**：1008×648、`decorations:false` + `transparent:true` + `resizable:false`，前端自绘 TitleBar；CSP 的 `img-src` 需放行 `cdn.modrinth.com` / `*.forgecdn.net` / `mod.mcimirror.top`，否则远程图标被静默拦截
+- **窗口**：默认 1008×648、`decorations:false` + `transparent:true` + `resizable:true`（minWidth 900 / minHeight 560，尺寸/位置/最大化经 `window_state.rs` 持久化），前端自绘 TitleBar；CSP 的 `img-src` 需放行 `cdn.modrinth.com` / `*.forgecdn.net` / `mod.mcimirror.top`，否则远程图标被静默拦截
 - **capabilities 是 v2 权限门**：新增 JS 侧 window/fs/dialog API 必须先改 `src-tauri/capabilities/default.json`
 - **Rust 变更需重启 `pnpm tauri dev`**（vite 忽略 src-tauri）；前端跨多个 store 的批量改动后建议重启 dev——HMR 可能停在半旧半新（组件逻辑更新但 store 是旧的），排查前端怪状前先重启排除
 - **reqwest 0.13 无 `.form()`**：表单手工 urlencode

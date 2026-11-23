@@ -158,7 +158,7 @@ See 📖 [AGENTS.md](AGENTS.md) (repository development guide).
 
 ## 💻 Runtime
 
-- 🪟 Windows · 🐧 Linux · 🍎 macOS 13+ (1008×648 window, borderless & transparent, not resizable)
+- 🪟 Windows · 🐧 Linux · 🍎 macOS 13+ (1008×648 default window, borderless & transparent, resizable down to 900×560, window state persisted)
 - ⚙️ Config directory (`Settings.toml` / `secrets.bin` / `tasks.db` / logs):
   - Windows: `%APPDATA%\Elytra`
   - macOS: `~/Library/Application Support/Elytra`
