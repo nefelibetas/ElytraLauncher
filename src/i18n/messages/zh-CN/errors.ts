@@ -428,6 +428,7 @@ export default {
   },
   tray: {
     noIcon: "应用缺少窗口图标",
-    notReady: "托盘未初始化"
+    notReady: "托盘未初始化",
+    initPanic: "托盘初始化 panic"
   }
 };

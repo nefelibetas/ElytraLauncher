@@ -205,7 +205,10 @@ where
             .map(String::as_str)
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .unwrap_or("unknown panic");
-        Err(format!("托盘初始化 panic\n{detail}"))
+        Err(keyed_msg!(
+            "errors.tray.initPanic",
+            "托盘初始化 panic\n{detail}"
+        ))
     })
 }
 
@@ -500,13 +503,19 @@ mod tests {
     #[test]
     fn guard_tray_panic_converts_str_payload() {
         let err = guard_tray_panic(|| panic!("libappindicator missing")).unwrap_err();
-        assert_eq!(err, "托盘初始化 panic\nlibappindicator missing");
+        assert_eq!(
+            err,
+            "@i18n:errors.tray.initPanic\n托盘初始化 panic\nlibappindicator missing"
+        );
     }
 
     #[test]
     fn guard_tray_panic_converts_string_payload() {
         let err = guard_tray_panic(|| panic!("{}", "dynamic detail")).unwrap_err();
-        assert_eq!(err, "托盘初始化 panic\ndynamic detail");
+        assert_eq!(
+            err,
+            "@i18n:errors.tray.initPanic\n托盘初始化 panic\ndynamic detail"
+        );
     }
 
     #[test]

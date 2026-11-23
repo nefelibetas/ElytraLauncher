@@ -428,6 +428,7 @@ export default {
   },
   tray: {
     noIcon: "The app has no window icon",
-    notReady: "Tray is not initialized"
+    notReady: "Tray is not initialized",
+    initPanic: "Tray initialization panicked"
   }
 };
