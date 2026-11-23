@@ -179,6 +179,7 @@ export async function doLaunch(
 
   // 本次启动代际号：取消启动会自增，使在飞 await 的落点全部作废（后端同步收到取消请求）
   const seq = ++launchSeq;
+  let windowWait: GameWindowWait | null = null;
 
   try {
     cancelledLabels.clear(); // 上次取消的抑制标记只对那一次启动有效
@@ -249,8 +250,14 @@ export async function doLaunch(
     if (seq !== launchSeq) return;
     step("launch.steps.files", "done");
 
-    // ② 启动游戏进程
+    // ② 启动游戏进程（监听先于 spawn 注册：非 Windows 平台首轮轮询即推窗口事件，晚注册会丢）
     step("launch.steps.start", "running");
+    windowWait = waitGameWindow(selectedVersion.value);
+    await windowWait.ready;
+    if (seq !== launchSeq) {
+      windowWait.cancel();
+      return;
+    }
     const pid = await invoke("spawn_game", {
       request: {
         versionDirName: selectedVersion.value,
@@ -270,7 +277,10 @@ export async function doLaunch(
         launchGeneration,
       },
     });
-    if (seq !== launchSeq) return; // 已取消：后端已按取消终止该进程
+    if (seq !== launchSeq) {
+      windowWait.cancel();
+      return; // 已取消：后端已按取消终止该进程
+    }
     step("launch.steps.start", "done");
     step("launch.steps.window", "running");
     console.log("Game started, PID:", pid);
@@ -282,7 +292,7 @@ export async function doLaunch(
 
     // ③ 等待游戏窗口（后端轮询可见窗口推送事件；90s 兜底防卡死）
     step("launch.steps.window", "running");
-    const outcome = await waitGameWindow(selectedVersion.value);
+    const outcome = await windowWait.promise;
     if (seq !== launchSeq) return;
     step("launch.steps.window", "done");
     launchState.phase = "done";
@@ -308,6 +318,7 @@ export async function doLaunch(
       resetLaunch();
     }, 1500);
   } catch (e) {
+    windowWait?.cancel();
     // 已取消：本次流程的落点全部作废（取消路径不放错误弹窗，后端「启动已取消」亦不提示）
     if (seq !== launchSeq) return;
     resetLaunch();
@@ -395,6 +406,13 @@ interface WindowWait {
   exited: { code: number | null; report: string | null; cause: string | null } | null;
 }
 
+/** 窗口等待句柄：ready 完成表示监听已注册（必须先于 spawn_game）；cancel 供 spawn 失败/取消路径清理。 */
+interface GameWindowWait {
+  promise: Promise<WindowWait>;
+  ready: Promise<void>;
+  cancel: () => void;
+}
+
 /** 从 Mixin fatal 行提取失败 Mod id；显示时首字母大写，至少比只写“Mixin 失败”可定位。 */
 function failingMixinMod(cause: string | null): string {
   const match = cause?.match(/Mixin apply for mod ([^\s]+)/i);
@@ -437,34 +455,43 @@ function crashAlertTitle(cause: string | null): string {
 
 let gameExitListenerReady = false;
 
-function waitGameWindow(label: string): Promise<WindowWait> {
-  return new Promise((resolve) => {
-    let settled = false;
-    let windowSeen = false;
-    let exited: WindowWait["exited"] = null;
-    const unlisteners: Array<() => void> = [];
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      waitingLabel = null;
-      for (const u of unlisteners) u();
-      resolve({ shown: windowSeen, exited });
-    };
-    const timer = setTimeout(finish, 90_000);
-    waitingLabel = label;
+function waitGameWindow(label: string): GameWindowWait {
+  let settled = false;
+  let windowSeen = false;
+  let exited: WindowWait["exited"] = null;
+  const unlisteners: Array<() => void> = [];
+  let resolveWait!: (w: WindowWait) => void;
+  const promise = new Promise<WindowWait>((r) => {
+    resolveWait = r;
+  });
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    waitingLabel = null;
+    for (const u of unlisteners) u();
+    resolveWait({ shown: windowSeen, exited });
+  };
+  const timer = setTimeout(finish, 90_000);
+  waitingLabel = label;
+  const register = (u: () => void) => {
+    if (settled) u();
+    else unlisteners.push(u);
+  };
+  const ready = Promise.all([
     listen<[number, string]>(GAME_WINDOW_VISIBLE, (ev) => {
       if (ev.payload[1] !== label) return;
       windowSeen = true;
       finish();
-    }).then(u => unlisteners.push(u));
+    }).then(register),
     listen<GameExitedPayload>(GAME_EXITED, (ev) => {
       if (ev.payload[1] !== label) return;
       const [, , code, report, cause] = ev.payload;
       exited = { code, report, cause };
       finish();
-    }).then(u => unlisteners.push(u));
-  });
+    }).then(register),
+  ]).then(() => {});
+  return { promise, ready, cancel: finish };
 }
 
 /** 最近一次游戏日志（launcher/process.rs 落盘）。 */
