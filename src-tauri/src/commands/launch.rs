@@ -13,6 +13,7 @@ use crate::launcher::env;
 use crate::launcher::platform;
 use crate::launcher::process;
 use crate::launcher::skin;
+use crate::persist;
 use crate::task;
 use crate::util;
 
@@ -30,7 +31,12 @@ pub async fn check_launch_env(version_dir_name: String) -> Result<String, String
 
     process::ensure_game_ready(&version_json, &mc_dir, &version_dir_name)?;
 
-    let java_env = env::selected_jdk_version(&jdk::read(), &jdk::read_cache());
+    // 与 load_launch_config 一致：实例级 Java 覆盖优先，避免提示的 JDK 与实际启动所用不一致。
+    let mut jdk_options = jdk::read();
+    if let Some(profile) = persist::instance::read_launch(&mc_dir, &version_dir_name) {
+        jdk_options.selection = profile.java;
+    }
+    let java_env = env::selected_jdk_version(&jdk_options, &jdk::read_cache());
     let jdk_label = java_path.display().to_string();
     match compat::check(
         &version_json,
