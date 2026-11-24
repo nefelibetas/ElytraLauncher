@@ -153,7 +153,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 
 ## Testing & QA
 
-- **无前端测试**；Rust 677 个单元测试（649 passed + 28 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
+- **无前端测试**；Rust 678 个单元测试（650 passed + 28 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
 - **只测纯函数与关键不变量**：PKCE、URL 组装、启动命令构建、离线皮肤 UUID、内存分配公式、util、maven 解析与排序、Mod 双源搜索、修复步骤规划、persist 读写、secrets DPAPI、store 快照/恢复、fetcher 取消/换源/校验/重定向、segmented 切分/续传/回退、loader profile 合并与继承、房间码与广播回环、emit 派发器（合并/保序）、progress 口径、步骤索引↔名字对齐
 - **断言风格**：`assert_eq!` 精确值为主要；行为不变量用 `assert!` + 中文 message
 - **平台隔离**：Windows 专属（BAT 渲染、DPAPI、注册表代理）用 `#[cfg(target_os = "windows")]`
@@ -171,7 +171,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **平台差异用编译期开关**：`cfg!(target_os = "windows")` / `#[cfg(target_os = ...)]` / `game::resource::extract::TARGET_OS`；测试数据（旧式 natives 的 map key 与 classifier、可执行文件名、路径分隔符）必须跟随当前平台，不得硬编码 Windows 形态。
 - **平台专属测试隔离**：只对特定 OS 有意义的用例用 `#[cfg(target_os = ...)]` 挂起，不进入其它平台的测试二进制；跨平台用例不得依赖固定目录层级。
 - **网络/外部夹具**：`#[ignore]` + 环境变量或 `tempfile` 下载目录门控；不提交用户绝对路径，不依赖固定盘符/目录结构。
-- **CI 边界**：`rust-cross`（Linux/macOS）只跑 clippy（见 `check.yml` 文件头）；新增/修改测试一律按「所有平台都会执行」处理，平台专属用例必须用 `#[cfg]` 隔离，不允许依赖只在 Windows CI 上跑。
+- **CI 边界**：`rust-cross` 的 Linux job 跑 `cargo test --lib`，macOS 只跑 clippy（见 `check.yml` 文件头）；新增/修改测试必须能在 Linux 执行，平台专属用例用 `#[cfg]` 隔离，不依赖只在 Windows CI 上跑。
 
 ## Known Debt（已知遗留，待处理）
 

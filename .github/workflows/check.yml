@@ -3,7 +3,7 @@ name: Check
 # 平台拆分（被 ci.yml / release.yml 复用）：
 #   frontend     平台无关检查（前端类型 / CSS / i18n + cargo fmt），只跑一次
 #   rust-windows Windows 全量 clippy + test
-#   rust-cross   Linux / macOS clippy（覆盖平台 cfg 分支的编译与 lint；test 仍只在 Windows 跑）
+#   rust-cross   Linux clippy + 单测 / macOS clippy（macOS 暂不跑 test）
 on:
   workflow_call:
 
@@ -113,3 +113,7 @@ jobs:
       - name: cargo clippy（零警告）
         working-directory: src-tauri
         run: cargo clippy --lib -- -D warnings
+      - name: cargo test（Linux 串行；macOS 只 clippy）
+        if: startsWith(matrix.os, 'ubuntu')
+        working-directory: src-tauri
+        run: cargo test --lib -- --test-threads=1
