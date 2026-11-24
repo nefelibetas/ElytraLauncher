@@ -193,6 +193,9 @@ fn init_tray_guarded(app: &tauri::App) -> Result<(), String> {
     init_tray(app)
 }
 
+#[cfg(all(target_os = "linux", panic = "abort"))]
+compile_error!("Linux 托盘初始化依赖 panic=unwind（catch_unwind 降级）；切换 abort 前须替换该方案");
+
 /// 托盘初始化 panic → 降级错误：首行中文结论，panic payload 作技术细节。
 #[cfg(target_os = "linux")]
 fn guard_tray_panic<F>(f: F) -> Result<(), String>
