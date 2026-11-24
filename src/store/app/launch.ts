@@ -258,7 +258,7 @@ export async function doLaunch(
       windowWait.cancel();
       return;
     }
-    const pid = await invoke("spawn_game", {
+    const pid = await invoke<number>("spawn_game", {
       request: {
         versionDirName: selectedVersion.value,
         authMode: isOffline ? "offline" : isExternal ? "external" : "online",
@@ -281,6 +281,7 @@ export async function doLaunch(
       windowWait.cancel();
       return; // 已取消：后端已按取消终止该进程
     }
+    windowWait.bindPid(pid);
     windowWait.start(); // 90s 窗口计时从进程拉起后开始，不占启动准备时间
     step("launch.steps.start", "done");
     step("launch.steps.window", "running");
@@ -407,10 +408,11 @@ interface WindowWait {
   exited: { code: number | null; report: string | null; cause: string | null } | null;
 }
 
-/** 窗口等待句柄：ready 表示监听已注册（必须先于 spawn_game）；start 在进程拉起后启动 90s 计时；cancel 供失败/取消清理。 */
+/** 窗口等待句柄：ready 表示监听已注册（必须先于 spawn_game）；bindPid 绑定本次进程；start 在进程拉起后启动 90s 计时；cancel 供失败/取消清理。 */
 interface GameWindowWait {
   promise: Promise<WindowWait>;
   ready: Promise<void>;
+  bindPid: (pid: number) => void;
   start: () => void;
   cancel: () => void;
 }
@@ -467,6 +469,13 @@ function waitGameWindow(label: string): GameWindowWait {
     resolveWait = r;
   });
   let timer: number | undefined;
+  let expectedPid: number | null = null;
+  let pendingExit: {
+    pid: number;
+    code: number | null;
+    report: string | null;
+    cause: string | null;
+  } | null = null;
   const finish = () => {
     if (settled) return;
     settled = true;
@@ -478,6 +487,20 @@ function waitGameWindow(label: string): GameWindowWait {
   const start = () => {
     if (settled || timer !== undefined) return;
     timer = setTimeout(finish, 90_000);
+  };
+  const acceptExit = (code: number | null, report: string | null, cause: string | null) => {
+    if (settled) return;
+    exited = { code, report, cause };
+    finish();
+  };
+  /** 绑定本次 spawn 的 pid；绑定前到达的退出事件先缓存，绑定后按 pid 过滤陈旧进程。 */
+  const bindPid = (pid: number) => {
+    expectedPid = pid;
+    if (pendingExit?.pid === pid) {
+      const e = pendingExit;
+      pendingExit = null;
+      acceptExit(e.code, e.report, e.cause);
+    }
   };
   waitingLabel = label;
   const register = (u: () => void) => {
@@ -491,13 +514,17 @@ function waitGameWindow(label: string): GameWindowWait {
       finish();
     }).then(register),
     listen<GameExitedPayload>(GAME_EXITED, (ev) => {
+      const [pid, , code, report, cause] = ev.payload;
       if (ev.payload[1] !== label) return;
-      const [, , code, report, cause] = ev.payload;
-      exited = { code, report, cause };
-      finish();
+      if (expectedPid === null) {
+        pendingExit = { pid, code, report, cause };
+        return;
+      }
+      if (pid !== expectedPid) return;
+      acceptExit(code, report, cause);
     }).then(register),
   ]).then(() => {});
-  return { promise, ready, start, cancel: finish };
+  return { promise, ready, bindPid, start, cancel: finish };
 }
 
 /** 最近一次游戏日志（launcher/process.rs 落盘）。 */
