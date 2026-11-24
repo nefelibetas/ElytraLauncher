@@ -138,13 +138,23 @@ fn parse_xdg_download_dir(contents: &str, home: &Path) -> Option<PathBuf> {
 
 fn compute_config_dir() -> PathBuf {
     if is_dev_runtime() {
-        return exe_dir().join(constants::CONFIG_DIR);
+        return dev_config_dir(&exe_dir());
     }
     if let Some(root) = platform_data_root() {
         return root.join(constants::CONFIG_DIR);
     }
     // 极端环境（APPDATA/HOME 均缺失）：退回 exe 旁，至少让应用能起来
-    exe_dir().join(constants::CONFIG_DIR)
+    dev_config_dir(&exe_dir())
+}
+
+/// exe 旁配置目录；候选路径存在且非目录时回退 `{CONFIG_DIR}-dev`：
+/// 大小写不敏感文件系统（macOS 默认 APFS）上 `Elytra` 与 cargo 产物 `elytra` 是同一路径。
+fn dev_config_dir(exe_dir: &Path) -> PathBuf {
+    let dir = exe_dir.join(constants::CONFIG_DIR);
+    if dir.exists() && !dir.is_dir() {
+        return exe_dir.join(format!("{}-dev", constants::CONFIG_DIR));
+    }
+    dir
 }
 
 /// 平台用户数据根目录（Windows）：`%APPDATA%`（Roaming），缺省回退 `%USERPROFILE%\AppData\Roaming`。
@@ -251,6 +261,28 @@ mod tests {
         assert!(!path_under_cargo_target(Path::new(
             "/tmp/.mount_elytraX/usr/bin/elytra"
         )));
+    }
+
+    /// exe 旁配置目录：候选路径被同名文件占用（大小写不敏感 FS 上的 cargo 产物）时回退 `-dev` 后缀。
+    #[test]
+    fn dev_config_dir_falls_back_when_candidate_is_a_file() {
+        let base = std::env::temp_dir().join(format!("elytra-dirs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        assert_eq!(dev_config_dir(&base), base.join(constants::CONFIG_DIR));
+
+        std::fs::write(base.join(constants::CONFIG_DIR), b"binary").unwrap();
+        assert_eq!(
+            dev_config_dir(&base),
+            base.join(format!("{}-dev", constants::CONFIG_DIR))
+        );
+
+        std::fs::remove_file(base.join(constants::CONFIG_DIR)).unwrap();
+        std::fs::create_dir(base.join(constants::CONFIG_DIR)).unwrap();
+        assert_eq!(dev_config_dir(&base), base.join(constants::CONFIG_DIR));
+
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     /// 只读安装位置判定：Program Files 下默认游戏目录不能放 exe 旁（建目录会失败），应回退用户数据目录。
