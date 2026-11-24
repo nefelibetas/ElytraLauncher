@@ -153,7 +153,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 
 ## Testing & QA
 
-- **无前端测试**；Rust 645 个单元测试（619 passed + 26 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
+- **无前端测试**；Rust 677 个单元测试（649 passed + 28 ignored），与实现同文件、`#[cfg(test)] mod tests`；集成测试 `tests/online_diag.rs`、`tests/tool_download.rs`、`tests/e2e_download.rs`（`#[ignore]`，需真实网络）
 - **只测纯函数与关键不变量**：PKCE、URL 组装、启动命令构建、离线皮肤 UUID、内存分配公式、util、maven 解析与排序、Mod 双源搜索、修复步骤规划、persist 读写、secrets DPAPI、store 快照/恢复、fetcher 取消/换源/校验/重定向、segmented 切分/续传/回退、loader profile 合并与继承、房间码与广播回环、emit 派发器（合并/保序）、progress 口径、步骤索引↔名字对齐
 - **断言风格**：`assert_eq!` 精确值为主要；行为不变量用 `assert!` + 中文 message
 - **平台隔离**：Windows 专属（BAT 渲染、DPAPI、注册表代理）用 `#[cfg(target_os = "windows")]`
@@ -164,6 +164,14 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **ModLoader 矩阵**：`game/loader/mod.rs` 的 `#[cfg(test)] mod matrix`，真实网络 + 真实 JDK 跑「形态」而非「版本」：loader 9 条（Fabric / Quilt / Forge 1.7.10·1.8.9 spec-0 / Forge 1.12.2 / 1.16.5 / 1.20.1 / NeoForge 20.4·1.21.1）+ OptiFine 5 条；每例把安装出的版本 JSON 按真实模型解析并构建启动命令（classpath 项数、`${}` 残留、loader 是否进 `-cp`/`--module-path`、natives 标志）
 - **工具箱下载器测试**：本地 HTTP 服务（可控 206/200 + 按块节流）验证入队/分段一致性/暂停位图/续传/取消/不支持 Range 回退；文件内有 `TEST_LOCK` 串行闸
 - **发布前 GTK 冒烟**：CI 只构建不渲染，发版前在 WSLg / Linux VM 跑 `pnpm tauri dev` 过 10 个页面（滚动条宽度、徽章底色、弹窗遮罩、皮肤画布）
+
+### 测试跨平台与路径约束（硬性）
+
+- **禁止用硬编码绝对路径定位夹具**：测试不得用 `C:\...`、`/home/...`、盘符、用户名去指向真实文件；路径解析类用例可以把这类字符串当纯输入。夹具一律 `tempfile::tempdir()` / `std::env::temp_dir()`，外部夹具用 `std::env::var_os("<ENV>")` 定位，缺失时 `eprintln!` 后跳过（不得 fail）。
+- **平台差异用编译期开关**：`cfg!(target_os = "windows")` / `#[cfg(target_os = ...)]` / `game::resource::extract::TARGET_OS`；测试数据（旧式 natives 的 map key 与 classifier、可执行文件名、路径分隔符）必须跟随当前平台，不得硬编码 Windows 形态。
+- **平台专属测试隔离**：只对特定 OS 有意义的用例用 `#[cfg(target_os = ...)]` 挂起，不进入其它平台的测试二进制；跨平台用例不得依赖固定目录层级。
+- **网络/外部夹具**：`#[ignore]` + 环境变量或 `tempfile` 下载目录门控；不提交用户绝对路径，不依赖固定盘符/目录结构。
+- **CI 边界**：`rust-cross`（Linux/macOS）只跑 clippy（见 `check.yml` 文件头）；新增/修改测试一律按「所有平台都会执行」处理，平台专属用例必须用 `#[cfg]` 隔离，不允许依赖只在 Windows CI 上跑。
 
 ## Known Debt（已知遗留，待处理）
 
