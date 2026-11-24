@@ -8,7 +8,7 @@ import AlertDialog from "../common/AlertDialog.vue";
 import { errMsg } from "../../utils/error";
 import { importLocalModpack } from "../../store/task/modpack";
 import {
-  dirs, activePath, dirsError, itemMenu,
+  dirs, activePath, dirsError, itemMenu, dirDisplayName,
   selectDir, openItemMenu, onWindowClick, closeItemMenu,
   menuOpen, menuRefresh, menuRemove, menuRename, confirmRename,
   renameDialog, renameInput, renameError,
@@ -53,7 +53,7 @@ async function menuImportPack() {
         @contextmenu.prevent="openItemMenu($event, d)"
       >
         <div class="vs-dir-main">
-          <div class="vs-dir-title">{{ d.name }}</div>
+          <div class="vs-dir-title">{{ dirDisplayName(d) }}</div>
           <div class="vs-dir-sub" v-tooltip="d.path">{{ d.path }}</div>
         </div>
         <button

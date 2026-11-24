@@ -488,6 +488,7 @@ export default {
         "Delete instance \"{name}\"? This removes the instance folder and all its files and cannot be undone.",
       vanilla: "Vanilla",
       nameRequired: "Name cannot be empty",
+      defaultDirName: "Current folder",
       deleting: "Deleting instance…",
       deleted: "Instance \"{name}\" deleted",
     },
