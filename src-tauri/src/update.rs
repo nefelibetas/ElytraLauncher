@@ -232,14 +232,14 @@ fn assets_from_json(json: &serde_json::Value) -> Vec<LauncherUpdateAsset> {
 fn fallback_assets(version: &str) -> Vec<LauncherUpdateAsset> {
     let base = format!("https://github.com/{REPO}/releases/download/v{version}");
     [
-        format!("Elytra-Launcher_{version}_windows-x64_setup.exe"),
-        format!("Elytra-Launcher_{version}_windows-x64.msi"),
-        format!("Elytra-Launcher_{version}_windows-x64_portable.zip"),
-        format!("Elytra-Launcher_{version}_macos-universal.dmg"),
-        format!("Elytra-Launcher_{version}_linux-x64.AppImage"),
-        format!("Elytra-Launcher_{version}_linux-x64.deb"),
-        format!("Elytra-Launcher_{version}_linux-x64.rpm"),
-        format!("Elytra-Launcher_{version}_linux-x64_portable.tar.gz"),
+        format!("Elytra-Launcher-{version}-windows-x64-setup.exe"),
+        format!("Elytra-Launcher-{version}-windows-x64.msi"),
+        format!("Elytra-Launcher-{version}-windows-x64-portable.zip"),
+        format!("Elytra-Launcher-{version}-macos-universal.dmg"),
+        format!("Elytra-Launcher-{version}-x86_64.AppImage"),
+        format!("Elytra-Launcher-{version}-x86_64.deb"),
+        format!("Elytra-Launcher-{version}-x86_64.rpm"),
+        format!("Elytra-Launcher-{version}-linux-x86_64-portable.tar.gz"),
     ]
     .into_iter()
     .map(|name| LauncherUpdateAsset {

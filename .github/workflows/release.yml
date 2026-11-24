@@ -161,11 +161,11 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           # 便携版：Tauri 不产出，取 cargo 的裸 exe（前端资源已内嵌；运行需系统有 WebView2）
           Compress-Archive -Path "src-tauri/target/release/Elytra Launcher.exe" `
-            -DestinationPath "artifacts/Elytra-Launcher_${V}_windows-x64_portable.zip"
+            -DestinationPath "artifacts/Elytra-Launcher-${V}-windows-x64-portable.zip"
           Copy-Item (Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe").FullName `
-            "artifacts/Elytra-Launcher_${V}_windows-x64_setup.exe"
+            "artifacts/Elytra-Launcher-${V}-windows-x64-setup.exe"
           Copy-Item (Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi").FullName `
-            "artifacts/Elytra-Launcher_${V}_windows-x64.msi"
+            "artifacts/Elytra-Launcher-${V}-windows-x64.msi"
 
       - name: 收集产物 → artifacts/（macOS）
         if: runner.os == 'macOS'
@@ -174,7 +174,7 @@ jobs:
           V="${{ steps.ver.outputs.version }}"
           mkdir -p artifacts
           cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg \
-            "artifacts/Elytra-Launcher_${V}_macos-universal.dmg"
+            "artifacts/Elytra-Launcher-${V}-macos-universal.dmg"
 
       - name: 收集产物 → artifacts/（Linux）
         if: runner.os == 'Linux'
@@ -182,11 +182,11 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           mkdir -p artifacts
-          cp src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/Elytra-Launcher_${V}_linux-x64.AppImage"
-          cp src-tauri/target/release/bundle/deb/*.deb           "artifacts/Elytra-Launcher_${V}_linux-x64.deb"
-          cp src-tauri/target/release/bundle/rpm/*.rpm           "artifacts/Elytra-Launcher_${V}_linux-x64.rpm"
+          cp src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/Elytra-Launcher-${V}-x86_64.AppImage"
+          cp src-tauri/target/release/bundle/deb/*.deb           "artifacts/Elytra-Launcher-${V}-x86_64.deb"
+          cp src-tauri/target/release/bundle/rpm/*.rpm           "artifacts/Elytra-Launcher-${V}-x86_64.rpm"
           # 便携版：裸二进制（依赖系统 webkit2gtk 等运行库，发行版无关）
-          tar -czf "artifacts/Elytra-Launcher_${V}_linux-x64_portable.tar.gz" \
+          tar -czf "artifacts/Elytra-Launcher-${V}-linux-x86_64-portable.tar.gz" \
             -C src-tauri/target/release "Elytra Launcher"
 
       - uses: actions/upload-artifact@v6
@@ -220,6 +220,18 @@ jobs:
           else
             echo "未找到 $NOTES，保留 --generate-notes 自动正文"
           fi
+      - name: 清理旧命名产物（同版本重跑）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          # 旧方案用下划线分隔；重跑同版本时上一轮可能已把旧名产物传进 Release
+          gh release view "$TAG" --json assets -q '.assets[].name' -R "$GITHUB_REPOSITORY" \
+            | grep -E '^Elytra-Launcher_' \
+            | while read -r name; do
+                gh release delete-asset "$TAG" "$name" -y -R "$GITHUB_REPOSITORY"
+              done || true
       - name: 生成并上传 release.json（静态更新清单）
         env:
           GH_TOKEN: ${{ github.token }}
