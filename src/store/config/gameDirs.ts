@@ -151,6 +151,11 @@ export async function confirmRename() {
     renameError.value = t("settings.version.select.nameRequired");
     return;
   }
+  // 默认目录预填的是译文；未改名时直接关闭，避免把 "Current folder" 之类的展示值持久化成名字。
+  if (target.name === DEFAULT_DIR_NAME && name === t("settings.version.select.defaultDirName")) {
+    renameDialog.value = false;
+    return;
+  }
   try {
     dirs.value = await invoke<GameDir[]>("rename_game_dir", {
       path: target.path,
