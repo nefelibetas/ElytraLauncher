@@ -588,9 +588,9 @@ fn forge_patch_client<'a>(
     })
 }
 
-/// processors 产物（data.PATCHED）的声明 sha1/size 是官方预构建口径，与本机生成字节必然不同；
-/// 落盘后把 version.json 与库清单改写为实际值，否则空 url 条目在下载阶段被判「内嵌库缺失」，
-/// 启动预检（size-first）与修复（sha1 强校验）也会因同一口径不一致失败。
+/// processors 产物（data.PATCHED）的声明 sha1/size 是官方构建机口径；本机生成的字节可能因运行
+/// 处理器的 JDK/zlib 环境不同而不同。落盘后把 version.json 与库清单改写为实际值，否则空 url
+/// 条目在下载阶段被判「内嵌库缺失」，启动预检（size-first）与修复（sha1 强校验）也会因同一口径失败。
 fn reconcile_patched_client(
     profile_json: &serde_json::Value,
     lib_dir: &Path,
@@ -649,6 +649,14 @@ fn reconcile_patched_client(
                 continue;
             };
             if a.get("path").and_then(|p| p.as_str()) == Some(rel.as_str()) {
+                let old_sha1 = a.get("sha1").and_then(|v| v.as_str()).unwrap_or("");
+                let old_size = a.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+                if old_sha1 != sha1.as_str() || old_size != size {
+                    // 官方安装器会校验该哈希；Elytra 以本机为准，留痕便于定位处理器环境差异。
+                    eprintln!(
+                        "[forge] patched client 声明 {old_sha1}/{old_size} → 实际 {sha1}/{size}"
+                    );
+                }
                 a["sha1"] = serde_json::Value::String(sha1.clone());
                 a["size"] = serde_json::Value::from(size);
                 changed = true;
