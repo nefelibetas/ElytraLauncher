@@ -98,10 +98,10 @@ jobs:
         with:
           install_args: "rust protoc"
       - name: 安装 7-Zip（easytier 构建依赖，macOS）
-        if: startsWith(matrix.os, 'macos')
+        if: runner.os == 'macOS'
         run: brew list p7zip >/dev/null 2>&1 || brew install p7zip
       - name: Linux 系统依赖（Tauri v2 前置 + kcp-sys 的 bindgen）
-        if: startsWith(matrix.os, 'ubuntu')
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -114,6 +114,6 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --lib -- -D warnings
       - name: cargo test（Linux 串行；macOS 只 clippy）
-        if: startsWith(matrix.os, 'ubuntu')
+        if: runner.os == 'Linux'
         working-directory: src-tauri
         run: cargo test --lib -- --test-threads=1

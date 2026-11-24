@@ -171,7 +171,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **平台差异用编译期开关**：`cfg!(target_os = "windows")` / `#[cfg(target_os = ...)]` / `game::resource::extract::TARGET_OS`；测试数据（旧式 natives 的 map key 与 classifier、可执行文件名、路径分隔符）必须跟随当前平台，不得硬编码 Windows 形态。
 - **平台专属测试隔离**：只对特定 OS 有意义的用例用 `#[cfg(target_os = ...)]` 挂起，不进入其它平台的测试二进制；跨平台用例不得依赖固定目录层级。
 - **网络/外部夹具**：`#[ignore]` + 环境变量或 `tempfile` 下载目录门控；不提交用户绝对路径，不依赖固定盘符/目录结构。
-- **CI 边界**：`rust-cross` 的 Linux job 跑 `cargo test --lib`，macOS 只跑 clippy（见 `check.yml` 文件头）；新增/修改测试必须能在 Linux 执行，平台专属用例用 `#[cfg]` 隔离，不依赖只在 Windows CI 上跑。
+- **CI 边界**：`rust-cross` 的 Linux job 跑 `cargo test --lib`，macOS 只跑 clippy（见 `check.yml` 文件头）；新增/修改测试必须能在 Linux 执行，平台专属用例用 `#[cfg]` 隔离，不依赖只在 Windows CI 上跑。平台判断用 `runner.os`，不写 `startsWith(matrix.os, ...)`，避免绑定 runner 镜像 label。
 
 ## Known Debt（已知遗留，待处理）
 

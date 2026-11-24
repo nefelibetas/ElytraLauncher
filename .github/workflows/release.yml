@@ -78,7 +78,7 @@ jobs:
           install_args: "node npm:pnpm rust protoc"
 
       - name: 确保 7-Zip 可用（easytier 构建依赖，Windows）
-        if: startsWith(matrix.os, 'windows')
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           if [ -f "/c/Program Files/7-Zip/7z.exe" ]; then
@@ -89,11 +89,11 @@ jobs:
           fi
 
       - name: 安装 7-Zip（easytier 构建依赖，macOS）
-        if: startsWith(matrix.os, 'macos')
+        if: runner.os == 'macOS'
         run: brew list p7zip >/dev/null 2>&1 || brew install p7zip
 
       - name: Linux 系统依赖（Tauri v2 前置 + kcp-sys 的 bindgen）
-        if: startsWith(matrix.os, 'ubuntu')
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           # 指示器库用 libappindicator3-dev（Tauri 官方 pipeline 示例即此名，已确认 jammy 存在）——
@@ -154,7 +154,7 @@ jobs:
         run: pnpm tauri build --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
 
       - name: 收集产物 → artifacts/（Windows）
-        if: startsWith(matrix.os, 'windows')
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $V = "${{ steps.ver.outputs.version }}"
@@ -168,7 +168,7 @@ jobs:
             "artifacts/Elytra-Launcher_${V}_windows-x64.msi"
 
       - name: 收集产物 → artifacts/（macOS）
-        if: startsWith(matrix.os, 'macos')
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
@@ -177,7 +177,7 @@ jobs:
             "artifacts/Elytra-Launcher_${V}_macos-universal.dmg"
 
       - name: 收集产物 → artifacts/（Linux）
-        if: startsWith(matrix.os, 'ubuntu')
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
