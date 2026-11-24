@@ -237,7 +237,7 @@ pub fn pre_launch_check(
     let vdir = mc_dir.join("versions").join(version_dir_name);
     let jar_ok = |p: &std::path::Path| p.metadata().map(|m| m.len() > 0).unwrap_or(false);
     // 与 classpath 用同一套解析规则（否则"检查通过但启动用错 jar"）
-    if super::args::resolve_client_jar(&vdir, version_dir_name)
+    if super::args::resolve_client_jar_inherited(&vdir, version_dir_name, mc_dir)
         .filter(|p| jar_ok(p))
         .is_none()
     {

@@ -7,6 +7,7 @@ use crate::game::resource::extract::{
     extract_jar, legacy_classifier_artifact, matches_rules, modern_native_matches,
     modern_natives_key, NativesKind, TARGET_OS,
 };
+use crate::game::version::dir::find_version_json;
 use crate::game::version::model::VersionJson;
 use crate::launcher::env::game_language_props;
 use crate::launcher::memory;
@@ -360,8 +361,8 @@ fn resolve_launch_paths(
         // 占位值仅供模板替换兜底（带 feature 的参数组已被过滤）
         WindowSize::Default => (DEFAULT_RESOLUTION_WIDTH, DEFAULT_RESOLUTION_HEIGHT, false),
     };
-    // JAR 文件名不一定等于目录名；与启动前完整性检查共用 resolve_client_jar，避免两处选中不同文件
-    let client_jar = resolve_client_jar(&version_dir, version_dir_name)
+    // JAR 文件名不一定等于目录名；与启动前完整性检查共用同一解析，避免两处选中不同文件
+    let client_jar = resolve_client_jar_inherited(&version_dir, version_dir_name, mc_dir)
         .unwrap_or_else(|| version_dir.join(format!("{}.{}", version_dir_name, EXT_JAR)));
     // classpath 分隔符按平台区分：Windows ';' / Unix ':'（硬编码 ';' → ClassNotFoundException；与 mod_loader/forge.rs 一致）
     let classpath_sep = if cfg!(windows) { ";" } else { ":" };
@@ -813,6 +814,33 @@ pub fn resolve_client_jar(version_dir: &Path, version_dir_name: &str) -> Option<
     jars.into_iter().next()
 }
 
+/// 直接父版本 id：读原始 JSON（Elytra 展开后的合并 JSON 已无 `inheritsFrom`）。
+fn direct_parent_id(mc_dir: &Path, version_dir_name: &str) -> Option<String> {
+    let vdir = mc_dir.join("versions").join(version_dir_name);
+    let path = find_version_json(&vdir, version_dir_name)?;
+    let text = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value
+        .get("inheritsFrom")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+/// client jar 解析：本版本目录优先，缺失/0 字节时回退直接父版本（官方安装器只写继承式 JSON，不在版本目录放 jar）。
+pub fn resolve_client_jar_inherited(
+    version_dir: &Path,
+    version_dir_name: &str,
+    mc_dir: &Path,
+) -> Option<PathBuf> {
+    let non_empty = |p: &PathBuf| p.metadata().map(|m| m.len() > 0).unwrap_or(false);
+    resolve_client_jar(version_dir, version_dir_name)
+        .filter(non_empty)
+        .or_else(|| {
+            let parent = direct_parent_id(mc_dir, version_dir_name)?;
+            resolve_client_jar(&mc_dir.join("versions").join(&parent), &parent).filter(non_empty)
+        })
+}
+
 struct JvmArgs<'a> {
     version_json: &'a VersionJson,
     natives_dir: &'a Path,
@@ -1050,6 +1078,38 @@ mod tests {
         assert!(
             resolve_client_jar(empty.path(), "v").is_none(),
             "无 jar 应返回 None"
+        );
+    }
+
+    /// 官方安装器的继承式版本目录只有 JSON（jar 在父版本），启动解析须回退父版本。
+    #[test]
+    fn resolve_client_jar_falls_back_to_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let mc = dir.path();
+        let parent_dir = mc.join("versions").join("1.20.4");
+        std::fs::create_dir_all(&parent_dir).unwrap();
+        std::fs::write(parent_dir.join("1.20.4.jar"), b"parent").unwrap();
+        let child_dir = mc.join("versions").join("1.20.4-forge-49.2.13");
+        std::fs::create_dir_all(&child_dir).unwrap();
+        std::fs::write(
+            child_dir.join("1.20.4-forge-49.2.13.json"),
+            r#"{"id":"1.20.4-forge-49.2.13","inheritsFrom":"1.20.4","mainClass":"x"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_client_jar_inherited(&child_dir, "1.20.4-forge-49.2.13", mc).unwrap(),
+            parent_dir.join("1.20.4.jar"),
+            "版本目录无 jar 时应回退父版本"
+        );
+        std::fs::write(child_dir.join("local.jar"), b"local").unwrap();
+        assert_eq!(
+            resolve_client_jar_inherited(&child_dir, "1.20.4-forge-49.2.13", mc).unwrap(),
+            child_dir.join("local.jar"),
+            "本地非空 jar 优先于父版本"
+        );
+        assert!(
+            resolve_client_jar_inherited(mc, "missing", mc).is_none(),
+            "无本地 jar 且无继承时返回 None"
         );
     }
 
