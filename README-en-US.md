@@ -183,7 +183,7 @@ See 📖 [AGENTS.md](AGENTS.md) (repository development guide).
 | macOS | Not notarized; first launch requires right-click → Open. macOS 13+. |
 | Windows uninstall | MSI does not remove `%APPDATA%\Elytra`; NSIS keeps app data by default; neither removes the game directory. |
 | Windows portable build | Requires the system WebView2 runtime (usually present on Windows 10/11). |
-| Linux | Built on Ubuntu 22.04 (glibc 2.35+); the portable build depends on the system WebKitGTK. |
+| Linux | Built on Ubuntu 22.04 (glibc 2.35+); the portable build depends on the system WebKitGTK. The tray icon is optional and requires `libappindicator-gtk3` or `libayatana-appindicator-gtk3`; when missing it degrades gracefully (closing the window quits the app). |
 | Skin wardrobe | Only available for Microsoft accounts; offline mode uses a fixed default skin. |
 | CurseForge | Requires a valid CurseForge API key; if the built-in key expires, enter your own key under Settings → Downloads → CurseForge key. The source is unavailable when no key is configured, while Modrinth keeps working. |
 | OptiFine | No public API; some versions/combinations may fail to download or install. |
