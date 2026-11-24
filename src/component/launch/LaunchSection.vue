@@ -46,7 +46,8 @@ function goSettings(tab: "launch" | "external") {
       <div class="launch-actions">
         <button class="secondary-btn" @click="router.push('/version-select')">
           <LayoutGrid :size="14" />
-          <span>{{ t("launch.action.selectVersion") }}</span>
+          <span class="label-full">{{ t("launch.action.selectVersion") }}</span>
+          <span class="label-short">{{ t("launch.action.selectVersionShort") }}</span>
         </button>
         <button class="secondary-btn" @click="router.push('/tools')">
           <Wrench :size="14" />
@@ -148,6 +149,21 @@ function goSettings(tab: "launch" | "external") {
 .secondary-btn:hover {
   border-color: var(--color-brand);
   color: var(--color-brand);
+}
+
+/* 标签放不下时省略而不是折行：折行会让图标留在行首、文字在剩余宽度内居中，两者脱开 */
+.secondary-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary-btn .label-short { display: none; }
+
+@media (max-width: 980px) {
+  .secondary-btn .label-full { display: none; }
+  .secondary-btn .label-short { display: inline; }
 }
 
 .lo-input {

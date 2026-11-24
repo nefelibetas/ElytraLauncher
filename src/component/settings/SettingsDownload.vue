@@ -317,13 +317,13 @@ function openCurseforgeConsole() {
   padding: 6px 0;
 }
 .dl-source-detail .dl-label {
-  flex-basis: 84px;
+  flex-basis: 130px;
   font-size: var(--fs-base);
   color: var(--text-secondary);
 }
 
 .dl-label {
-  flex: 0 0 112px;
+  flex: 0 0 160px;
   min-width: 0;
   font-size: var(--fs-md);
   font-weight: 600;

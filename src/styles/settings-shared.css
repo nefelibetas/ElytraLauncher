@@ -77,7 +77,7 @@
 
 .lo-label {
   flex: none;
-  width: 96px;
+  width: 150px;
   font-size: var(--fs-base);
   color: var(--text-secondary);
   white-space: nowrap;
