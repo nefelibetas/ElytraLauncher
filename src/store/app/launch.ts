@@ -281,6 +281,7 @@ export async function doLaunch(
       windowWait.cancel();
       return; // 已取消：后端已按取消终止该进程
     }
+    windowWait.start(); // 90s 窗口计时从进程拉起后开始，不占启动准备时间
     step("launch.steps.start", "done");
     step("launch.steps.window", "running");
     console.log("Game started, PID:", pid);
@@ -406,10 +407,11 @@ interface WindowWait {
   exited: { code: number | null; report: string | null; cause: string | null } | null;
 }
 
-/** 窗口等待句柄：ready 完成表示监听已注册（必须先于 spawn_game）；cancel 供 spawn 失败/取消路径清理。 */
+/** 窗口等待句柄：ready 表示监听已注册（必须先于 spawn_game）；start 在进程拉起后启动 90s 计时；cancel 供失败/取消清理。 */
 interface GameWindowWait {
   promise: Promise<WindowWait>;
   ready: Promise<void>;
+  start: () => void;
   cancel: () => void;
 }
 
@@ -464,6 +466,7 @@ function waitGameWindow(label: string): GameWindowWait {
   const promise = new Promise<WindowWait>((r) => {
     resolveWait = r;
   });
+  let timer: number | undefined;
   const finish = () => {
     if (settled) return;
     settled = true;
@@ -472,7 +475,10 @@ function waitGameWindow(label: string): GameWindowWait {
     for (const u of unlisteners) u();
     resolveWait({ shown: windowSeen, exited });
   };
-  const timer = setTimeout(finish, 90_000);
+  const start = () => {
+    if (settled || timer !== undefined) return;
+    timer = setTimeout(finish, 90_000);
+  };
   waitingLabel = label;
   const register = (u: () => void) => {
     if (settled) u();
@@ -491,7 +497,7 @@ function waitGameWindow(label: string): GameWindowWait {
       finish();
     }).then(register),
   ]).then(() => {});
-  return { promise, ready, cancel: finish };
+  return { promise, ready, start, cancel: finish };
 }
 
 /** 最近一次游戏日志（launcher/process.rs 落盘）。 */
