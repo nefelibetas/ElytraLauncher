@@ -92,6 +92,15 @@ fn scan_dir_and_children(
 }
 
 fn probe_home(dir: &Path, found: &mut Vec<JdkInfo>, seen: &mut HashSet<String>, only_64bit: bool) {
+    probe_one(dir, found, seen, only_64bit);
+    // macOS bundle 布局的 JAVA_HOME 在 Contents/Home，比扫描目录深两层，递归深度预算覆盖不到
+    let bundle_home = dir.join("Contents").join("Home");
+    if bundle_home.is_dir() {
+        probe_one(&bundle_home, found, seen, only_64bit);
+    }
+}
+
+fn probe_one(dir: &Path, found: &mut Vec<JdkInfo>, seen: &mut HashSet<String>, only_64bit: bool) {
     let Ok(env) = inspect(dir) else {
         return;
     };
@@ -283,6 +292,36 @@ fn env(key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    /// macOS bundle 布局的 JAVA_HOME 在第 5 层目录，深度 4 的递归须靠 bundle 探测命中。
+    #[cfg(unix)]
+    #[test]
+    fn scan_finds_macos_bundle_home_within_depth_budget() {
+        let base = std::env::temp_dir().join(format!("elytra-jdk-scan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let home = base.join("runtime/mac-os-arm64/java-21/jre.bundle/Contents/Home");
+        std::fs::create_dir_all(home.join("bin")).unwrap();
+        let java = home.join("bin/java");
+        std::fs::write(
+            &java,
+            "#!/bin/sh\necho 'openjdk version \"21.0.1\" 2023-10-17' >&2\necho 'OpenJDK 64-Bit Server VM' >&2\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&java, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mut found = Vec::new();
+        let mut seen = HashSet::new();
+        scan_dir_recursive(&base.join("runtime"), &mut found, &mut seen, true, 4);
+        assert!(
+            found
+                .iter()
+                .any(|j| j.path == home.to_string_lossy() && j.version == "21.0.1"),
+            "bundle 布局的 JAVA_HOME 应被深度 4 的扫描命中: {found:?}"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     #[test]
     fn parse_version_extracts_quoted_string() {
