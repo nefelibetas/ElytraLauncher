@@ -509,8 +509,15 @@ async fn install_mojang_runtime(
     }
 
     mark_bin_executable(&dest_root);
-    // 5. 校验：inspect 版本 + major 匹配
-    let info = scanner::inspect(&dest_root)
+    // 5. 校验：inspect 版本 + major 匹配；macOS bundle 的 JAVA_HOME 在 jre.bundle/Contents/Home
+    let home = find_java_home(&dest_root).ok_or_else(|| {
+        keyed_msg!(
+            "errors.jdk.install",
+            "安装后未找到 Java 可执行文件\n{}",
+            dest_root.display()
+        )
+    })?;
+    let info = scanner::inspect(&home)
         .map_err(common_err_ctx_key!("errors.jdk.install", "安装后校验失败"))?;
     if parse_java_major(&info.version) != Some(major) {
         bail_key!(
@@ -737,7 +744,8 @@ fn mark_bin_executable(root: &Path) {
     if bin.is_dir() {
         mark_dir(&bin);
     }
-    walk(root, 2);
+    // macOS bundle 的 bin 在第 4 层（root/{jdk-*|jre.bundle}/Contents/Home/bin）
+    walk(root, 4);
 }
 
 #[cfg(not(unix))]
@@ -952,6 +960,31 @@ fn file_sha256(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    /// macOS bundle 布局：bin/java 在第 4 层，补执行位与 JAVA_HOME 定位都必须覆盖。
+    #[cfg(unix)]
+    #[test]
+    fn bundle_layout_gets_exec_bit_and_java_home() {
+        let tmp = std::env::temp_dir().join(format!("elytra_bundle_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let home = tmp.join("jre.bundle/Contents/Home");
+        std::fs::create_dir_all(home.join("bin")).unwrap();
+        let bin = java_bin_path(&home);
+        std::fs::write(&bin, b"fake java").unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        mark_bin_executable(&tmp);
+        let mode = std::fs::metadata(&bin).unwrap().permissions().mode();
+        assert_ne!(mode & 0o111, 0, "bundle 深层 bin/java 必须补执行位");
+        assert_eq!(
+            find_java_home(&tmp).as_deref(),
+            Some(home.as_path()),
+            "应定位 bundle 内的 JAVA_HOME"
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
 
     #[test]
     fn component_mapping_matches_plan() {
