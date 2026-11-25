@@ -99,22 +99,22 @@ function openCurseforgeConsole() {
     <!-- 下载源（主开关）：切换三细分；明细区可展开单独调整 -->
     <div class="dl-row">
       <span class="dl-label">{{ t("settings.download.source") }}</span>
-      <div class="dl-field">
+      <div class="dl-field dl-field-inline">
         <DropSelect
           :model-value="dlSourceMaster"
           :options="sourceOptions"
           :placeholder="masterPlaceholder"
           @update:model-value="onMaster"
         />
+        <button
+          class="dl-detail-toggle"
+          :class="{ open: dlDetailOpen }"
+          v-tooltip="t('settings.download.adjustDetail')"
+          @click="dlDetailOpen = !dlDetailOpen"
+        >
+          <SlidersHorizontal :size="15" />
+        </button>
       </div>
-      <button
-        class="dl-detail-toggle"
-        :class="{ open: dlDetailOpen }"
-        v-tooltip="t('settings.download.adjustDetail')"
-        @click="dlDetailOpen = !dlDetailOpen"
-      >
-        <SlidersHorizontal :size="15" />
-      </button>
     </div>
 
     <!-- 细分源设置：三类各自独立 -->
@@ -230,39 +230,43 @@ function openCurseforgeConsole() {
     <!-- 最大线程数：官方源并发；镜像模式固定 16，隐藏该行 -->
     <div v-if="!concurrencyLocked" class="dl-row">
       <span class="dl-label">{{ t("settings.download.threads") }}</span>
-      <input
-        class="dl-range"
-        type="range"
-        min="1"
-        max="256"
-        step="1"
-        v-model.number="dlConcurrency"
-        :style="{ '--range-pct': (dlConcurrency / 256 * 100) + '%' }"
-        @input="saveDownloadConfig"
-        autocomplete="off"
-      />
-      <span class="dl-val">{{ dlConcurrency }} / 256</span>
+      <div class="dl-field dl-field-inline">
+        <input
+          class="dl-range"
+          type="range"
+          min="1"
+          max="256"
+          step="1"
+          v-model.number="dlConcurrency"
+          :style="{ '--range-pct': (dlConcurrency / 256 * 100) + '%' }"
+          @input="saveDownloadConfig"
+          autocomplete="off"
+        />
+        <span class="dl-val">{{ dlConcurrency }} / 256</span>
+      </div>
     </div>
-    <!-- 下载限速：0 = 不限制 -->
-    <div class="dl-row">
-      <span class="dl-label">{{ t("settings.download.speedLimit") }}</span>
-      <input
-        class="dl-range"
-        type="range"
-        min="0"
-        max="10240"
-        step="256"
-        v-model.number="maxSpeedKb"
-        :style="{ '--range-pct': (maxSpeedKb / 10240 * 100) + '%' }"
-        @input="saveDownloadConfig"
-        autocomplete="off"
-      />
-      <span class="dl-val">{{ dlMaxSpeed === 0 ? t('settings.download.unlimited') : fmtSpeed(dlMaxSpeed) }}</span>
-    </div>
-    <!-- Auto 模式：官方源优先+镜像降级；并发仅作用官方源，镜像固定 16 -->
+    <!-- Auto 模式：官方源优先+镜像降级；并发仅作用官方源，镜像固定 16。紧跟线程数行，避免误读为限速说明 -->
     <p v-if="dlGameMode === 'auto' && !concurrencyLocked" class="dl-note">
       {{ t("settings.download.autoNote") }}
     </p>
+    <!-- 下载限速：0 = 不限制 -->
+    <div class="dl-row">
+      <span class="dl-label">{{ t("settings.download.speedLimit") }}</span>
+      <div class="dl-field dl-field-inline">
+        <input
+          class="dl-range"
+          type="range"
+          min="0"
+          max="10240"
+          step="256"
+          v-model.number="maxSpeedKb"
+          :style="{ '--range-pct': (maxSpeedKb / 10240 * 100) + '%' }"
+          @input="saveDownloadConfig"
+          autocomplete="off"
+        />
+        <span class="dl-val">{{ dlMaxSpeed === 0 ? t('settings.download.unlimited') : fmtSpeed(dlMaxSpeed) }}</span>
+      </div>
+    </div>
 
     <div v-if="dlError" class="dl-error">{{ dlError }}</div>
   </div>
@@ -273,16 +277,48 @@ function openCurseforgeConsole() {
 </style>
 
 <style scoped>
+/* 两列网格共享标签列：列宽取当前语言最长标签（max-content），控件紧随其后。
+   顶层行用 display:contents 拆成网格项，纵向节奏由标签/控件的 margin 提供
+   （9+9=18），细分源块与提示各自跨列。 */
+.stg-card {
+  --dl-row-gap: 14px;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0 var(--dl-row-gap);
+  align-items: center;
+}
+.stg-card-hdr {
+  grid-column: 1 / -1;
+}
+/* stylelint-disable-next-line plugin/no-unsupported-browser-features -- 行盒仅做网格占位，标签/控件仍在无障碍树 */
+.stg-card > .dl-row { display: contents; }
+.stg-card > .dl-row > .dl-label,
+.stg-card > .dl-row > .dl-field {
+  margin: 9px 0;
+}
+
+/* 细分源独立成块：内部仍是固定 130px 标签列的行 */
+.dl-source-detail {
+  grid-column: 1 / -1;
+}
+
 .dl-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--dl-row-gap);
   padding: 9px 0;
 }
 
 .dl-field {
   flex: 1;
   min-width: 0;
+}
+/* 控件 + 尾部附加（展开按钮 / 数值）：两列，尾部贴右 */
+.dl-field-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--dl-row-gap);
 }
 
 .dl-detail-toggle {
@@ -323,7 +359,7 @@ function openCurseforgeConsole() {
 }
 
 .dl-label {
-  flex: 0 0 160px;
+  flex: none;
   min-width: 0;
   font-size: var(--fs-md);
   font-weight: 600;
@@ -338,7 +374,7 @@ function openCurseforgeConsole() {
 }
 
 .dl-range {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 .dl-val {
@@ -360,7 +396,7 @@ function openCurseforgeConsole() {
 .dl-key-input {
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: 34px;
   padding: 0 9px;
   font-size: var(--fs-sm);
   color: var(--text-primary);
@@ -375,7 +411,7 @@ function openCurseforgeConsole() {
 
 .dl-key-btn {
   flex: 0 0 auto;
-  height: 30px;
+  height: 34px;
   padding: 0 10px;
   font-size: var(--fs-sm);
   color: var(--text-primary);
@@ -397,10 +433,11 @@ function openCurseforgeConsole() {
 }
 
 .dl-key-hint {
+  grid-column: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: -2px 0 4px 126px;
+  margin: -2px 0 4px;
   font-size: var(--fs-2xs);
   line-height: 1.4;
   color: var(--text-secondary);
@@ -419,13 +456,15 @@ function openCurseforgeConsole() {
 }
 
 .dl-error {
+  grid-column: 1 / -1;
   margin-top: 8px;
   font-size: var(--fs-sm);
   color: var(--color-danger);
 }
 
 .dl-note {
-  margin: -4px 0 4px 126px;
+  grid-column: 2;
+  margin: -4px 0 4px;
   font-size: var(--fs-xs);
   color: var(--text-tertiary);
   line-height: 1.5;
