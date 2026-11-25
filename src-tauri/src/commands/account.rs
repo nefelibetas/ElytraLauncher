@@ -240,7 +240,7 @@ pub async fn external_login(
     external::save(&acc)?;
     // 确保 authlib-injector.jar 就绪（启动注入用）；失败不阻塞登录
     if let Err(e) = external::ensure_jar().await {
-        eprintln!("[external] authlib-injector 下载失败: {e}");
+        log::warn!("[external] authlib-injector 下载失败: {e}");
     }
     Ok(acc)
 }

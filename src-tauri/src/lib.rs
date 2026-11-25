@@ -235,6 +235,11 @@ fn set_tray_labels(app: tauri::AppHandle, show: String, quit: String) -> Result<
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 子进程不得弹控制台：GUI 进程先持有一个隐藏控制台，第三方库内部 spawn
+    // （easytier 的 cmd/ipconfig 等）才会继承它而非新建窗口
+    win_console::ensure_hidden_console();
+    // 启动器日志落盘（stdout/stderr → Elytra/launcher.log），先于 host 初始化以捕获其错误
+    elytra_domain::logging::init();
     if let Err(e) = host::init(host::Config {
         identity: host::Identity {
             app_version: constants::APP_VERSION.into(),
@@ -243,14 +248,9 @@ pub fn run() {
         },
         ..Default::default()
     }) {
-        eprintln!("host 初始化失败: {e}");
+        log::error!("host 初始化失败: {e}");
     }
     util::set_handle(tauri::async_runtime::handle().inner().clone());
-    // 子进程不得弹控制台：GUI 进程先持有一个隐藏控制台，第三方库内部 spawn
-    // （easytier 的 cmd/ipconfig 等）才会继承它而非新建窗口
-    win_console::ensure_hidden_console();
-    // 启动器日志落盘（stdout/stderr → Elytra/launcher.log）
-    elytra_domain::logging::init();
     // 任务数据库恢复与工具箱配置均为首次访问惰性初始化；窗口创建前不碰 SQLite/TOML。
 
     let app = tauri::Builder::default()
@@ -299,7 +299,7 @@ pub fn run() {
             });
             // 系统托盘：失败时仅记录，前端 has_tray 会回退为直接退出。
             if let Err(e) = init_tray_guarded(app) {
-                eprintln!("托盘初始化失败: {e}");
+                log::error!("托盘初始化失败: {e}");
             }
             // 游戏目录变化监听（激活目录的 versions/ 与聚焦版本子目录 → 事件推送）
             game::version::watch::init_with_sink(sink::sink(app.handle()));
