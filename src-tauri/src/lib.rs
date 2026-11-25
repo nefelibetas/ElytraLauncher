@@ -4,7 +4,6 @@ extern crate elytra_domain;
 
 mod commands;
 pub mod constants;
-mod logging;
 mod sink;
 pub mod ts_export;
 mod update;
@@ -251,7 +250,7 @@ pub fn run() {
     // （easytier 的 cmd/ipconfig 等）才会继承它而非新建窗口
     win_console::ensure_hidden_console();
     // 启动器日志落盘（stdout/stderr → Elytra/launcher.log）
-    logging::init();
+    elytra_domain::logging::init();
     // 任务数据库恢复与工具箱配置均为首次访问惰性初始化；窗口创建前不碰 SQLite/TOML。
 
     let app = tauri::Builder::default()
