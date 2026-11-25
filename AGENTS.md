@@ -7,10 +7,10 @@ Elytra Launcher — **Tauri v2（Rust 后端）+ Vue 3（TypeScript 前端）** 
 后端 **173 个 `#[tauri::command]`**（23 个模块），前端 **10 个页面**（`src/pages/`），无状态管理库（模块级 `reactive()`/`ref()` 单例）。
 
 > **核心已拆分**：领域实现位于 sibling 仓库 `C:\project\elytra-core`（Cargo workspace）：
-> `elytra-domain`（auth/config/downloader/game/jdk/launcher/persist/server_status/task/tooldl/util）、
+> `elytra-domain`（auth/config/downloader/game/jdk/launcher/logging/persist/server_status/task/tooldl/util）、
 > `elytra-map`（`map/` + 调色素材）、`elytra-seedmap`（`seedmap/` + cubiomes）、`elytra-online`（`online/`）、
 > `elytra-dto`（前端 TS 契约镜像，唯一 `ts-rs` 消费者，非 default-members）。
-> 本仓 `src-tauri/src` 只剩 `commands/`、`lib.rs`、`window_state.rs`、`update.rs`、`ts_export.rs`、`constants.rs`、`sink.rs`、`logging.rs`、`win_console.rs`。
+> 本仓 `src-tauri/src` 只剩 `commands/`、`lib.rs`、`window_state.rs`、`update.rs`、`ts_export.rs`、`constants.rs`、`sink.rs`、`win_console.rs`。
 > 领域路径映射：原 `src-tauri/src/<core 模块>` → `elytra-core/crates/domain/src/<模块>`；`map` → `crates/map/src`；`seedmap` → `crates/seedmap/src`；`online` → `crates/online/src`；`data/wiki_entries.txt` → `crates/domain/src/data`；`assets/` → `crates/map/assets`；`vendor/cubiomes` → `crates/seedmap/vendor`。
 > core 通过 `host::Config` 注入版本/配置目录/CurseForge key，通过 `util::set_handle` 注入 tokio runtime，通过 `task::EventSink` 接收事件；错误统一 `elytra_domain::error::CoreError`（`Display` 仍是 `@i18n` 协议，Tauri 序列化为字符串）。
 
