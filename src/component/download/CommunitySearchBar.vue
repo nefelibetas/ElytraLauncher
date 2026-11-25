@@ -193,10 +193,12 @@ watch(
   transition: border-color var(--dur-fast);
 }
 .cs-input:focus { border-color: var(--color-brand); }
-/* DropSelect 填充 flex 行（class 落根 .ds） */
+/* DropSelect 填充 flex 行（class 落根 .ds）。
+   min-width 必须为 0：四字段行在窄窗口下减去标签/间距后每项不足 120px，
+   固定下限会让整行溢出并被 .card-body 的 overflow:hidden 裁掉最后一列的右边框。 */
 .cs-form-row .cs-fill {
-  flex: 1;
-  min-width: 120px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .cs-form-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .cs-btn {
