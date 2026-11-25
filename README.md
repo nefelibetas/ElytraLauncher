@@ -22,6 +22,8 @@
 
 ---
 
+> **项目结构**：核心领域实现（下载 / 装配 / 任务 / 账号 / JDK / 联机 / 地图 / 种子预览）位于独立仓库 [`ElytraLauncher/elytra-core`](https://github.com/ElytraLauncher/elytra-core)；本仓库只保留 Tauri 外壳、命令层与 Vue 前端。前端 TS 契约由 `elytra-dto` 生成。
+
 ## ✨ 功能
 
 ### 📦 下载与安装
