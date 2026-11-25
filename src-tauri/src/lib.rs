@@ -510,7 +510,7 @@ mod tests {
     fn guard_tray_panic_converts_str_payload() {
         let err = guard_tray_panic(|| panic!("libappindicator missing")).unwrap_err();
         assert_eq!(
-            err,
+            err.to_string(),
             "@i18n:errors.tray.initPanic\n托盘初始化 panic\nlibappindicator missing"
         );
     }
@@ -519,7 +519,7 @@ mod tests {
     fn guard_tray_panic_converts_string_payload() {
         let err = guard_tray_panic(|| panic!("{}", "dynamic detail")).unwrap_err();
         assert_eq!(
-            err,
+            err.to_string(),
             "@i18n:errors.tray.initPanic\n托盘初始化 panic\ndynamic detail"
         );
     }
@@ -528,8 +528,10 @@ mod tests {
     fn guard_tray_panic_passes_through_results() {
         assert_eq!(guard_tray_panic(|| Ok(())).unwrap(), ());
         assert_eq!(
-            guard_tray_panic(|| Err("plain".into())),
-            Err("plain".into())
+            guard_tray_panic(|| Err("plain".into()))
+                .unwrap_err()
+                .to_string(),
+            "plain"
         );
     }
 }

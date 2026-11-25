@@ -84,7 +84,18 @@ jobs:
         run: cargo clippy --lib -- -D warnings
       - name: cargo test（串行：persist 共用 Settings.toml、网络测试抖动）
         working-directory: src-tauri
-        run: cargo test --lib -- --test-threads=1
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --lib -- --test-threads=1 2>&1 | tee app-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "### App test failure"
+              grep -E 'FAILED|panicked at|test result|error\[|error:' app-test.log | tail -80
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
       - name: core clippy（零警告）
         working-directory: ../elytra-core
         run: cargo clippy --workspace -- -D warnings
