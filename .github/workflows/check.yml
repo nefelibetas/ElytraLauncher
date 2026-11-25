@@ -23,10 +23,7 @@ jobs:
         shell: bash
         env:
           CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: |
-          CORE_REF=$(cat .github/elytra-core-ref)
-          git clone "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
-          git -C ../elytra-core checkout "$CORE_REF"
+        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "node npm:pnpm rust"
@@ -66,10 +63,7 @@ jobs:
         shell: bash
         env:
           CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: |
-          CORE_REF=$(cat .github/elytra-core-ref)
-          git clone "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
-          git -C ../elytra-core checkout "$CORE_REF"
+        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "rust protoc"
@@ -126,10 +120,7 @@ jobs:
         shell: bash
         env:
           CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: |
-          CORE_REF=$(cat .github/elytra-core-ref)
-          git clone "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
-          git -C ../elytra-core checkout "$CORE_REF"
+        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "rust protoc"
