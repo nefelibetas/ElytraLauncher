@@ -2,7 +2,7 @@
 import type { AutoTaskPhase } from "./AutoTaskPhase";
 
 /**
- * 进度事件载荷（`auto-task-progress`；高频，按 version_id 合并最新帧）。
+ * 进度事件载荷（`auto-task-progress`）。
  */
 export type AutoTaskProgress = { version_id: string, phase: AutoTaskPhase, 
 /**

@@ -72,6 +72,11 @@ jobs:
       APPLE_SIGNING_IDENTITY: '-'
     steps:
       - uses: actions/checkout@v5
+      - name: Checkout core
+        shell: bash
+        env:
+          CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
+        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
 
       - uses: jdx/mise-action@v5
         with:

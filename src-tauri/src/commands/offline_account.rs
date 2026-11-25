@@ -1,4 +1,5 @@
-use crate::auth;
+use elytra_domain::auth;
+use elytra_domain::error::CoreError;
 
 /// 读取最后一次使用的离线用户名（历史列表末尾；兼容旧版单值键）。
 #[tauri::command]
@@ -7,7 +8,7 @@ pub fn get_last_offline_username() -> String {
 }
 
 #[tauri::command]
-pub fn save_last_offline_username(username: String) -> Result<(), String> {
+pub fn save_last_offline_username(username: String) -> Result<(), CoreError> {
     save_offline_account(username)
 }
 
@@ -19,13 +20,13 @@ pub fn get_offline_accounts() -> Vec<String> {
 
 /// 保存/更新离线用户名到历史列表（输入即存；已存在则移到末尾，空名忽略）。
 #[tauri::command]
-pub fn save_offline_account(username: String) -> Result<(), String> {
+pub fn save_offline_account(username: String) -> Result<(), CoreError> {
     auth::offline::save(&username)
         .map_err(common_err_ctx_key!("errors.config.write", "保存配置失败"))
 }
 
 #[tauri::command]
-pub fn remove_offline_account(username: String) -> Result<(), String> {
+pub fn remove_offline_account(username: String) -> Result<(), CoreError> {
     auth::offline::remove(&username)
         .map_err(common_err_ctx_key!("errors.config.write", "保存配置失败"))
 }

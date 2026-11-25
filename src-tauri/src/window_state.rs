@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-use crate::util::config_dir;
+use elytra_domain::util::config_dir;
 
 const WINDOW_LABEL: &str = "main";
 const FILE_NAME: &str = "window-state.json";

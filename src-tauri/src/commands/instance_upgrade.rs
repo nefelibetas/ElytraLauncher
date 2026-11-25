@@ -1,17 +1,18 @@
 //! 实例升级命令：备份 / 回滚 / 提交与 Mod 兼容性检查。
 
-use crate::game::updates::{check_upgrade_compat, scan_mod_files, UpgradeReport};
-use crate::game::version::dir::version_dir_path;
-use crate::game::version::upgrade::{
+use elytra_domain::error::CoreError;
+use elytra_domain::game::updates::{check_upgrade_compat, scan_mod_files, UpgradeReport};
+use elytra_domain::game::version::dir::version_dir_path;
+use elytra_domain::game::version::upgrade::{
     self, InstanceUpgradeInfo, UpgradeCommitResult, UpgradeRollbackResult, UpgradeTarget,
 };
-use crate::util::is_simple_name;
+use elytra_domain::util::is_simple_name;
 
 /// 当前实例的 MC / Loader / Mod 数与未完成的升级。
 #[tauri::command]
 pub async fn get_instance_upgrade_info(
     version_dir_name: String,
-) -> Result<InstanceUpgradeInfo, String> {
+) -> Result<InstanceUpgradeInfo, CoreError> {
     tauri::async_runtime::spawn_blocking(move || upgrade::upgrade_info(&version_dir_name))
         .await
         .map_err(common_err_ctx_key!(
@@ -27,7 +28,7 @@ pub async fn check_instance_upgrade(
     target_mc: String,
     target_loader: String,
     target_loader_version: Option<String>,
-) -> Result<UpgradeReport, String> {
+) -> Result<UpgradeReport, CoreError> {
     if !is_simple_name(&version_dir_name) {
         bail_key!("errors.version.badName", "版本名非法");
     }
@@ -51,7 +52,7 @@ pub async fn prepare_instance_upgrade(
     target_loader: String,
     target_loader_version: Option<String>,
     disable_mods: Vec<String>,
-) -> Result<InstanceUpgradeInfo, String> {
+) -> Result<InstanceUpgradeInfo, CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let target = UpgradeTarget {
             mc_version: target_mc,
@@ -69,7 +70,7 @@ pub async fn prepare_instance_upgrade(
 
 /// 安装任务成功结束后标记可提交。
 #[tauri::command]
-pub async fn mark_instance_upgrade_ready(version_dir_name: String) -> Result<(), String> {
+pub async fn mark_instance_upgrade_ready(version_dir_name: String) -> Result<(), CoreError> {
     tauri::async_runtime::spawn_blocking(move || upgrade::mark_ready(&version_dir_name))
         .await
         .map_err(common_err_ctx_key!("errors.file.write", "写入升级标记失败"))?
@@ -79,7 +80,7 @@ pub async fn mark_instance_upgrade_ready(version_dir_name: String) -> Result<(),
 #[tauri::command]
 pub async fn rollback_instance_upgrade(
     version_dir_name: String,
-) -> Result<UpgradeRollbackResult, String> {
+) -> Result<UpgradeRollbackResult, CoreError> {
     tauri::async_runtime::spawn_blocking(move || upgrade::rollback(&version_dir_name))
         .await
         .map_err(common_err_ctx_key!("errors.file.delete", "回滚升级失败"))?
@@ -89,7 +90,7 @@ pub async fn rollback_instance_upgrade(
 #[tauri::command]
 pub async fn commit_instance_upgrade(
     version_dir_name: String,
-) -> Result<UpgradeCommitResult, String> {
+) -> Result<UpgradeCommitResult, CoreError> {
     tauri::async_runtime::spawn_blocking(move || upgrade::commit(&version_dir_name))
         .await
         .map_err(common_err_ctx_key!("errors.file.write", "完成升级失败"))?

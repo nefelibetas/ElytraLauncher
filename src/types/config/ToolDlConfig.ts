@@ -5,7 +5,7 @@
  */
 export type ToolDlConfig = { 
 /**
- * 保存目录（空 = 尚未选择，此时不允许开始下载）
+ * 保存目录（空 = 尚未选择）
  */
 save_dir: string, 
 /**

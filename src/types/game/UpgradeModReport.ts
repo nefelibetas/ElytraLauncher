@@ -14,7 +14,7 @@ current_version: string | null,
  */
 compatible_version: string | null, status: UpgradeModStatus, 
 /**
- * 语言无关的原因码；前端按 `settings.version.setup.upgrade.reasons.<code>` 翻译。
+ * 语言无关的原因码。
  */
 reason: string | null, 
 /**

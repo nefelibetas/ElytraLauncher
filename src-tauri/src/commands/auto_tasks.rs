@@ -1,17 +1,18 @@
+use elytra_domain::error::CoreError;
 use std::path::PathBuf;
 
 use tauri::AppHandle;
 
-use crate::launcher::auto_tasks::ctx::AutoTaskCtx;
-use crate::launcher::auto_tasks::model::{AutoTaskPhase, AutoTasks};
-use crate::launcher::auto_tasks::runner;
-use crate::persist;
-use crate::persist::instance;
-use crate::util;
+use crate::sink::sink;
+use elytra_domain::launcher::auto_tasks::ctx::AutoTaskCtx;
+use elytra_domain::launcher::auto_tasks::model::{AutoTaskPhase, AutoTasks};
+use elytra_domain::launcher::auto_tasks::runner;
+use elytra_domain::persist;
+use elytra_domain::persist::instance;
+use elytra_domain::util;
 
 /// 实例自动任务状态：`global` 为默认值/"自定义"预填；`instance` 为 Some 时该实例采用自己的。
-#[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export_to = "launcher/")]
+#[derive(serde::Serialize)]
 pub struct InstanceAutoTasksState {
     pub global: AutoTasks,
     pub instance: Option<AutoTasks>,
@@ -34,13 +35,13 @@ pub fn get_instance_auto_tasks(version_id: String) -> InstanceAutoTasksState {
 pub fn save_instance_auto_tasks(
     version_id: String,
     tasks: Option<AutoTasks>,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     instance::write_auto_tasks(&mc_dir(), &version_id, tasks.as_ref())
 }
 
 /// 保存全局自动任务（读改写整个 `launcher` section，避免前端回传整份 LaunchOptions）。
 #[tauri::command]
-pub fn save_global_auto_tasks(tasks: AutoTasks) -> Result<(), String> {
+pub fn save_global_auto_tasks(tasks: AutoTasks) -> Result<(), CoreError> {
     let mut options = persist::launch_options();
     options.auto_tasks = tasks;
     persist::save_launch_options(&options)
@@ -53,9 +54,9 @@ pub async fn run_auto_tasks_now(
     app: AppHandle,
     version_id: String,
     phase: String,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     let phase = AutoTaskPhase::parse(&phase)
-        .ok_or_else(|| keyed_msg!("errors.autoTasks.unknownPhase", "未知自动任务阶段\n{phase}"))?;
+        .ok_or_else(|| err_keyed!("errors.autoTasks.unknownPhase", "未知自动任务阶段\n{phase}"))?;
     let root = mc_dir();
     let game_dir = root.join("versions").join(&version_id);
     if !game_dir.is_dir() {
@@ -78,7 +79,7 @@ pub async fn run_auto_tasks_now(
             exit_code: None,
             crash_report: None,
         };
-        let failures = runner::run_auto_tasks(&app, &ctx, phase, &auto_tasks);
+        let failures = runner::run_auto_tasks(sink(&app).as_ref(), &ctx, phase, &auto_tasks);
         if failures.is_empty() {
             return Ok(());
         }
@@ -87,7 +88,7 @@ pub async fn run_auto_tasks_now(
             .map(|f| format!("[{}] {}", f.action, f.message))
             .collect::<Vec<_>>()
             .join("\n");
-        Err(keyed_msg!(
+        Err(err_keyed!(
             "errors.autoTasks.runFailed",
             "自动任务执行失败\n{detail}"
         ))

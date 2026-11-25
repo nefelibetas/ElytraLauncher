@@ -1,14 +1,15 @@
 //! 启动器自身更新：读取 GitHub Releases 的 latest，返回版本、说明与可下载文件清单；
 //! 下载由前端交给工具箱下载器（`tooldl`）执行，本模块不落盘、不运行安装包。
 
+use elytra_domain::error::CoreError;
 use std::time::Duration;
 
 use serde::Serialize;
 
 use crate::constants::APP_VERSION;
-use crate::downloader::fetcher::http;
-use crate::persist;
-use crate::util::downloads_dir;
+use elytra_domain::downloader::fetcher::http;
+use elytra_domain::persist;
+use elytra_domain::util::downloads_dir;
 
 const REPO: &str = "nefelibetas/ElytraLauncher";
 const RELEASE_MANIFEST_URL: &str =
@@ -25,12 +26,10 @@ pub struct UpdateInfo {
 }
 
 /// Release 中的一个可下载文件。
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export_to = "update/")]
+#[derive(Debug, Clone, Serialize)]
 pub struct LauncherUpdateAsset {
     pub name: String,
     pub url: String,
-    #[ts(type = "number")]
     pub size: u64,
     /// windows / macos / linux / other
     pub platform: String,
@@ -43,8 +42,7 @@ pub struct LauncherUpdateAsset {
 }
 
 /// 下载更新对话框的完整数据：平台信息、文件清单与下载目录。
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export_to = "update/")]
+#[derive(Debug, Clone, Serialize)]
 pub struct LauncherUpdatePlan {
     pub version: String,
     pub release_url: String,
@@ -81,21 +79,21 @@ struct ManifestAsset {
 }
 
 /// 查询最新正式 Release：优先取发布产物中的静态 release.json；缺失/损坏时回退 GitHub API。
-pub async fn check() -> Result<Option<UpdateInfo>, String> {
+pub async fn check() -> Result<Option<UpdateInfo>, CoreError> {
     if let Ok(Some(info)) = check_static_manifest().await {
         return Ok(Some(info));
     }
     check_github_api().await
 }
 
-async fn check_static_manifest() -> Result<Option<UpdateInfo>, String> {
+async fn check_static_manifest() -> Result<Option<UpdateInfo>, CoreError> {
     let Some(manifest) = fetch_static_manifest().await? else {
         return Ok(None);
     };
     Ok(Some(manifest_to_info(manifest)?))
 }
 
-async fn fetch_static_manifest() -> Result<Option<ReleaseManifest>, String> {
+async fn fetch_static_manifest() -> Result<Option<ReleaseManifest>, CoreError> {
     let response = http()
         .get(RELEASE_MANIFEST_URL)
         .send()
@@ -113,10 +111,10 @@ async fn fetch_static_manifest() -> Result<Option<ReleaseManifest>, String> {
     Ok(Some(manifest))
 }
 
-fn manifest_to_info(manifest: ReleaseManifest) -> Result<UpdateInfo, String> {
+fn manifest_to_info(manifest: ReleaseManifest) -> Result<UpdateInfo, CoreError> {
     let latest_version = normalize_version(&manifest.version);
     if latest_version.is_empty() {
-        return Err(keyed_msg!(
+        return Err(err_keyed!(
             "errors.update.failed",
             "检查更新失败\n发布信息缺少版本号"
         ));
@@ -137,7 +135,7 @@ fn manifest_to_info(manifest: ReleaseManifest) -> Result<UpdateInfo, String> {
 }
 
 /// 下载更新对话框数据：release.json 文件清单（主）+ GitHub API（清单缺失时兜底）+ 产物命名兜底。
-pub async fn download_plan() -> Result<LauncherUpdatePlan, String> {
+pub async fn download_plan() -> Result<LauncherUpdatePlan, CoreError> {
     let (version, release_url, mut assets) =
         if let Some(manifest) = fetch_static_manifest().await.ok().flatten() {
             let ReleaseManifest {
@@ -173,7 +171,7 @@ pub async fn download_plan() -> Result<LauncherUpdatePlan, String> {
                 .ok()
                 .and_then(Result::ok)
                 .flatten()
-                .ok_or_else(|| keyed_msg!("errors.update.noRelease", "未找到可下载的发布版本"))?;
+                .ok_or_else(|| err_keyed!("errors.update.noRelease", "未找到可下载的发布版本"))?;
             let version = api
                 .get("tag_name")
                 .and_then(|v| v.as_str())
@@ -423,7 +421,7 @@ fn sort_assets(assets: &mut [LauncherUpdateAsset], platform: &str, arch: &str) {
     });
 }
 
-async fn fetch_latest_release() -> Result<Option<serde_json::Value>, String> {
+async fn fetch_latest_release() -> Result<Option<serde_json::Value>, CoreError> {
     let url = format!("https://api.github.com/repos/{REPO}/releases/latest");
     let response = http()
         .get(url)
@@ -465,7 +463,7 @@ async fn fetch_latest_release() -> Result<Option<serde_json::Value>, String> {
     Ok(Some(json))
 }
 
-async fn check_github_api() -> Result<Option<UpdateInfo>, String> {
+async fn check_github_api() -> Result<Option<UpdateInfo>, CoreError> {
     let Some(json) = fetch_latest_release().await? else {
         return Ok(None);
     };

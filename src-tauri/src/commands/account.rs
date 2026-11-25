@@ -1,19 +1,21 @@
 //! 账号与皮肤命令：逻辑在 auth/。
 
+use elytra_domain::error::CoreError;
 use std::sync::Arc;
 
 use base64::Engine;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::auth::account;
-use crate::auth::external;
-use crate::auth::microsoft;
-use crate::auth::model;
-use crate::auth::mojang;
-use crate::constants;
-use crate::persist;
-use crate::task::EventSink;
+use crate::sink::sink;
+use elytra_domain::auth::account;
+use elytra_domain::auth::external;
+use elytra_domain::auth::microsoft;
+use elytra_domain::auth::model;
+use elytra_domain::auth::mojang;
+use elytra_domain::constants;
+use elytra_domain::persist;
+use elytra_domain::task::EventSink;
 
 /// 进行中的登录回调任务（取消时 abort 释放回调端口）。
 static LOGIN_TASK: std::sync::LazyLock<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>> =
@@ -21,7 +23,7 @@ static LOGIN_TASK: std::sync::LazyLock<parking_lot::Mutex<Option<tokio::task::Jo
 
 /// 启动 Microsoft 登录，返回授权 URL；结果经 `ms-login-complete` 事件推送。
 #[tauri::command]
-pub async fn start_ms_login(app: AppHandle) -> Result<String, String> {
+pub async fn start_ms_login(app: AppHandle) -> Result<String, CoreError> {
     // 释放端口，保证可重入
     if let Some(h) = LOGIN_TASK.lock().take() {
         h.abort();
@@ -41,7 +43,7 @@ pub async fn start_ms_login(app: AppHandle) -> Result<String, String> {
     let auth_url = microsoft::build_auth_url(&state, &pkce).map_err(|e| e.to_string())?;
 
     // 含超时；完成后端口自动释放
-    let sink: Arc<dyn EventSink> = Arc::new(app.clone());
+    let sink: Arc<dyn EventSink> = sink(&app);
     let handle = tokio::task::spawn(async move {
         account::wait_callback(sink, listener, &state, &pkce).await;
     });
@@ -74,17 +76,17 @@ pub fn get_ms_accounts() -> Vec<model::MsAccount> {
 
 /// 移除指定 uuid 账号（连同 refresh_token）；删除当前账号后回退上一账号。
 #[tauri::command]
-pub fn remove_ms_account(uuid: String) -> Result<(), String> {
+pub fn remove_ms_account(uuid: String) -> Result<(), CoreError> {
     model::remove(&uuid)
 }
 
 /// 切换当前正版账号：静默刷新后置为当前；失效返回错误。
 #[tauri::command]
-pub async fn switch_ms_account(uuid: String) -> Result<model::MsAccount, String> {
+pub async fn switch_ms_account(uuid: String) -> Result<model::MsAccount, CoreError> {
     let account = model::read_all()
         .into_iter()
         .find(|a| a.uuid == uuid)
-        .ok_or_else(|| keyed_msg!("errors.account.notInList", "该账号不在列表中，请重新登录"))?;
+        .ok_or_else(|| err_keyed!("errors.account.notInList", "该账号不在列表中，请重新登录"))?;
     let refreshed = microsoft::refresh_login(&account)
         .await
         .map_err(|e| e.to_string())?;
@@ -94,32 +96,32 @@ pub async fn switch_ms_account(uuid: String) -> Result<model::MsAccount, String>
 
 /// 内置默认皮肤（Steve / Alex）base64：编译期内置，不依赖已下载版本。
 #[tauri::command]
-pub fn fetch_default_skin(skin: String) -> Result<String, String> {
+pub fn fetch_default_skin(skin: String) -> Result<String, CoreError> {
     let data: &[u8] = match skin.as_str() {
         "steve" => include_bytes!("../../resources/steve.png"),
         "alex" => include_bytes!("../../resources/alex.png"),
-        _ => return Err(keyed_msg!("errors.account.unknownSkinType", "未知皮肤类型")),
+        _ => return Err(err_keyed!("errors.account.unknownSkinType", "未知皮肤类型")),
     };
     Ok(base64::engine::general_purpose::STANDARD.encode(data))
 }
 
 /// 头像用皮肤 PNG（base64）：官方失败自动回退 minotar。
-async fn fetch_skin_for_avatar(uuid: String) -> Result<String, String> {
+async fn fetch_skin_for_avatar(uuid: String) -> Result<String, CoreError> {
     let (url, _model) = mojang::skin_profile_with_fallback(&uuid).await?;
     account::fetch_b64(&url, "下载皮肤").await
 }
 
 /// 保存用皮肤 PNG（base64）：仅官方直连，失败如实报错。
-async fn fetch_skin_official(uuid: String) -> Result<String, String> {
+async fn fetch_skin_official(uuid: String) -> Result<String, CoreError> {
     let textures = mojang::profile_textures(&uuid).await?;
     let skin_url = textures["textures"]["SKIN"]["url"]
         .as_str()
-        .ok_or_else(|| keyed_msg!("errors.account.noSkin", "该账号未设置皮肤"))?;
+        .ok_or_else(|| err_keyed!("errors.account.noSkin", "该账号未设置皮肤"))?;
     account::fetch_b64(skin_url, "下载皮肤").await
 }
 
 #[tauri::command]
-pub async fn fetch_account_skin(uuid: String) -> Result<String, String> {
+pub async fn fetch_account_skin(uuid: String) -> Result<String, CoreError> {
     fetch_skin_for_avatar(uuid).await
 }
 
@@ -132,14 +134,14 @@ pub struct SkinProfile {
 
 /// 正版皮肤 PNG + 模型类型，一次 IPC 供 3D 头像渲染；官方失败自动回退 minotar。
 #[tauri::command]
-pub async fn fetch_account_skin_profile(uuid: String) -> Result<SkinProfile, String> {
+pub async fn fetch_account_skin_profile(uuid: String) -> Result<SkinProfile, CoreError> {
     let (url, model) = mojang::skin_profile_with_fallback(&uuid).await?;
     let b64 = account::fetch_b64(&url, "下载皮肤").await?;
     Ok(SkinProfile { skin: b64, model })
 }
 
 #[tauri::command]
-pub async fn fetch_external_skin(api_url: String, uuid: String) -> Result<String, String> {
+pub async fn fetch_external_skin(api_url: String, uuid: String) -> Result<String, CoreError> {
     let (url, _model) = external::external_skin_info(&api_url, &uuid).await?;
     account::fetch_b64(&url, "下载皮肤").await
 }
@@ -148,13 +150,13 @@ pub async fn fetch_external_skin(api_url: String, uuid: String) -> Result<String
 pub async fn fetch_external_skin_profile(
     api_url: String,
     uuid: String,
-) -> Result<SkinProfile, String> {
+) -> Result<SkinProfile, CoreError> {
     let (url, model) = external::external_skin_info(&api_url, &uuid).await?;
     let b64 = account::fetch_b64(&url, "下载皮肤").await?;
     Ok(SkinProfile { skin: b64, model })
 }
 
-async fn write_b64_file(b64: &str, path: &str) -> Result<(), String> {
+async fn write_b64_file(b64: &str, path: &str) -> Result<(), CoreError> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64)
         .map_err(common_err_ctx_key!("errors.skin.load", "皮肤数据解码失败"))?;
@@ -164,20 +166,24 @@ async fn write_b64_file(b64: &str, path: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn save_external_skin(api_url: String, uuid: String, path: String) -> Result<(), String> {
+pub async fn save_external_skin(
+    api_url: String,
+    uuid: String,
+    path: String,
+) -> Result<(), CoreError> {
     let b64 = fetch_external_skin(api_url, uuid).await?;
     write_b64_file(&b64, &path).await
 }
 
 #[tauri::command]
-pub async fn save_skin(uuid: String, path: String) -> Result<(), String> {
+pub async fn save_skin(uuid: String, path: String) -> Result<(), CoreError> {
     let b64 = fetch_skin_official(uuid).await?;
     write_b64_file(&b64, &path).await
 }
 
 /// 上传本地皮肤到官方账号；token 由后端取并自动刷新。
 #[tauri::command]
-pub async fn upload_skin_file(file_path: String, variant: String) -> Result<(), String> {
+pub async fn upload_skin_file(file_path: String, variant: String) -> Result<(), CoreError> {
     if !matches!(variant.as_str(), "CLASSIC" | "SLIM") {
         bail_key!("errors.account.unknownSkinModel", "未知皮肤模型\n{variant}");
     }
@@ -186,33 +192,33 @@ pub async fn upload_skin_file(file_path: String, variant: String) -> Result<(), 
 }
 
 #[tauri::command]
-pub async fn fetch_capes() -> Result<Vec<account::CapeInfo>, String> {
+pub async fn fetch_capes() -> Result<Vec<account::CapeInfo>, CoreError> {
     let token = account::valid_access_token().await?;
     account::fetch_capes(&token).await
 }
 
 #[tauri::command]
-pub async fn set_active_cape(cape_id: String) -> Result<(), String> {
+pub async fn set_active_cape(cape_id: String) -> Result<(), CoreError> {
     let token = account::valid_access_token().await?;
     account::set_active_cape(&token, &cape_id).await
 }
 
 #[tauri::command]
-pub async fn disable_cape() -> Result<(), String> {
+pub async fn disable_cape() -> Result<(), CoreError> {
     let token = account::valid_access_token().await?;
     account::disable_cape(&token).await
 }
 
 /// 确保当前正版账号凭证可用（临近过期才刷新）；未过期时零网络开销。
 #[tauri::command]
-pub async fn ensure_ms_account() -> Result<model::MsAccount, String> {
+pub async fn ensure_ms_account() -> Result<model::MsAccount, CoreError> {
     account::ensure_valid_account().await
 }
 
 #[tauri::command]
-pub async fn refresh_ms_account() -> Result<model::MsAccount, String> {
+pub async fn refresh_ms_account() -> Result<model::MsAccount, CoreError> {
     let account = model::read()
-        .ok_or_else(|| keyed_msg!("errors.account.notSignedIn", "未登录 Microsoft 账号"))?;
+        .ok_or_else(|| err_keyed!("errors.account.notSignedIn", "未登录 Microsoft 账号"))?;
     let refreshed = microsoft::refresh_login(&account)
         .await
         .map_err(|e| e.to_string())?;
@@ -229,7 +235,7 @@ pub async fn external_login(
     api_url: String,
     username: String,
     password: String,
-) -> Result<external::ExternalAccount, String> {
+) -> Result<external::ExternalAccount, CoreError> {
     let acc = external::login(&api_url, &username, &password).await?;
     external::save(&acc)?;
     // 确保 authlib-injector.jar 就绪（启动注入用）；失败不阻塞登录
@@ -246,7 +252,7 @@ pub fn get_external_accounts() -> Vec<external::ExternalAccount> {
 
 /// 切换当前第三方账号（置为列表末尾 = 启用）。
 #[tauri::command]
-pub fn switch_external_account(api_url: String, uuid: String) -> Result<(), String> {
+pub fn switch_external_account(api_url: String, uuid: String) -> Result<(), CoreError> {
     external::switch(&api_url, &uuid)
 }
 
@@ -254,7 +260,7 @@ pub fn switch_external_account(api_url: String, uuid: String) -> Result<(), Stri
 pub async fn refresh_external_account(
     api_url: String,
     uuid: String,
-) -> Result<external::ExternalAccount, String> {
+) -> Result<external::ExternalAccount, CoreError> {
     external::refresh_account(&api_url, &uuid).await
 }
 
@@ -265,12 +271,12 @@ pub async fn switch_external_role(
     uuid: String,
     profile_id: String,
     profile_name: String,
-) -> Result<external::ExternalAccount, String> {
+) -> Result<external::ExternalAccount, CoreError> {
     external::switch_role(&api_url, &uuid, &profile_id, &profile_name).await
 }
 
 #[tauri::command]
-pub fn remove_external_account(api_url: String, uuid: String) -> Result<(), String> {
+pub fn remove_external_account(api_url: String, uuid: String) -> Result<(), CoreError> {
     external::remove(&api_url, &uuid)
 }
 
@@ -281,7 +287,7 @@ pub fn get_external_config() -> external::ExternalConfig {
 }
 
 #[tauri::command]
-pub fn save_external_config(config: external::ExternalConfig) -> Result<(), String> {
+pub fn save_external_config(config: external::ExternalConfig) -> Result<(), CoreError> {
     persist::save(constants::SECT_EXTERNAL, &config)
         .map_err(common_err_ctx_key!("errors.config.write", "保存失败"))
 }

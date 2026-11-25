@@ -1,6 +1,6 @@
-//! 启动器日志落盘（stdout/stderr 重定向）。
+//! 启动器日志落盘（stdout/stderr 重定向）：GUI 进程无控制台，落盘后设置页可查看。
 
-use super::dirs::config_dir;
+use elytra_domain::util::config_dir;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::io::AsRawHandle;
@@ -9,8 +9,29 @@ use std::path::Path;
 /// launcher.log 单文件上限 5 MiB：超限则在启动时轮转为 `launcher.log.1`（仅保留一份备份）。
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 
-/// 把进程 stdout/stderr 重定向到 exe 旁 Elytra/launcher.log（追加）。GUI 进程无控制台，
-/// eprintln 无人可见，落盘后设置页可查看。注意：file 句柄必须保活（mem::forget），
+/// 安装 stderr logger；调用前先 `init_file_logging`，日志随 stderr 落入 launcher.log。
+pub fn init() {
+    init_file_logging();
+    static LOGGER: StderrLogger = StderrLogger;
+    let _ = log::set_logger(&LOGGER);
+    log::set_max_level(log::LevelFilter::Info);
+}
+
+struct StderrLogger;
+
+impl log::Log for StderrLogger {
+    fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        eprintln!("[{}] {}", record.level(), record.args());
+    }
+
+    fn flush(&self) {}
+}
+
+/// 把进程 stdout/stderr 重定向到配置目录 `launcher.log`（追加）。file 句柄必须保活（mem::forget），
 /// 否则句柄被关闭后遭系统复用，重定向失效。
 pub fn init_file_logging() {
     let path = config_dir().join("launcher.log");
@@ -38,7 +59,6 @@ pub fn init_file_logging() {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // POSIX：dup2 到 stdout/stderr（std::os::unix::io::AsRawFd + libc::dup2）
         #[cfg(unix)]
         {
             use std::os::unix::io::AsRawFd;
@@ -71,7 +91,6 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    /// 用例独立目录（tag + 进程 id 隔离；先清后建）
     fn case_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("elytra-log-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

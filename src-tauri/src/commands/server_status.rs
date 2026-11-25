@@ -1,12 +1,16 @@
-//! 服务器状态检测命令：探测 Java/基岩版 Minecraft 服务器在线状态（协议实现在 crate::server_status）。
+//! 服务器状态检测命令：探测 Java/基岩版 Minecraft 服务器在线状态（协议实现在 elytra_domain::server_status）。
 
-use crate::server_status::{self, ServerStatus, BEDROCK_DEFAULT_PORT, JAVA_DEFAULT_PORT};
+use elytra_domain::error::CoreError;
+use elytra_domain::server_status::{self, ServerStatus, BEDROCK_DEFAULT_PORT, JAVA_DEFAULT_PORT};
 
 /// 探测服务器状态。
 /// `edition`：`"java"` / `"bedrock"` / 空（自动：先 Java，失败再试基岩版）。
 /// 自动模式下：地址带显式端口时两版共用该端口，否则用各自默认端口（Java 25565 / Bedrock 19132）。
 #[tauri::command]
-pub async fn ping_server(address: String, edition: Option<String>) -> Result<ServerStatus, String> {
+pub async fn ping_server(
+    address: String,
+    edition: Option<String>,
+) -> Result<ServerStatus, CoreError> {
     let edition = edition.unwrap_or_default();
     match edition.as_str() {
         "bedrock" => {
@@ -29,7 +33,8 @@ pub async fn ping_server(address: String, edition: Option<String>) -> Result<Ser
                         Ok(status) => Ok(status),
                         Err(bedrock_err) => Err(format!(
                             "服务器无响应\nJava 版：{java_err}\n基岩版：{bedrock_err}"
-                        )),
+                        )
+                        .into()),
                     }
                 }
             }

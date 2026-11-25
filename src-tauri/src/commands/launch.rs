@@ -1,21 +1,23 @@
 //! 启动命令：装配/进程在 launcher/process.rs，命令构建 args.rs，环境 env.rs，皮肤 skin.rs，平台 platform.rs。
 
+use elytra_domain::error::CoreError;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::auth::account;
-use crate::events;
-use crate::jdk;
-use crate::launcher::args::{build_launch_command, LaunchRequest};
-use crate::launcher::auto_tasks;
-use crate::launcher::compat::{self, JavaCompat};
-use crate::launcher::env;
-use crate::launcher::platform;
-use crate::launcher::process;
-use crate::launcher::skin;
-use crate::persist;
-use crate::task;
-use crate::util;
+use crate::sink::sink;
+use elytra_domain::auth::account;
+use elytra_domain::events;
+use elytra_domain::jdk;
+use elytra_domain::launcher::args::{build_launch_command, LaunchRequest};
+use elytra_domain::launcher::auto_tasks;
+use elytra_domain::launcher::compat::{self, JavaCompat};
+use elytra_domain::launcher::env;
+use elytra_domain::launcher::platform;
+use elytra_domain::launcher::process;
+use elytra_domain::launcher::skin;
+use elytra_domain::persist;
+use elytra_domain::task;
+use elytra_domain::util;
 
 // ── 启动装配 ──
 
@@ -25,7 +27,7 @@ use crate::util;
 
 /// 启动前环境 + 完整性校验；通过时返回所用 JDK 信息，**存在 Java 兼容风险时返回 `@i18n:` 提示**（前端弹提示）。
 #[tauri::command]
-pub async fn check_launch_env(version_dir_name: String) -> Result<String, String> {
+pub async fn check_launch_env(version_dir_name: String) -> Result<String, CoreError> {
     let (java_path, version_json, mc_dir, launcher_config, java_major) =
         env::load_launch_config(&version_dir_name)?;
 
@@ -83,7 +85,7 @@ pub struct SpawnGameRequest {
 
 /// 启动 Minecraft 游戏进程。返回子进程 PID。
 #[tauri::command]
-pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32, String> {
+pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32, CoreError> {
     let SpawnGameRequest {
         version_dir_name,
         auth_mode,
@@ -148,8 +150,9 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
 
     let game_dir = mc_dir.join("versions").join(&version_dir_name);
     let config_dir = util::config_dir();
+    let auto_sink = sink(&app);
     let failures = auto_tasks::runner::run_auto_tasks(
-        &app,
+        auto_sink.as_ref(),
         &auto_tasks::ctx::AutoTaskCtx {
             mc_dir: &mc_dir,
             game_dir: &game_dir,
@@ -186,8 +189,8 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
 
     // cwd = 版本隔离的 gameDir（与官方启动器一致）；装配在 launcher/process.rs，此处仅注入事件派发（队列线程，监听线程不等 webview 消费）。
     let log_path = mc_dir.join("logs").join("elytra-launch.log");
-    let app_window = app.clone();
-    let app_exit = app.clone();
+    let window_sink = sink(&app);
+    let exit_sink = sink(&app);
     let label_window = version_dir_name.clone();
     let label_exit = version_dir_name.clone();
     let auto_tasks_exit = launcher_config.auto_tasks.clone();
@@ -204,7 +207,7 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
         },
         move |pid| {
             task::emit_event(
-                &app_window,
+                window_sink.as_ref(),
                 events::GAME_WINDOW_VISIBLE,
                 (pid, label_window.clone()),
             );
@@ -214,7 +217,7 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
             process::clear_launched(clear_generation, pid);
             // 退出码随事件送出：前端据非 0 判崩溃；diagnosis 为推断出的失败结论（可空）
             task::emit_event(
-                &app_exit,
+                exit_sink.as_ref(),
                 events::GAME_EXITED,
                 (pid, label_exit, exit_code, crash_report.clone(), diagnosis),
             );
@@ -231,14 +234,14 @@ pub async fn spawn_game(app: AppHandle, request: SpawnGameRequest) -> Result<u32
                 };
                 if crash_report.is_some() {
                     auto_tasks::runner::run_auto_tasks(
-                        &app_exit,
+                        exit_sink.as_ref(),
                         &ctx,
                         auto_tasks::model::AutoTaskPhase::OnCrash,
                         &auto_tasks_exit,
                     );
                 }
                 auto_tasks::runner::run_auto_tasks(
-                    &app_exit,
+                    exit_sink.as_ref(),
                     &ctx,
                     auto_tasks::model::AutoTaskPhase::PostExit,
                     &auto_tasks_exit,
@@ -262,7 +265,7 @@ pub async fn get_game_log(game_dir: String, version_name: String) -> String {
 }
 
 #[tauri::command]
-pub fn open_launcher_log_dir(app: AppHandle) -> Result<(), String> {
+pub fn open_launcher_log_dir(app: AppHandle) -> Result<(), CoreError> {
     let dir = util::config_dir();
     let path = dir.to_string_lossy().to_string();
     if !dir.exists() {
@@ -287,7 +290,7 @@ pub async fn get_launcher_log() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game::version::model::VersionJson;
+    use elytra_domain::game::version::model::VersionJson;
 
     #[test]
     fn spawn_game_request_deserializes_camel_case() {
@@ -304,7 +307,7 @@ mod tests {
         assert_eq!(req.version_dir_name, "26.3-fabric-0.20.0");
         assert_eq!(req.launch_generation, 7);
     }
-    use crate::launcher::model::{AuthMode, LaunchOptions, MemoryMode, WindowSize};
+    use elytra_domain::launcher::model::{AuthMode, LaunchOptions, MemoryMode, WindowSize};
 
     /// 构造一个最小可用的版本 JSON（旧格式 minecraftArguments，保底参数路径）。
     fn minimal_version_json() -> VersionJson {

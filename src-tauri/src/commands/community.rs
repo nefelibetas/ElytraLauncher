@@ -1,8 +1,9 @@
+use elytra_domain::error::CoreError;
 use std::collections::HashMap;
 
-use crate::game::community;
-use crate::game::modpack::resolve_version_meta;
-use crate::game::version::dir::version_dir_path;
+use elytra_domain::game::community;
+use elytra_domain::game::modpack::resolve_version_meta;
+use elytra_domain::game::version::dir::version_dir_path;
 
 /// 搜索 Mod / 光影包等（按 `source` 分派 modrinth / curseforge；`query.category` 为项目类型过滤，`page_size` 为每源条数；`translate` 默认开启）。
 #[tauri::command]
@@ -10,7 +11,7 @@ pub async fn search_community(
     source: String,
     query: community::SearchQuery,
     translate: Option<bool>,
-) -> Result<community::CommunitySearchPage, String> {
+) -> Result<community::CommunitySearchPage, CoreError> {
     community::search_community(&source, &query, translate.unwrap_or(true)).await
 }
 
@@ -21,7 +22,7 @@ pub async fn get_community_versions(
     game_version: Option<String>,
     loader: Option<String>,
     refresh: Option<bool>,
-) -> Result<Vec<community::CommunityVersion>, String> {
+) -> Result<Vec<community::CommunityVersion>, CoreError> {
     community::get_community_versions(
         &source,
         &project_id,
@@ -38,7 +39,7 @@ pub async fn get_community_details(
     ids: Vec<String>,
     translate: Option<bool>,
     refresh: Option<bool>,
-) -> Result<Vec<community::CommunityDependencyItem>, String> {
+) -> Result<Vec<community::CommunityDependencyItem>, CoreError> {
     community::get_community_details(
         &source,
         &ids,
@@ -56,7 +57,7 @@ pub async fn resolve_mod_dependencies(
     version_id: String,
     version_dir_name: String,
     version_overrides: Option<HashMap<String, String>>,
-) -> Result<community::ModDependencyPlan, String> {
+) -> Result<community::ModDependencyPlan, CoreError> {
     let vdir = version_dir_path(&version_dir_name)?;
     let (mc_version, kind, _) = resolve_version_meta(&vdir, &version_dir_name);
     if kind == "vanilla" || kind == "optifine" {
@@ -84,7 +85,7 @@ pub async fn get_mod_conflicts(
     project_id: String,
     version_id: String,
     version_dir_name: String,
-) -> Result<community::ModConflictReport, String> {
+) -> Result<community::ModConflictReport, CoreError> {
     let vdir = version_dir_path(&version_dir_name)?;
     let (mc_version, kind, _) = resolve_version_meta(&vdir, &version_dir_name);
     if !matches!(kind.as_str(), "fabric" | "forge" | "neoforge" | "quilt") {
@@ -114,11 +115,11 @@ pub fn get_curseforge_key_source() -> community::CurseForgeKeySource {
 }
 
 #[tauri::command]
-pub fn set_curseforge_key(key: String) -> Result<(), String> {
+pub fn set_curseforge_key(key: String) -> Result<(), CoreError> {
     community::set_curseforge_key(&key)
 }
 
 #[tauri::command]
-pub fn clear_curseforge_key() -> Result<(), String> {
+pub fn clear_curseforge_key() -> Result<(), CoreError> {
     community::clear_curseforge_key()
 }

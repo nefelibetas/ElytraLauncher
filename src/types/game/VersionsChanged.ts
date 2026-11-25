@@ -2,7 +2,7 @@
 import type { InstalledVersionInfo } from "./InstalledVersionInfo";
 
 /**
- * 版本列表变化（`versions/` 一级条目增删改名，或版本 json 落盘导致 loader 推断变化）。
+ * 版本列表变化事件。
  */
 export type VersionsChanged = { 
 /**

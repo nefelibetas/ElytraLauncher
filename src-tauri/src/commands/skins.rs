@@ -1,6 +1,7 @@
 //! 本地皮肤收藏命令（披风侧沿用 account.rs 的 fetch_capes / set_active_cape / disable_cape）。
 
-use crate::auth::skins::{self, LocalSkinView};
+use elytra_domain::auth::skins::{self, LocalSkinView};
+use elytra_domain::error::CoreError;
 
 /// 本地皮肤列表（添加时间倒序）。条目含 PNG base64 与绝对路径，供前端一次渲染 3D 衣柜。
 #[tauri::command]
@@ -18,18 +19,18 @@ pub fn save_local_skin(
     b64: String,
     variant: String,
     source: String,
-) -> Result<LocalSkinView, String> {
+) -> Result<LocalSkinView, CoreError> {
     skins::save(&name, &b64, &variant, &source)
 }
 
 /// 移除本地皮肤（幂等：id 不存在 / 文件已删均成功），返回删除后的列表。
 #[tauri::command]
-pub fn remove_local_skin(id: String) -> Result<Vec<LocalSkinView>, String> {
+pub fn remove_local_skin(id: String) -> Result<Vec<LocalSkinView>, CoreError> {
     skins::remove(&id)
 }
 
 #[tauri::command]
-pub async fn read_local_skin(id: String) -> Result<String, String> {
+pub async fn read_local_skin(id: String) -> Result<String, CoreError> {
     tauri::async_runtime::spawn_blocking(move || skins::read(&id))
         .await
         .map_err(common_err_ctx_key!("errors.file.read", "读取皮肤失败"))?
@@ -37,11 +38,11 @@ pub async fn read_local_skin(id: String) -> Result<String, String> {
 
 /// 导出皮肤 PNG 到选定路径（仅接受 .png）。
 #[tauri::command]
-pub fn export_skin_png(path: String, b64: String) -> Result<(), String> {
+pub fn export_skin_png(path: String, b64: String) -> Result<(), CoreError> {
     skins::export_png(&path, &b64)
 }
 
 #[tauri::command]
-pub fn import_skin_png(path: String) -> Result<String, String> {
+pub fn import_skin_png(path: String) -> Result<String, CoreError> {
     skins::import_png(&path)
 }

@@ -1,33 +1,39 @@
 //! 下载任务命令：注册与 spawn 在 task/ 域，命令只传参。
 
+use elytra_domain::error::CoreError;
 use std::path::Path;
 use tauri::AppHandle;
 
-use crate::game::modpack::{ModpackRequest, PackSource};
-use crate::task::export::spawn_modpack_export;
-use crate::task::{
-    self, files, model, modpack, repair, spawn_download, spawn_install_jdk, spawn_task, store,
+use crate::sink::sink;
+use elytra_domain::game::modpack::{ModpackRequest, PackSource};
+use elytra_domain::task::export::spawn_modpack_export;
+use elytra_domain::task::{
+    self, files, model, modpack, repair, spawn_download, spawn_install_jdk, spawn_task_with_sink,
+    store,
 };
 
 /// 提交完整下载/安装任务（注册 TaskManager 并后台执行），返回任务 id；注册/spawn/快照走 task::spawn_download。
 #[tauri::command]
-pub async fn start_download(app: AppHandle, task: model::DownloadTask) -> Result<String, String> {
-    task::spawn_download(app, task)
+pub async fn start_download(
+    app: AppHandle,
+    task: model::DownloadTask,
+) -> Result<String, CoreError> {
+    task::spawn_download(sink(&app), task)
 }
 
 #[tauri::command]
 pub async fn download_files(
     app: AppHandle,
     task: model::DownloadFilesTask,
-) -> Result<String, String> {
-    files::spawn_files_task(app, task)
+) -> Result<String, CoreError> {
+    files::spawn_files_task(sink(&app), task)
 }
 
 #[tauri::command]
 pub async fn download_single_file(
     app: AppHandle,
     task: model::DownloadFileTask,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     task.validate()?;
     let batch = model::DownloadFilesTask {
         version_dir_name: task.version_dir_name,
@@ -38,11 +44,13 @@ pub async fn download_single_file(
             replace: Vec::new(),
         }],
     };
-    files::spawn_files_task(app, batch)
+    files::spawn_files_task(sink(&app), batch)
 }
 
 #[tauri::command]
-pub async fn scan_missing_files(version_dir_name: String) -> Result<repair::MissingReport, String> {
+pub async fn scan_missing_files(
+    version_dir_name: String,
+) -> Result<repair::MissingReport, CoreError> {
     repair::scan_missing(&version_dir_name).await
 }
 
@@ -51,12 +59,12 @@ pub async fn scan_missing_files(version_dir_name: String) -> Result<repair::Miss
 pub async fn submit_missing_download(
     app: AppHandle,
     version_dir_name: String,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     let report = repair::scan_missing(&version_dir_name).await?;
 
     let steps = repair::repair_step_specs(&report);
-    spawn_task(
-        app,
+    spawn_task_with_sink(
+        sink(&app),
         format!("{} 版本修复", version_dir_name),
         model::TaskText::new(
             "task.backend.name.repair",
@@ -76,8 +84,8 @@ pub async fn submit_missing_download(
 
 /// 提交 JDK 安装任务（下载缺失 Java 运行时）；完成后自动注册进 jdk 配置，返回任务 id。
 #[tauri::command]
-pub async fn submit_install_jdk(app: AppHandle, major: u32) -> Result<String, String> {
-    task::spawn_install_jdk(app, major)
+pub async fn submit_install_jdk(app: AppHandle, major: u32) -> Result<String, CoreError> {
+    task::spawn_install_jdk(sink(&app), major)
 }
 
 /// 上次进程残留的未完成任务（供恢复横幅）；本进程创建的 running/paused 快照属于当前会话，
@@ -91,29 +99,29 @@ pub async fn list_interrupted_tasks() -> Vec<store::InterruptedJob> {
 
 /// 恢复中断任务：读快照 → 以恢复凭证重新提交（幂等重跑，已下载文件 sha1 命中自动跳过），返回新任务 id。
 #[tauri::command]
-pub async fn resume_task(app: AppHandle, task_id: String) -> Result<String, String> {
+pub async fn resume_task(app: AppHandle, task_id: String) -> Result<String, CoreError> {
     let (_name, spec) = store::load_spec(&task_id)
-        .ok_or_else(|| keyed_msg!("errors.task.snapshotMissing", "任务快照不存在或已过期"))?;
+        .ok_or_else(|| err_keyed!("errors.task.snapshotMissing", "任务快照不存在或已过期"))?;
     // 恢复即重跑：旧快照删除，spawn 时写入新快照（新 task_id）
     task::store::remove_snapshot(&task_id);
     match spec {
-        store::JobSpec::Download(task) => spawn_download(app, task),
+        store::JobSpec::Download(task) => spawn_download(sink(&app), task),
         store::JobSpec::Files(task) => {
             // 社区资源无校验数据，恢复 = 重新开始：先清掉上次中断残留的 .elytra-part
             // 半截临时文件（可能被占用/干扰校验）。
             files::cleanup_file_parts(&task);
-            files::spawn_files_task(app, task)
+            files::spawn_files_task(sink(&app), task)
         }
         store::JobSpec::Repair { version_dir_name } => {
             submit_missing_download(app, version_dir_name).await
         }
-        store::JobSpec::InstallJdk { major } => spawn_install_jdk(app, major),
+        store::JobSpec::InstallJdk { major } => spawn_install_jdk(sink(&app), major),
         store::JobSpec::ModpackInstall(spec) => install_modpack(app, spec.request).await,
         store::JobSpec::ExportModpack {
             version_name,
             save_path,
             format,
-        } => spawn_modpack_export(app, version_name, save_path, format),
+        } => spawn_modpack_export(sink(&app), version_name, save_path, format),
     }
 }
 
@@ -124,7 +132,7 @@ pub fn dismiss_interrupted_task(task_id: String) {
 
 /// 暂停任务：停下载、保留已下载目录与快照（status=paused），前端可"继续"（resume_task 重跑）。
 #[tauri::command]
-pub fn pause_task(task_id: String) -> Result<(), String> {
+pub fn pause_task(task_id: String) -> Result<(), CoreError> {
     if !task::global().pause(&task_id) {
         bail_key!("errors.task.notFound", "任务不存在或已结束{task_id}");
     }
@@ -132,7 +140,7 @@ pub fn pause_task(task_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn cancel_task(app: AppHandle, task_id: String) -> Result<(), String> {
+pub async fn cancel_task(app: AppHandle, task_id: String) -> Result<(), CoreError> {
     task::global().cancel(&task_id);
     // 立即广播取消态：cancel() 只改内存不发事件，否则心跳事件会把卡片重置回运行中。
     if let Some(p) = task::global()
@@ -140,14 +148,14 @@ pub async fn cancel_task(app: AppHandle, task_id: String) -> Result<(), String> 
         .into_iter()
         .find(|p| p.task_id == task_id && p.status == model::TaskStatus::Cancelled)
     {
-        task::emit(&app, &p);
+        task::emit(sink(&app).as_ref(), &p);
     }
     Ok(())
 }
 
 /// 对挂起等待决策的任务（WaitingForUser）作出选择：skip=跳过该文件继续，retry=重试，cancel=取消任务；非等待状态返回错误。
 #[tauri::command]
-pub fn decide_waiting_task(task_id: String, action: String) -> Result<(), String> {
+pub fn decide_waiting_task(task_id: String, action: String) -> Result<(), CoreError> {
     let decision = match action.as_str() {
         "skip" => task::WaitingDecision::Skip,
         "retry" => task::WaitingDecision::Retry,
@@ -157,7 +165,7 @@ pub fn decide_waiting_task(task_id: String, action: String) -> Result<(), String
     if task::global().decide(&task_id, decision) {
         Ok(())
     } else {
-        Err(keyed_msg!("errors.task.notWaiting", "任务未处于等待状态"))
+        Err(err_keyed!("errors.task.notWaiting", "任务未处于等待状态"))
     }
 }
 
@@ -171,22 +179,22 @@ pub fn task_exists(task_id: String) -> bool {
 
 /// 安装整合包（自动嗅探 Modrinth / CurseForge / MultiMC·Prism / HMCL / MCBBS / PCL / 完整目录，不按扩展名判断）：单任务承载 包体下载/解析 → 本体+ModLoader → 内容+覆盖解压；恢复 = 重跑整卡（各环节幂等），返回任务 id。
 #[tauri::command]
-pub async fn install_modpack(app: AppHandle, request: ModpackRequest) -> Result<String, String> {
+pub async fn install_modpack(app: AppHandle, request: ModpackRequest) -> Result<String, CoreError> {
     if request.name.trim().is_empty() {
-        return Err(keyed_msg!(
+        return Err(err_keyed!(
             "errors.task.modpackNameEmpty",
             "整合包名称不能为空"
         ));
     }
     match &request.source {
         PackSource::Local { path } if path.trim().is_empty() => {
-            return Err(keyed_msg!(
+            return Err(err_keyed!(
                 "errors.task.modpackPathEmpty",
                 "整合包文件路径不能为空"
             ));
         }
         PackSource::Online { url, .. } if url.trim().is_empty() => {
-            return Err(keyed_msg!(
+            return Err(err_keyed!(
                 "errors.task.modpackUrlEmpty",
                 "整合包下载地址不能为空"
             ));
@@ -200,8 +208,8 @@ pub async fn install_modpack(app: AppHandle, request: ModpackRequest) -> Result<
     }
 
     let steps = task::modpack::initial_step_specs(&request);
-    spawn_task(
-        app,
+    spawn_task_with_sink(
+        sink(&app),
         format!("整合包：{}", request.name),
         model::TaskText::new(
             "task.backend.name.modpack",

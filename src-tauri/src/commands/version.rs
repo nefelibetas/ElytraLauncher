@@ -1,14 +1,18 @@
 //! 版本内容命令：存档/Mod 扫描、Mod 更新、整合包导出；目录 = 激活游戏目录 + versions/{name}。
 
+use elytra_domain::error::CoreError;
 use serde::Serialize;
 
-use crate::game::modpack::resolve_version_meta;
-use crate::game::updates::{self, ModFileDetail, ModListResult, ModUpdate, ResourceListResult};
-use crate::game::version::dir::{version_dir_path, version_server_section};
-use crate::persist;
-use crate::task::export::spawn_modpack_export;
-use crate::task::ModpackExportFormat;
-use crate::util::{self, is_simple_name};
+use crate::sink::sink;
+use elytra_domain::game::modpack::resolve_version_meta;
+use elytra_domain::game::updates::{
+    self, ModFileDetail, ModListResult, ModUpdate, ResourceListResult,
+};
+use elytra_domain::game::version::dir::{version_dir_path, version_server_section, VersionServer};
+use elytra_domain::persist;
+use elytra_domain::task::export::spawn_modpack_export;
+use elytra_domain::task::ModpackExportFormat;
+use elytra_domain::util::{self, is_simple_name};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WorldInfo {
@@ -18,8 +22,7 @@ pub struct WorldInfo {
 }
 
 /// 目标实例的 MC 版本与 ModLoader（Mod 下载前校验）。
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export_to = "game/")]
+#[derive(Debug, Clone, Serialize)]
 pub struct InstanceModTarget {
     pub mc_version: String,
     pub loader: String,
@@ -37,8 +40,8 @@ pub struct ResourceFile {
 #[tauri::command]
 pub async fn get_instance_mod_target(
     version_dir_name: String,
-) -> Result<InstanceModTarget, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<InstanceModTarget, String> {
+) -> Result<InstanceModTarget, CoreError> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<InstanceModTarget, CoreError> {
         let vdir = version_dir_path(&version_dir_name)?;
         let (mc_version, loader, _) = resolve_version_meta(&vdir, &version_dir_name);
         Ok(InstanceModTarget { mc_version, loader })
@@ -125,7 +128,7 @@ pub async fn list_resource_files(version_name: String, kind: String) -> Vec<Reso
 pub async fn list_resource_detailed(
     version_name: String,
     kind: String,
-) -> Result<ResourceListResult, String> {
+) -> Result<ResourceListResult, CoreError> {
     if !matches!(kind.as_str(), "resourcepacks" | "datapacks" | "shaderpacks") {
         return Ok(ResourceListResult {
             files: Vec::new(),
@@ -141,14 +144,14 @@ pub async fn delete_resource_file(
     version_name: String,
     kind: String,
     file_name: String,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     let vdir = version_dir_path(&version_name)?;
     updates::delete_resource_file(&vdir, &kind, &file_name).await
 }
 
 /// 删除整个存档（saves/<world> 目录，递归）；`world_name` 须为简单目录名（防路径穿越），大目录走 spawn_blocking。
 #[tauri::command]
-pub async fn delete_world(version_name: String, world_name: String) -> Result<(), String> {
+pub async fn delete_world(version_name: String, world_name: String) -> Result<(), CoreError> {
     if !util::is_simple_name(&world_name) {
         bail_key!("errors.version.invalidDirName", "非法目录名");
     }
@@ -163,7 +166,7 @@ pub async fn delete_world(version_name: String, world_name: String) -> Result<()
 }
 
 #[tauri::command]
-pub async fn list_mods_detailed(version_name: String) -> Result<ModListResult, String> {
+pub async fn list_mods_detailed(version_name: String) -> Result<ModListResult, CoreError> {
     let vdir = version_dir_path(&version_name)?;
     Ok(updates::list_mods_detailed(&vdir.join("mods")).await)
 }
@@ -173,7 +176,7 @@ pub async fn list_mods_detailed(version_name: String) -> Result<ModListResult, S
 pub async fn identify_mod_file(
     version_name: String,
     file_name: String,
-) -> Result<Option<ModFileDetail>, String> {
+) -> Result<Option<ModFileDetail>, CoreError> {
     if !is_simple_name(&file_name) {
         bail_key!("errors.version.invalidFileName", "非法文件名");
     }
@@ -184,7 +187,7 @@ pub async fn identify_mod_file(
 
 /// 检查 mods 更新（仅 Modrinth 源，未命中跳过）；`mc_version`/`loader` 由后端从版本目录 json 权威解析（目录名仅兜底）。
 #[tauri::command]
-pub async fn check_mod_updates(version_name: String) -> Result<Vec<ModUpdate>, String> {
+pub async fn check_mod_updates(version_name: String) -> Result<Vec<ModUpdate>, CoreError> {
     let vdir = version_dir_path(&version_name)?;
     let files = updates::scan_mod_files(&vdir.join("mods"));
     if files.is_empty() {
@@ -200,16 +203,9 @@ pub async fn update_mod_file(
     file_name: String,
     file_url: String,
     file_sha1: String,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     let vdir = version_dir_path(&version_name)?;
     updates::update_mod_file(&vdir.join("mods"), &file_name, &file_url, &file_sha1).await
-}
-
-/// 版本级服务器直连配置（快速进服 --server/--port，per-version）；存储于 section `version_server_{version_name}`，为空时启动回退全局 LaunchOptions。
-#[derive(Debug, Clone, Default, Serialize, serde::Deserialize)]
-pub struct VersionServer {
-    pub server: Option<String>,
-    pub port: Option<u16>,
 }
 
 #[tauri::command]
@@ -229,7 +225,7 @@ pub async fn save_version_server(
     version_name: String,
     server: Option<String>,
     port: Option<u16>,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let section = version_server_section(&version_name)?;
         let cfg = VersionServer {
@@ -244,7 +240,7 @@ pub async fn save_version_server(
 }
 
 #[tauri::command]
-pub async fn delete_mod_file(version_name: String, file_name: String) -> Result<(), String> {
+pub async fn delete_mod_file(version_name: String, file_name: String) -> Result<(), CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let vdir = version_dir_path(&version_name)?;
         updates::delete_mod_file(&vdir.join("mods"), &file_name)
@@ -255,7 +251,7 @@ pub async fn delete_mod_file(version_name: String, file_name: String) -> Result<
 
 /// 切换 mods 目录下单个 mod 文件的启用/禁用状态（重命名 .jar → .jar.disabled，扫描自动隐藏）。
 #[tauri::command]
-pub async fn toggle_mod_file(version_name: String, file_name: String) -> Result<bool, String> {
+pub async fn toggle_mod_file(version_name: String, file_name: String) -> Result<bool, CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let vdir = version_dir_path(&version_name)?;
         updates::toggle_mod_file(&vdir.join("mods"), &file_name)
@@ -272,16 +268,16 @@ pub async fn export_modpack(
     version_name: String,
     save_path: String,
     format: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     let raw = format.as_deref().unwrap_or("mrpack");
     let format = ModpackExportFormat::parse(raw)
-        .ok_or_else(|| keyed_msg!("errors.modpack.exportFormat", "不支持的导出格式\n{raw}"))?;
-    spawn_modpack_export(app, version_name, save_path, format)
+        .ok_or_else(|| err_keyed!("errors.modpack.exportFormat", "不支持的导出格式\n{raw}"))?;
+    spawn_modpack_export(sink(&app), version_name, save_path, format)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::game::modpack::{pack_modpack_with, resolve_version_meta, ExportObserver};
+    use elytra_domain::game::modpack::{pack_modpack_with, resolve_version_meta, ExportObserver};
     use std::io::Read;
 
     struct Noop;

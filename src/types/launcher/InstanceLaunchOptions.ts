@@ -7,8 +7,5 @@ import type { WindowSize } from "./WindowSize";
 
 /**
  * 实例级启动参数快照：只包含“可以按实例覆盖”的字段。
- *
- * 不含 `server`/`port`（版本设置里的服务器直连独立存储、优先级更高）与 `auto_tasks`（独立 section）；
- * Java 选择随实例快照一起保存。
  */
 export type InstanceLaunchOptions = { memory: MemoryMode, min_memory: number | null, window_title: string, process_priority: ProcessPriority, window_size: WindowSize, disable_launch_wrapper: boolean, disable_lwjgl_unsafe_agent: boolean, pre_launch_memory_optimize: boolean, use_high_performance_gpu: boolean, game_language: string, verify_ssl: boolean, jvm_args: Array<string>, game_args: Array<string>, gc_type: GcType, java: JdkSelection, };

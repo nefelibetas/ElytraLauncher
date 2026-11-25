@@ -1,24 +1,25 @@
 //! 启动器更新命令：检查更新、下载文件清单、下载目录配置；下载本身复用工具箱下载器。
 
+use elytra_domain::error::CoreError;
 use std::path::Path;
 
-use crate::config::launcher_update::LauncherUpdateConfig;
-use crate::persist;
 use crate::update::{check, download_plan, LauncherUpdatePlan, UpdateInfo};
+use elytra_domain::config::launcher_update::LauncherUpdateConfig;
+use elytra_domain::persist;
 
 #[tauri::command]
-pub async fn check_launcher_update() -> Result<Option<UpdateInfo>, String> {
+pub async fn check_launcher_update() -> Result<Option<UpdateInfo>, CoreError> {
     check().await
 }
 
 /// Release 文件清单 + 本机平台 + 生效下载目录（配置为空时取平台默认值）。
 #[tauri::command]
-pub async fn get_launcher_update_plan() -> Result<LauncherUpdatePlan, String> {
+pub async fn get_launcher_update_plan() -> Result<LauncherUpdatePlan, CoreError> {
     download_plan().await
 }
 
 #[tauri::command]
-pub fn save_launcher_update_config(config: LauncherUpdateConfig) -> Result<(), String> {
+pub fn save_launcher_update_config(config: LauncherUpdateConfig) -> Result<(), CoreError> {
     let dir = config.download_dir.trim();
     if !dir.is_empty() && !Path::new(dir).is_absolute() {
         bail_key!("errors.update.dirInvalid", "下载目录必须是绝对路径");

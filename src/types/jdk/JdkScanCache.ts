@@ -2,6 +2,6 @@
 import type { JdkInfo } from "./JdkInfo";
 
 /**
- * 本机 JDK 扫描缓存（`jdk_scanned` section），由后端扫描/安装维护、前端只读。
+ * 本机 JDK 扫描缓存（`jdk_scanned` section）。
  */
 export type JdkScanCache = { jdks: Array<JdkInfo>, };

@@ -9,7 +9,27 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const strict = process.argv.includes("--strict");
 const locales = ["zh-CN", "en-US"];
 const messagesRoot = path.join(root, "src/i18n/messages");
-const rustRoot = path.join(root, "src-tauri", "src");
+const coreRoot =
+  process.env.ELYTRA_CORE_ROOT || path.join(root, "..", "elytra-core");
+const rustRoots = [
+  path.join(root, "src-tauri", "src"),
+  path.join(coreRoot, "crates"),
+];
+
+function walkRust(cb) {
+  for (const dir of rustRoots) {
+    if (!fs.existsSync(dir)) {
+      console.error(`[i18n] Rust 根目录不存在: ${dir}`);
+      failed = true;
+      continue;
+    }
+    walk(dir, ".rs", (rel, text) => cb(normalizeRustPath(rel), text));
+  }
+}
+
+function normalizeRustPath(rel) {
+  return rel.replace(/^(?:\.\.\/)+elytra-core\//, "elytra-core/");
+}
 
 function loadLocale(locale) {
   const dir = path.join(messagesRoot, locale);
@@ -92,7 +112,7 @@ function checkBackendKeys() {
   const entries = [];
   const macroRe = /(?:bail_key|common_err_ctx_key|keyed_msg)!\s*\(\s*"([^"]*)"/g;
   const literalRe = /@i18n:([A-Za-z0-9_.-]+)(\?[^\s"'`\\]*)?/g;
-  walk(rustRoot, ".rs", (rel, text) => {
+  walkRust((rel, text) => {
     text.split(/\r?\n/).forEach((line, i) => {
       for (const m of line.matchAll(macroRe)) {
         const [key, query] = m[1].split("?");
@@ -176,7 +196,7 @@ const plainBaselineFile = path.join(root, "scripts", "i18n-rust-plain-baseline.j
 function collectRustPlainErrors() {
   const hits = [];
   const constructRe = /(?:Err\(\s*(?:format!\(\s*)?"|(?:^|[^_])bail!\s*\(\s*"|ok_or(?:_else\(\s*\|\|\s*(?:format!\(\s*)?"|")?|common_err_ctx!\s*\(\s*")/;
-  walk(rustRoot, ".rs", (rel, text) => {
+  walkRust((rel, text) => {
     if (rel.endsWith("macros.rs")) return;
     // 测试与实现同文件、按惯例在尾部：截掉 test 区，避免断言消息误报
     const testAt = text.indexOf("#[cfg(test)]");

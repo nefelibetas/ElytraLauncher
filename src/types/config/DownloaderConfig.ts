@@ -3,34 +3,35 @@ import type { DownloadSourceMode } from "./DownloadSourceMode";
 import type { JdkSourceMode } from "./JdkSourceMode";
 import type { NetworkMode } from "./NetworkMode";
 
+/**
+ * 下载器配置。
+ */
 export type DownloaderConfig = { concurrency: number, minecraft_dir: string, 
 /**
- * 全局限速（bytes/s）；0/None = 不限制。fetcher 全局生效。
+ * 全局限速（bytes/s）；0/None = 不限制。
  */
 max_speed: number, 
 /**
- * 游戏下载源模式（版本列表/json、资源索引与对象、支持库、client JAR、ModLoader 构件与安装器、
- * Mojang JDK runtime 统一走此源）
+ * 游戏下载源模式。
  */
 game_source_mode: DownloadSourceMode, 
 /**
- * 社区下载源模式：official = Modrinth API + cdn.modrinth.com；
- * china = MCIM（mod.mcimirror.top，镜像 Modrinth/CurseForge API 与文件 CDN）。
+ * 社区下载源模式。
  */
 community_source_mode: DownloadSourceMode, 
 /**
- * 网络代理模式：auto（自动检测系统代理）/ system（强制系统代理）/ direct（强制直连）。
+ * 网络代理模式。
  */
 network_mode: NetworkMode, 
 /**
- * 仅前端展示使用（后端仅存储透传；en 模式下搜索命令跳过翻译请求）。
+ * 仅前端展示使用（后端仅存储透传）。
  */
 translate_display: string, 
 /**
- * 社区版本列表是否只显示正式版（过滤快照/预发布）；仅前端使用，后端存储透传。
+ * 社区版本列表是否只显示正式版；仅前端使用，后端存储透传。
  */
 show_release_only: boolean, 
 /**
- * JDK（managed runtime）下载源模式：auto 智能回退 / officialOnly 仅官方 / mirrorOnly 仅镜像
+ * JDK（managed runtime）下载源模式。
  */
 jdk_source_mode: JdkSourceMode, };

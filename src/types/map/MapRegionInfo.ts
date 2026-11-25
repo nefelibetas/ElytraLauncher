@@ -5,6 +5,6 @@
  */
 export type MapRegionInfo = { x: number, z: number, 
 /**
- * region 文件最后修改（unix 秒）；前端据此检测变更并增量重取瓦片。
+ * region 文件最后修改（unix 秒）。
  */
 mtime: number, };

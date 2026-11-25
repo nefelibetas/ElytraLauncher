@@ -1,22 +1,23 @@
 //! 世界预览命令：版本/存档路径由后端解析，只读已加载 region。
 //! 瓦片为俯视 PNG，`max_y` 指定向下扫描的最高 Y（降低可看洞穴/地下）。
 
+use elytra_domain::error::CoreError;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::game::version::dir::version_dir_path;
-use crate::map::folder::{discover_worlds, MapFolderEntry};
-use crate::map::mod_color::overlay_for_world;
-use crate::map::region_io::{
+use elytra_domain::game::version::dir::version_dir_path;
+use elytra_domain::util::is_simple_name;
+use elytra_map::folder::{discover_worlds, MapFolderEntry};
+use elytra_map::mod_color::overlay_for_world;
+use elytra_map::region_io::{
     dimension_dir, list_region_files, region_file_for, surface_info, MapRegionInfo,
 };
-use crate::map::render::{render_region_tile_lod, RenderStyle};
-use crate::map::search::{find_biome, list_biomes, MapBiomeHit, MapBiomeSummary};
-use crate::map::tile_cache::{read_cached_tile, tile_cache_key, write_tile};
-use crate::map::world_info::{world_info, MapWorldInfo};
-use crate::seedmap;
-use crate::util::is_simple_name;
+use elytra_map::render::{render_region_tile_lod, RenderStyle};
+use elytra_map::search::{find_biome, list_biomes, MapBiomeHit, MapBiomeSummary};
+use elytra_map::tile_cache::{read_cached_tile, tile_cache_key, write_tile};
+use elytra_map::world_info::{world_info, MapWorldInfo};
+use elytra_seedmap as seedmap;
 
 /// 地图瓦片请求的可选参数（避免命令参数超过 7 个）。
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -27,13 +28,12 @@ pub struct MapTileOptions {
     pub lod: u8,
 }
 
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export_to = "map/")]
+#[derive(Debug, Clone, Serialize)]
 pub struct MapBlockInfo {
     pub biome: Option<String>,
 }
 
-fn world_root(version_name: &str, world_name: &str) -> Result<PathBuf, String> {
+fn world_root(version_name: &str, world_name: &str) -> Result<PathBuf, CoreError> {
     if !is_simple_name(version_name) {
         bail_key!(
             "errors.map.invalid_version",
@@ -54,7 +54,7 @@ fn world_root(version_name: &str, world_name: &str) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn validate_dimension(world: &Path, dimension: &str) -> Result<(), String> {
+fn validate_dimension(world: &Path, dimension: &str) -> Result<(), CoreError> {
     if dimension_dir(world, dimension).join("region").is_dir() {
         Ok(())
     } else {
@@ -62,7 +62,7 @@ fn validate_dimension(world: &Path, dimension: &str) -> Result<(), String> {
     }
 }
 
-fn folder_root(path: &str) -> Result<PathBuf, String> {
+fn folder_root(path: &str) -> Result<PathBuf, CoreError> {
     let root = PathBuf::from(path);
     if !root.is_dir() {
         bail_key!("errors.map.missing_world", "文件夹不存在\n{}", path);
@@ -70,7 +70,7 @@ fn folder_root(path: &str) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn map_regions(world: &Path, dimension: &str) -> Result<Vec<MapRegionInfo>, String> {
+fn map_regions(world: &Path, dimension: &str) -> Result<Vec<MapRegionInfo>, CoreError> {
     validate_dimension(world, dimension)?;
     Ok(list_region_files(&dimension_dir(world, dimension)))
 }
@@ -81,7 +81,7 @@ fn map_block(
     x: i32,
     z: i32,
     max_y: i32,
-) -> Result<MapBlockInfo, String> {
+) -> Result<MapBlockInfo, CoreError> {
     validate_dimension(world, dimension)?;
     let region_file = region_file_for(world, dimension, x, z);
     let max_y = max_y.clamp(-512, 512) as isize;
@@ -98,7 +98,7 @@ fn map_tile(
     max_y: i32,
     mod_colors: bool,
     lod: u8,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, CoreError> {
     validate_dimension(world, dimension)?;
     let max_y = max_y.clamp(-512, 512) as isize;
     let lod = lod.min(2);
@@ -136,8 +136,8 @@ fn map_tile(
 pub async fn get_map_world_info(
     version_name: String,
     world_name: String,
-) -> Result<MapWorldInfo, String> {
-    let info = tauri::async_runtime::spawn_blocking(move || -> Result<MapWorldInfo, String> {
+) -> Result<MapWorldInfo, CoreError> {
+    let info = tauri::async_runtime::spawn_blocking(move || -> Result<MapWorldInfo, CoreError> {
         let world = world_root(&version_name, &world_name)?;
         Ok(world_info(&world))
     })
@@ -151,7 +151,7 @@ pub async fn list_map_regions(
     version_name: String,
     world_name: String,
     dimension: String,
-) -> Result<Vec<MapRegionInfo>, String> {
+) -> Result<Vec<MapRegionInfo>, CoreError> {
     let regions = tauri::async_runtime::spawn_blocking(move || {
         let world = world_root(&version_name, &world_name)?;
         map_regions(&world, &dimension)
@@ -170,7 +170,7 @@ pub async fn get_map_tile(
     rz: i32,
     max_y: i32,
     options: MapTileOptions,
-) -> Result<tauri::ipc::Response, String> {
+) -> Result<tauri::ipc::Response, CoreError> {
     let png = tauri::async_runtime::spawn_blocking(move || {
         let world = world_root(&version_name, &world_name)?;
         map_tile(
@@ -200,7 +200,7 @@ pub async fn get_map_block(
     x: i32,
     z: i32,
     max_y: i32,
-) -> Result<MapBlockInfo, String> {
+) -> Result<MapBlockInfo, CoreError> {
     let info = tauri::async_runtime::spawn_blocking(move || {
         let world = world_root(&version_name, &world_name)?;
         map_block(&world, &dimension, x, z, max_y)
@@ -212,7 +212,7 @@ pub async fn get_map_block(
 
 /// 递归查找用户所选文件夹内的世界根目录（目录本身是世界时只返回它）。
 #[tauri::command]
-pub async fn resolve_map_folders(path: String) -> Result<Vec<MapFolderEntry>, String> {
+pub async fn resolve_map_folders(path: String) -> Result<Vec<MapFolderEntry>, CoreError> {
     let folders = tauri::async_runtime::spawn_blocking(move || discover_worlds(Path::new(&path)))
         .await
         .map_err(common_err_ctx_key!("errors.map.failed", "地图操作失败"))??;
@@ -220,8 +220,8 @@ pub async fn resolve_map_folders(path: String) -> Result<Vec<MapFolderEntry>, St
 }
 
 #[tauri::command]
-pub async fn get_map_folder_info(root: String) -> Result<MapWorldInfo, String> {
-    let info = tauri::async_runtime::spawn_blocking(move || -> Result<MapWorldInfo, String> {
+pub async fn get_map_folder_info(root: String) -> Result<MapWorldInfo, CoreError> {
+    let info = tauri::async_runtime::spawn_blocking(move || -> Result<MapWorldInfo, CoreError> {
         let world = folder_root(&root)?;
         Ok(world_info(&world))
     })
@@ -234,7 +234,7 @@ pub async fn get_map_folder_info(root: String) -> Result<MapWorldInfo, String> {
 pub async fn list_map_folder_regions(
     root: String,
     dimension: String,
-) -> Result<Vec<MapRegionInfo>, String> {
+) -> Result<Vec<MapRegionInfo>, CoreError> {
     let regions = tauri::async_runtime::spawn_blocking(move || {
         let world = folder_root(&root)?;
         map_regions(&world, &dimension)
@@ -252,7 +252,7 @@ pub async fn get_map_folder_tile(
     rz: i32,
     max_y: i32,
     options: MapTileOptions,
-) -> Result<tauri::ipc::Response, String> {
+) -> Result<tauri::ipc::Response, CoreError> {
     let png = tauri::async_runtime::spawn_blocking(move || {
         let world = folder_root(&root)?;
         map_tile(
@@ -280,7 +280,7 @@ pub async fn get_map_folder_block(
     x: i32,
     z: i32,
     max_y: i32,
-) -> Result<MapBlockInfo, String> {
+) -> Result<MapBlockInfo, CoreError> {
     let info = tauri::async_runtime::spawn_blocking(move || {
         let world = folder_root(&root)?;
         map_block(&world, &dimension, x, z, max_y)
@@ -296,7 +296,7 @@ pub fn get_map_slime_chunks(
     seed: String,
     rx: i32,
     rz: i32,
-) -> Result<Vec<seedmap::SeedMapSlimeChunk>, String> {
+) -> Result<Vec<seedmap::SeedMapSlimeChunk>, CoreError> {
     let seed = seedmap::parse_seed(&seed)?;
     Ok(seedmap::slime_chunks_seed(seed, rx, rz))
 }
@@ -308,7 +308,7 @@ pub async fn find_map_slime_chunks(
     center_x: i32,
     center_z: i32,
     radius: i32,
-) -> Result<Vec<seedmap::SeedMapSlimeChunk>, String> {
+) -> Result<Vec<seedmap::SeedMapSlimeChunk>, CoreError> {
     let seed = seedmap::parse_seed(&seed)?;
     tauri::async_runtime::spawn_blocking(move || {
         seedmap::find_slime_chunks_seed(seed, center_x, center_z, radius)
@@ -327,8 +327,8 @@ pub async fn list_map_biomes(
     world_name: String,
     dimension: String,
     max_y: i32,
-) -> Result<Vec<MapBiomeSummary>, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapBiomeSummary>, String> {
+) -> Result<Vec<MapBiomeSummary>, CoreError> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapBiomeSummary>, CoreError> {
         let world = world_root(&version_name, &world_name)?;
         validate_dimension(&world, &dimension)?;
         Ok(list_biomes(&world, &dimension, max_y))
@@ -345,8 +345,8 @@ pub async fn list_map_folder_biomes(
     root: String,
     dimension: String,
     max_y: i32,
-) -> Result<Vec<MapBiomeSummary>, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapBiomeSummary>, String> {
+) -> Result<Vec<MapBiomeSummary>, CoreError> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapBiomeSummary>, CoreError> {
         let world = folder_root(&root)?;
         validate_dimension(&world, &dimension)?;
         Ok(list_biomes(&world, &dimension, max_y))
@@ -368,8 +368,8 @@ pub async fn find_map_biome(
     biome: String,
     center_x: i32,
     center_z: i32,
-) -> Result<Option<MapBiomeHit>, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<Option<MapBiomeHit>, String> {
+) -> Result<Option<MapBiomeHit>, CoreError> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Option<MapBiomeHit>, CoreError> {
         let world = world_root(&version_name, &world_name)?;
         validate_dimension(&world, &dimension)?;
         Ok(find_biome(
@@ -391,8 +391,8 @@ pub async fn find_map_folder_biome(
     biome: String,
     center_x: i32,
     center_z: i32,
-) -> Result<Option<MapBiomeHit>, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<Option<MapBiomeHit>, String> {
+) -> Result<Option<MapBiomeHit>, CoreError> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Option<MapBiomeHit>, CoreError> {
         let world = folder_root(&root)?;
         validate_dimension(&world, &dimension)?;
         Ok(find_biome(

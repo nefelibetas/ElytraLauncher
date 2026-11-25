@@ -1,26 +1,17 @@
+use elytra_domain::error::CoreError;
 #[macro_use]
-mod macros;
+extern crate elytra_domain;
 
-mod auth;
 mod commands;
-pub mod config;
 pub mod constants;
-pub mod downloader;
-mod events;
-pub mod game;
-mod jdk;
-pub mod launcher;
-mod map;
-pub mod online;
-mod persist;
-mod seedmap;
-mod server_status;
-pub mod task;
-pub mod tooldl;
+mod logging;
+mod sink;
 pub mod ts_export;
 mod update;
-pub mod util;
+mod win_console;
 mod window_state;
+
+use elytra_domain::{events, game, host, jdk, persist, util};
 
 #[cfg(target_os = "linux")]
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -144,11 +135,11 @@ fn tray_menu(app: &tauri::AppHandle, show: &str, quit: &str) -> tauri::Result<Me
 }
 
 /// 创建系统托盘：菜单含「显示主窗口 / 退出」；双击图标恢复窗口。
-fn init_tray(app: &tauri::App) -> Result<(), String> {
+fn init_tray(app: &tauri::App) -> Result<(), CoreError> {
     let icon = app
         .default_window_icon()
         .cloned()
-        .ok_or_else(|| keyed_msg!("errors.tray.noIcon", "应用缺少窗口图标"))?;
+        .ok_or_else(|| err_keyed!("errors.tray.noIcon", "应用缺少窗口图标"))?;
     let menu = tray_menu(app.handle(), "显示主窗口", "退出").map_err(|e| e.to_string())?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
@@ -184,12 +175,12 @@ fn init_tray(app: &tauri::App) -> Result<(), String> {
 
 /// Linux 的 libappindicator-sys 在动态库缺失时直接 panic（不返回 Err），需收敛为降级错误。
 #[cfg(target_os = "linux")]
-fn init_tray_guarded(app: &tauri::App) -> Result<(), String> {
+fn init_tray_guarded(app: &tauri::App) -> Result<(), CoreError> {
     guard_tray_panic(|| init_tray(app))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn init_tray_guarded(app: &tauri::App) -> Result<(), String> {
+fn init_tray_guarded(app: &tauri::App) -> Result<(), CoreError> {
     init_tray(app)
 }
 
@@ -198,9 +189,9 @@ compile_error!("Linux 托盘初始化依赖 panic=unwind（catch_unwind 降级�
 
 /// 托盘初始化 panic → 降级错误：首行中文结论，panic payload 作技术细节。
 #[cfg(target_os = "linux")]
-fn guard_tray_panic<F>(f: F) -> Result<(), String>
+fn guard_tray_panic<F>(f: F) -> Result<(), CoreError>
 where
-    F: FnOnce() -> Result<(), String>,
+    F: FnOnce() -> Result<(), CoreError>,
 {
     catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|payload| {
         let detail = payload
@@ -208,7 +199,7 @@ where
             .map(String::as_str)
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .unwrap_or("unknown panic");
-        Err(keyed_msg!(
+        Err(err_keyed!(
             "errors.tray.initPanic",
             "托盘初始化 panic\n{detail}"
         ))
@@ -234,21 +225,33 @@ fn has_tray() -> bool {
 
 /// 前端语言切换后同步托盘菜单文案（托盘由 Rust 持有，无法直接读前端 i18n）。
 #[tauri::command]
-fn set_tray_labels(app: tauri::AppHandle, show: String, quit: String) -> Result<(), String> {
+fn set_tray_labels(app: tauri::AppHandle, show: String, quit: String) -> Result<(), CoreError> {
     let tray = app
         .tray_by_id(TRAY_ID)
-        .ok_or_else(|| keyed_msg!("errors.tray.notReady", "托盘未初始化"))?;
+        .ok_or_else(|| err_keyed!("errors.tray.notReady", "托盘未初始化"))?;
     let menu = tray_menu(&app, &show, &quit).map_err(|e| e.to_string())?;
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+    tray.set_menu(Some(menu))
+        .map_err(|e| CoreError::from(e.to_string()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Err(e) = host::init(host::Config {
+        identity: host::Identity {
+            app_version: constants::APP_VERSION.into(),
+            curseforge_key: constants::CURSEFORGE_API_KEY.map(str::to_string),
+            ..Default::default()
+        },
+        ..Default::default()
+    }) {
+        eprintln!("host 初始化失败: {e}");
+    }
+    util::set_handle(tauri::async_runtime::handle().inner().clone());
     // 子进程不得弹控制台：GUI 进程先持有一个隐藏控制台，第三方库内部 spawn
     // （easytier 的 cmd/ipconfig 等）才会继承它而非新建窗口
-    util::ensure_hidden_console();
+    win_console::ensure_hidden_console();
     // 启动器日志落盘（stdout/stderr → Elytra/launcher.log）
-    util::init_file_logging();
+    logging::init();
     // 任务数据库恢复与工具箱配置均为首次访问惰性初始化；窗口创建前不碰 SQLite/TOML。
 
     let app = tauri::Builder::default()
@@ -300,7 +303,7 @@ pub fn run() {
                 eprintln!("托盘初始化失败: {e}");
             }
             // 游戏目录变化监听（激活目录的 versions/ 与聚焦版本子目录 → 事件推送）
-            game::version::watch::init(app.handle().clone());
+            game::version::watch::init_with_sink(sink::sink(app.handle()));
             // JDK 首扫放到窗口创建后：首次启动的递归扫盘 + java -version 子进程不与 WebView 争资源。
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_millis(500));

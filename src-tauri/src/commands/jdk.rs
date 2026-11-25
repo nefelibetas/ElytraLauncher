@@ -1,5 +1,6 @@
-use crate::jdk::model::{JdkInfo, JdkOptions};
-use crate::jdk::{self, scanner};
+use elytra_domain::error::CoreError;
+use elytra_domain::jdk::model::{JdkInfo, JdkOptions};
+use elytra_domain::jdk::{self, scanner};
 
 #[tauri::command]
 pub async fn auto_scan_jdk() -> Vec<JdkInfo> {
@@ -24,17 +25,17 @@ pub fn get_discovered_jdks() -> Vec<JdkInfo> {
 }
 
 #[tauri::command]
-pub async fn scan_custom_jdk(path: String) -> Result<Vec<JdkInfo>, String> {
+pub async fn scan_custom_jdk(path: String) -> Result<Vec<JdkInfo>, CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let found = scanner::scan_custom_dir(&path)?;
         jdk::register_scanned(found.clone());
-        Ok::<_, String>(found)
+        Ok::<_, CoreError>(found)
     })
     .await
     .map_err(common_err_ctx_key!("errors.jdk.scan", "JDK 扫描失败"))?
 }
 
 #[tauri::command]
-pub fn save_jdk_options(options: JdkOptions) -> Result<(), String> {
+pub fn save_jdk_options(options: JdkOptions) -> Result<(), CoreError> {
     jdk::save(&options)
 }

@@ -2,6 +2,6 @@
 import type { InstalledVersionInfo } from "./InstalledVersionInfo";
 
 /**
- * 激活目录 + 版本列表一次返回：启动页少一次 IPC，也避免两次枚举之间目录被切换。
+ * 激活目录 + 版本列表一次返回。
  */
 export type VersionState = { active_dir: string, versions: Array<InstalledVersionInfo>, };

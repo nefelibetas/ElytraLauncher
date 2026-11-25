@@ -49,9 +49,13 @@ gen-ts = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-cc = "1"
 
 [dependencies]
+elytra-domain = { path = "../../elytra-core/crates/domain" }
+elytra-dto = { path = "../../elytra-core/crates/dto" }
+elytra-map = { path = "../../elytra-core/crates/map" }
+elytra-seedmap = { path = "../../elytra-core/crates/seedmap" }
+elytra-online = { path = "../../elytra-core/crates/online" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
@@ -61,75 +65,19 @@ tauri-plugin-single-instance = "2"
 # 系统通知：任务完成/失败、游戏崩溃（窗口后台时）
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 reqwest = { version = "0.13.4", features = ["json", "stream", "gzip", "http2", "multipart"] }
 tokio = { version = "1", features = ["full"] }
-futures-util = "0.3"
 serde_json = "1"
-# Rust → TypeScript 类型导出（前端 interface 自动生成，替代手写镜像）：
-# #[derive(TS)] + #[ts(export)] 在 cargo test 时输出 .ts 到 src/types/
-ts-rs = "10"
-sha1 = "0.10"
-sha2 = "0.10"
-# 联机房间码（online/scaffold/room.rs）：uuid 生成房间码短码；
-# 网络名/密钥由房间码**明文映射**（非 HMAC 派生），故不再依赖 hmac
-uuid = { version = "1", features = ["v4"] }
-base64 = "0.22"
 url = "2"
-percent-encoding = "2"
-getrandom = "0.2"
-# JDK 包解压：zip crate。默认 features 含 lzma/xz/zstd，会与 easytier 的 liblzma-sys 冲突
-# （links=lzma 冲突），Minecraft/JDK 生态 zip 均为 deflate 压缩，故关默认只留
-# deflate/bzip2/aes-crypto/time
-zip = { version = "2", default-features = false, features = ["deflate", "bzip2", "aes-crypto", "time"] }
-# JDK 包解压：Adoptium（Temurin）的 mac/linux 仅提供 tar.gz（官方 API 返回的包
-# 格式 zip/tar.gz 随平台变化），需 tar + flate2（纯 Rust，flate2 默认 miniz_oxide 后端）
-tar = "0.4"
-flate2 = "1"
-# 安装任务持久化（#6）：SQLite 存任务快照，崩溃/重启后恢复。
-# 运行时 SqlitePoolOptions（无 migrate 宏）；与 TOML 并存期间 Settings.toml 读写路径不动
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
-# 世界地图：region 读写 + NBT/chunk 解析 + 瓦片 PNG 编码（loaded-only，不接预测）
-mca = { version = "2.1", default-features = false }
-fastnbt = "2.6"
-fastanvil = "0.32"
-png = "0.18"
-# fastanvil 的调色板加载依赖 image 的 PNG codec；显式打开避免跨 crate feature 遗漏
-image = { version = "0.23", default-features = false, features = ["png"] }
-# 1.21.5+ region 自定义 LZ4（Java LZ4Block）兜底
-lz4-java-wrc = "0.2"
-# 游戏目录变化监听（game/version/watch.rs）：非递归 watch `versions/` 与聚焦版本子目录。
-# 平台后端 ReadDirectoryChangesW / inotify / FSEvents；事件驱动，空闲不轮询不占 CPU
-notify = "8"
-# 锁：立即 unwrap 的场景用 parking_lot（无 poisoning 路径，guard 更小更快）
+log = "0.4"
+base64 = "0.22"
 parking_lot = "0.12"
-# 联机（#online）：EasyTier 库内嵌虚拟局域网 + 端口转发。
-# 剔 tun feature：纯用户态 no_tun+smoltcp+socks5，无需 wintun 驱动/管理员权限。
-# socks5 = gateway 启用开关（gateway_enabled 由 cfg!(feature="socks5") 决定），端口转发依此启动；
-# management = 实例事件订阅；aes-gcm = 加密；quic = 传输协议。
-# kcp = port_forward 数据面首选传输（DataPlaneTcpConnectOptions::gateway 为 PreferKcp）：
-#   缺 kcp feature 时 kcp_ready=false，回退 smoltcp 用户态 TCP 栈，
-#   MC 登录配置同步（registry 数百 KB~数 MB）传输会中断（实测"连接中断"）。
-# endpoint-discovery = 解析 https/http/txt/srv 协调节点（默认社区节点是 https，缺则永远
-#   "endpoint discovery is disabled"）；同时带入 dns-resolver（STUN TXT 记录依赖它）。
-easytier = { git = "https://github.com/EasyTier/EasyTier", default-features = false, features = ["management", "socks5", "smoltcp", "kcp", "quic", "websocket", "logging", "aes-gcm", "endpoint-discovery"] }
-easytier-core = { git = "https://github.com/EasyTier/EasyTier", default-features = false }
-# rustls 进程级 CryptoProvider：reqwest 启用 aws-lc-rs、easytier 启用 ring，二者并存时
-# rustls 无法自动选择（协调节点 HTTPS 发现会在握手前 panic）；显式装 ring（与 easytier 内部一致）。
-# 主版本须与 easytier 依赖的 rustls 一致，否则 install_default 装到另一份 rustls 上无效。
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tauri-plugin-clipboard-manager = "2.5.0"
 
 [target.'cfg(unix)'.dependencies]
+# 启动日志 dup2 重定向
 libc = "0.2"
-# 读 Windows 系统代理（注册表 Internet Settings）：reqwest 默认不读系统代理，
-# 用户开着系统代理（Clash 等）时官方源直连会被劫持/黑洞，需显式走代理
-[target.'cfg(windows)'.dependencies]
-winreg = "0.55"
-# 非 Windows 钥匙串主密钥加密：secrets.bin 每条 value 用主密钥 ChaCha20-Poly1305 加密
-# （主密钥存系统钥匙串；无钥匙串环境降级明文 + 0o600）
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-chacha20poly1305 = "0.11"
+
 # macOS 系统钥匙串（Keychain Services）；security-framework 不重导出 core-foundation，需显式声明
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.7"
@@ -143,6 +91,8 @@ secret-service = { version = "5.1", features = ["rt-tokio-crypto-rust"] }
 # 注：serde_json / tokio / parking_lot 无需在此重复声明——集成测试同样能使用
 # [dependencies]（tokio 主依赖的 "full" 已覆盖 macros / rt-multi-thread）。
 tempfile = "3"
+# commands/version 的整合包导出测试读取 zip 条目
+zip = { version = "2", default-features = false, features = ["deflate", "bzip2", "aes-crypto", "time"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

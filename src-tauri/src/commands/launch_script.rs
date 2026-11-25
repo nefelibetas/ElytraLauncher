@@ -1,7 +1,8 @@
-use crate::auth::account::valid_access_token;
-use crate::launcher::args;
-use crate::launcher::process;
-use crate::launcher::script;
+use elytra_domain::auth::account::valid_access_token;
+use elytra_domain::error::CoreError;
+use elytra_domain::launcher::args;
+use elytra_domain::launcher::process;
+use elytra_domain::launcher::script;
 
 /// 导出 PCL 风格启动脚本（Windows .bat / macOS/Linux .sh）到指定路径，返回该路径。
 #[tauri::command]
@@ -13,7 +14,7 @@ pub async fn export_launch_script(
     access_token: String,
     uuid: String,
     xuid: String,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     // 与 spawn_game 同：正版模式用后端取的有效 token（自动刷新），其余沿用传入值
     let access_token = if auth_mode == "online" {
         valid_access_token().await?

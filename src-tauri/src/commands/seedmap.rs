@@ -1,6 +1,7 @@
+use elytra_domain::error::CoreError;
 use tauri::ipc::Response;
 
-use crate::seedmap;
+use elytra_seedmap as seedmap;
 
 #[tauri::command]
 pub fn get_seed_map_versions() -> Vec<seedmap::SeedMapVersion> {
@@ -8,7 +9,7 @@ pub fn get_seed_map_versions() -> Vec<seedmap::SeedMapVersion> {
 }
 
 #[tauri::command]
-pub fn resolve_seed_map_version(version: String) -> Result<seedmap::ResolvedVersion, String> {
+pub fn resolve_seed_map_version(version: String) -> Result<seedmap::ResolvedVersion, CoreError> {
     seedmap::resolve_version(&version)
 }
 
@@ -18,7 +19,7 @@ pub async fn get_seed_map_tile(
     version: String,
     rx: i32,
     rz: i32,
-) -> Result<Response, String> {
+) -> Result<Response, CoreError> {
     let resolved = seedmap::resolve_version(&version)?;
     let seed = seedmap::parse_seed(&seed)?;
     let cache_path = seedmap::tile_cache_path(&resolved.family, seed, rx, rz);
@@ -45,7 +46,7 @@ pub async fn get_seed_map_block(
     version: String,
     x: i32,
     z: i32,
-) -> Result<seedmap::SeedMapBlock, String> {
+) -> Result<seedmap::SeedMapBlock, CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let resolved = seedmap::resolve_version(&version)?;
         let seed = seedmap::parse_seed(&seed)?;
@@ -64,7 +65,7 @@ pub async fn get_seed_map_structures(
     version: String,
     rx: i32,
     rz: i32,
-) -> Result<Vec<seedmap::SeedMapStructure>, String> {
+) -> Result<Vec<seedmap::SeedMapStructure>, CoreError> {
     let resolved = seedmap::resolve_version(&version)?;
     let seed = seedmap::parse_seed(&seed)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -85,7 +86,7 @@ pub async fn find_seed_map_structures(
     center_x: i32,
     center_z: i32,
     radius: i32,
-) -> Result<Vec<seedmap::SeedMapStructure>, String> {
+) -> Result<Vec<seedmap::SeedMapStructure>, CoreError> {
     let resolved = seedmap::resolve_version(&version)?;
     let seed = seedmap::parse_seed(&seed)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -105,7 +106,7 @@ pub async fn find_seed_map_slime_chunks(
     center_x: i32,
     center_z: i32,
     radius: i32,
-) -> Result<Vec<seedmap::SeedMapSlimeChunk>, String> {
+) -> Result<Vec<seedmap::SeedMapSlimeChunk>, CoreError> {
     let resolved = seedmap::resolve_version(&version)?;
     let seed = seedmap::parse_seed(&seed)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -124,7 +125,7 @@ pub async fn get_seed_map_slime_chunks(
     version: String,
     rx: i32,
     rz: i32,
-) -> Result<Vec<seedmap::SeedMapSlimeChunk>, String> {
+) -> Result<Vec<seedmap::SeedMapSlimeChunk>, CoreError> {
     tauri::async_runtime::spawn_blocking(move || {
         let resolved = seedmap::resolve_version(&version)?;
         let seed = seedmap::parse_seed(&seed)?;

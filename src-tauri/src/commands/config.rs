@@ -1,4 +1,4 @@
-use crate::persist::config::{take_notice, RecoveryNotice};
+use elytra_domain::persist::config::{take_notice, RecoveryNotice};
 
 #[tauri::command]
 pub fn take_config_recovery_notice() -> Option<RecoveryNotice> {

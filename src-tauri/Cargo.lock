@@ -7,34 +7,20 @@ name = "Elytra"
 version = "1.7.4"
 dependencies = [
  "base64 0.22.1",
- "cc",
- "chacha20poly1305 0.11.0",
  "core-foundation 0.10.1",
- "easytier",
- "easytier-core",
- "fastanvil",
- "fastnbt",
- "flate2",
- "futures-util",
- "getrandom 0.2.17",
- "image 0.23.14",
+ "elytra-domain",
+ "elytra-dto",
+ "elytra-map",
+ "elytra-online",
+ "elytra-seedmap",
  "libc",
- "lz4-java-wrc",
- "mca",
- "notify",
+ "log",
  "parking_lot",
- "percent-encoding",
- "png 0.18.1",
  "reqwest 0.13.4",
- "rustls",
  "secret-service",
  "security-framework",
  "serde",
  "serde_json",
- "sha1",
- "sha2",
- "sqlx",
- "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -44,11 +30,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "tokio",
- "toml 0.8.23",
- "ts-rs",
  "url",
- "uuid",
- "winreg 0.55.0",
  "zip 2.4.2",
 ]
 
@@ -2144,6 +2126,97 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "elytra-domain"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chacha20poly1305 0.11.0",
+ "core-foundation 0.10.1",
+ "flate2",
+ "futures-util",
+ "getrandom 0.2.17",
+ "libc",
+ "log",
+ "notify",
+ "parking_lot",
+ "percent-encoding",
+ "reqwest 0.13.4",
+ "secret-service",
+ "security-framework",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "sqlx",
+ "tar",
+ "tokio",
+ "toml 0.8.23",
+ "url",
+ "uuid",
+ "winreg 0.55.0",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "elytra-dto"
+version = "0.1.0"
+dependencies = [
+ "elytra-domain",
+ "elytra-map",
+ "elytra-online",
+ "elytra-seedmap",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "elytra-map"
+version = "0.1.0"
+dependencies = [
+ "elytra-domain",
+ "fastanvil",
+ "fastnbt",
+ "flate2",
+ "image 0.23.14",
+ "lz4-java-wrc",
+ "mca",
+ "parking_lot",
+ "png 0.18.1",
+ "serde",
+ "serde_json",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "elytra-online"
+version = "0.1.0"
+dependencies = [
+ "easytier",
+ "easytier-core",
+ "elytra-domain",
+ "getrandom 0.2.17",
+ "log",
+ "parking_lot",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "elytra-seedmap"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "elytra-domain",
+ "elytra-map",
+ "png 0.18.1",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

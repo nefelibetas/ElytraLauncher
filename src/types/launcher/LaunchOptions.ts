@@ -5,48 +5,51 @@ import type { MemoryMode } from "./MemoryMode";
 import type { ProcessPriority } from "./ProcessPriority";
 import type { WindowSize } from "./WindowSize";
 
+/**
+ * 全局启动参数。
+ */
 export type LaunchOptions = { memory: MemoryMode, 
 /**
- * 最小堆 -Xms（MB）；None = 不设置。仅 Custom 模式生效（Auto 的 -Xmx 动态推测）。
+ * 最小堆 -Xms（MB）；None = 不设置。仅 Custom 模式生效。
  */
 min_memory: number | null, 
 /**
- * 游戏窗口标题；空 = 不改（不传 -Dminecraft.window.title）。
+ * 游戏窗口标题；空 = 不改。
  */
 window_title: string, process_priority: ProcessPriority, window_size: WindowSize, 
 /**
- * 禁用 Java Launch Wrapper（老版本 launchwrapper 主类 → client.main.Main）。
+ * 禁用 Java Launch Wrapper。
  */
 disable_launch_wrapper: boolean, 
 /**
- * 禁用 LWJGL Unsafe Agent（不注入 -javaagent:lwjgl-unsafe-agent 类参数）。
+ * 禁用 LWJGL Unsafe Agent。
  */
 disable_lwjgl_unsafe_agent: boolean, 
 /**
- * 启动游戏前进行内存优化（Windows 清理当前进程工作集）。
+ * 启动游戏前进行内存优化。
  */
 pre_launch_memory_optimize: boolean, 
 /**
- * 使用高性能显卡（Windows 注册表 DirectX UserGpuPreferences 指定独显）。
+ * 使用高性能显卡。
  */
 use_high_performance_gpu: boolean, 
 /**
- * 游戏语言代码（如 zh_cn / en_us）；空 = 不干预，旧值 auto_zh_CN 等价 zh_cn。
+ * 游戏语言代码（如 zh_cn / en_us）；空 = 不干预。
  */
 game_language: string, 
 /**
- * 服务器直连：快速进服（--server/--port 追加到游戏参数末尾）。None = 不指定。
+ * 服务器直连：快速进服。None = 不指定。
  */
 server: string | null, 
 /**
- * 服务器直连端口（配合 server 使用；None = 不传 --port）。
+ * 服务器直连端口（配合 server 使用）。
  */
 port: number | null, 
 /**
- * 正版登录时验证 SSL 证书（默认开启；关闭会暴露 token 到中间人风险）。
+ * 正版登录时验证 SSL 证书。
  */
 verify_ssl: boolean, jvm_args: Array<string>, game_args: Array<string>, 
 /**
- * 自动任务（pre_launch / on_crash / post_exit）。实例文件存在时由实例配置覆盖。
+ * 自动任务（pre_launch / on_crash / post_exit）。
  */
 auto_tasks: AutoTasks, gc_type: GcType, };

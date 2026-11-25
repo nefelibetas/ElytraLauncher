@@ -2,8 +2,11 @@
 import type { StepKind } from "./StepKind";
 import type { StepStatus } from "./StepStatus";
 
+/**
+ * 单个步骤信息。
+ */
 export type StepInfo = { name: string, 
 /**
- * 步骤枚举；None 时前端显示 name（旧事件/动态步骤）。
+ * 步骤枚举；None 时前端显示 name。
  */
 kind: StepKind | null, status: StepStatus, progress: number, };

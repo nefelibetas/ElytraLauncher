@@ -3,6 +3,6 @@ import type { AutoTaskFailureInfo } from "./AutoTaskFailureInfo";
 import type { AutoTaskPhase } from "./AutoTaskPhase";
 
 /**
- * 终态汇总事件载荷（`auto-tasks-finished`；低频 FIFO，前端据此弹 dialog）。
+ * 终态汇总事件载荷（`auto-tasks-finished`）。
  */
 export type AutoTasksFinished = { version_id: string, phase: AutoTaskPhase, failures: Array<AutoTaskFailureInfo>, };

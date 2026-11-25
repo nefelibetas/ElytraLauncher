@@ -1,19 +1,20 @@
 //! 版本图标命令：读/写/还原 versions/{dir} 下的图标。
 //! 优先级：用户自定义（version-icon.png）> 整合包项目图（pack-icon.png）；目录名守卫防路径穿越。
 
+use elytra_domain::error::CoreError;
 use std::path::PathBuf;
 
 use serde::Serialize;
 
-use crate::game::version::dir::version_dir_path;
-use crate::game::version::icon::{version_icon_path, CUSTOM_ICON_NAME};
-use crate::util;
+use elytra_domain::game::version::dir::version_dir_path;
+use elytra_domain::game::version::icon::{version_icon_path, CUSTOM_ICON_NAME};
+use elytra_domain::util;
 
 /// 版本图标读取上限（平台 logo / 用户图片一般 <256KB，留余量）。
 const MAX_PACK_ICON_BYTES: u64 = 1024 * 1024;
 
 /// 校验版本目录名：仅接受简单目录名，防路径穿越。
-fn ensure_simple_dir_name(name: &str) -> Result<(), String> {
+fn ensure_simple_dir_name(name: &str) -> Result<(), CoreError> {
     if !util::is_simple_name(name) {
         bail_key!("errors.version.dirNameInvalid", "版本目录名不合法\n{name}");
     }
@@ -60,13 +61,16 @@ pub fn get_version_icon_source(version_dir_name: String) -> VersionIconInfo {
 
 /// 设置自定义版本图标：把选中图片复制为 versions/{dir}/version-icon.png；仅接受 png/jpeg/webp/gif（魔数校验），≤1MB，覆盖旧图。
 #[tauri::command]
-pub async fn set_version_icon(version_dir_name: String, source_path: String) -> Result<(), String> {
+pub async fn set_version_icon(
+    version_dir_name: String,
+    source_path: String,
+) -> Result<(), CoreError> {
     ensure_simple_dir_name(&version_dir_name)?;
     let src = PathBuf::from(&source_path);
     let meta =
         std::fs::metadata(&src).map_err(common_err_ctx_key!("errors.file.read", "读取图片失败"))?;
     if !meta.is_file() {
-        return Err(keyed_msg!("errors.version.notAFile", "所选路径不是文件"));
+        return Err(err_keyed!("errors.version.notAFile", "所选路径不是文件"));
     }
     if meta.len() == 0 || meta.len() > MAX_PACK_ICON_BYTES {
         bail_key!(
@@ -78,7 +82,7 @@ pub async fn set_version_icon(version_dir_name: String, source_path: String) -> 
     let bytes =
         std::fs::read(&src).map_err(common_err_ctx_key!("errors.file.read", "读取图片失败"))?;
     if !util::is_supported_image(&bytes) {
-        return Err(keyed_msg!(
+        return Err(err_keyed!(
             "errors.version.iconFormat",
             "不支持的图片格式（仅支持 png / jpg / webp / gif）"
         ));
@@ -94,7 +98,7 @@ pub async fn set_version_icon(version_dir_name: String, source_path: String) -> 
 
 /// 还原默认图标：删自定义图标（version-icon.png），整合包项目图不受影响。
 #[tauri::command]
-pub async fn reset_version_icon(version_dir_name: String) -> Result<(), String> {
+pub async fn reset_version_icon(version_dir_name: String) -> Result<(), CoreError> {
     ensure_simple_dir_name(&version_dir_name)?;
     let vdir = version_dir_path(&version_dir_name)?;
     let target = vdir.join("version-icon.png");

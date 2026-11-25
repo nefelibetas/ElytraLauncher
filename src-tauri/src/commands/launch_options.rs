@@ -1,8 +1,9 @@
-use crate::jdk;
-use crate::launcher::memory;
-use crate::launcher::model;
-use crate::launcher::model::InstanceLaunchOptions;
-use crate::persist;
+use elytra_domain::error::CoreError;
+use elytra_domain::jdk;
+use elytra_domain::launcher::memory;
+use elytra_domain::launcher::model;
+use elytra_domain::launcher::model::InstanceLaunchOptions;
+use elytra_domain::persist;
 
 /// 系统内存信息（MB）：总内存 + 当前可用内存。
 #[tauri::command]
@@ -16,14 +17,13 @@ pub fn get_launch_options() -> model::LaunchOptions {
 }
 
 #[tauri::command]
-pub fn save_launch_options(config: model::LaunchOptions) -> Result<(), String> {
+pub fn save_launch_options(config: model::LaunchOptions) -> Result<(), CoreError> {
     persist::save_launch_options(&config)
         .map_err(common_err_ctx_key!("errors.config.write", "保存配置失败"))
 }
 
 /// 实例级启动参数状态：`global` 为全局快照，`instance` 为实例快照，`effective` 为实际生效值。
-#[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export_to = "launcher/")]
+#[derive(serde::Serialize)]
 pub struct InstanceLaunchState {
     pub global: InstanceLaunchOptions,
     pub instance: Option<InstanceLaunchOptions>,
@@ -52,6 +52,6 @@ pub fn get_instance_launch_options(version_id: String) -> InstanceLaunchState {
 pub fn save_instance_launch_options(
     version_id: String,
     options: Option<InstanceLaunchOptions>,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     persist::instance::write_launch(&mc_dir(), &version_id, options.as_ref())
 }

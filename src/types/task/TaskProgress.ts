@@ -11,10 +11,10 @@ export type TaskProgress = { task_id: string, name: string,
  */
 name_key: string | null, name_params: { [key in string]?: string } | null, status: TaskStatus, progress: number, speed_bps: number, 
 /**
- * 预计剩余秒数；停滞（>4s 无字节推进）或速度过低时 None。
+ * 预计剩余秒数；停滞或速度过低时 None。
  */
 eta_seconds: number | null, completed_files: number, total_files: number, completed_bytes: number, total_bytes: number, current_phase: string, 
 /**
- * 阶段的 i18n key；动态文件名/进度等仍看 current_phase。
+ * 阶段的 i18n key。
  */
 current_phase_key: string | null, current_phase_params: { [key in string]?: string } | null, steps: Array<StepInfo>, error: string | null, };
