@@ -12,23 +12,19 @@ const messagesRoot = path.join(root, "src/i18n/messages");
 const coreRoot =
   process.env.ELYTRA_CORE_ROOT || path.join(root, "..", "elytra-core");
 const rustRoots = [
-  path.join(root, "src-tauri", "src"),
-  path.join(coreRoot, "crates"),
+  { dir: path.join(root, "src-tauri", "src"), prefix: "src-tauri/src/" },
+  { dir: path.join(coreRoot, "crates"), prefix: "elytra-core/crates/" },
 ];
 
 function walkRust(cb) {
-  for (const dir of rustRoots) {
+  for (const { dir, prefix } of rustRoots) {
     if (!fs.existsSync(dir)) {
       console.error(`[i18n] Rust 根目录不存在: ${dir}`);
       failed = true;
       continue;
     }
-    walk(dir, ".rs", (rel, text) => cb(normalizeRustPath(rel), text));
+    walk(dir, ".rs", (rel, text) => cb(`${prefix}${rel}`, text));
   }
-}
-
-function normalizeRustPath(rel) {
-  return rel.replace(/^(?:\.\.\/)+elytra-core\//, "elytra-core/");
 }
 
 function loadLocale(locale) {
@@ -67,12 +63,12 @@ function placeholders(value) {
 }
 
 /** 递归遍历目录（按扩展名过滤；回调拿到相对路径与文件内容）。 */
-function walk(dir, ext, cb) {
+function walk(dir, ext, cb, base = dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full, ext, cb);
+    if (entry.isDirectory()) walk(full, ext, cb, base);
     else if (entry.name.endsWith(ext)) {
-      cb(path.relative(root, full).replaceAll("\\", "/"), fs.readFileSync(full, "utf8"));
+      cb(path.relative(base, full).replaceAll("\\", "/"), fs.readFileSync(full, "utf8"));
     }
   }
 }
