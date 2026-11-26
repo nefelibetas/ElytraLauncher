@@ -72,14 +72,6 @@ jobs:
       APPLE_SIGNING_IDENTITY: '-'
     steps:
       - uses: actions/checkout@v5
-      - name: Checkout core
-        shell: bash
-        env:
-          CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: |
-          CORE_TAG=$(cat .github/elytra-core-tag)
-          git clone "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
-          git -C ../elytra-core checkout "$CORE_TAG"
 
       - uses: jdx/mise-action@v5
         with:

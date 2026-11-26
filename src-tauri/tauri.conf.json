@@ -21,8 +21,8 @@
         "center": true,
         "shadow": false,
         "noRedirectionBitmap": true,
-        "minWidth": 900,
-        "minHeight": 560,
+        "minWidth": 1008,
+        "minHeight": 648,
         "scrollBarStyle": "fluentOverlay",
         "visible": false
       }

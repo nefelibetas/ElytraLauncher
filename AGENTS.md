@@ -13,6 +13,7 @@ Elytra Launcher — **Tauri v2（Rust 后端）+ Vue 3（TypeScript 前端）** 
 > 本仓 `src-tauri/src` 只剩 `commands/`、`lib.rs`、`window_state.rs`、`update.rs`、`ts_export.rs`、`constants.rs`、`sink.rs`、`win_console.rs`。
 > 领域路径映射：原 `src-tauri/src/<core 模块>` → `elytra-core/crates/domain/src/<模块>`；`map` → `crates/map/src`；`seedmap` → `crates/seedmap/src`；`online` → `crates/online/src`；`data/wiki_entries.txt` → `crates/domain/src/data`；`assets/` → `crates/map/assets`；`vendor/cubiomes` → `crates/seedmap/vendor`。
 > core 通过 `host::Config` 注入版本/配置目录/CurseForge key，通过 `util::set_handle` 注入 tokio runtime，通过 `task::EventSink` 接收事件；错误统一 `elytra_domain::error::CoreError`（`Display` 仍是 `@i18n` 协议，Tauri 序列化为字符串）。
+> App 通过 `src-tauri/Cargo.toml` 的 git tag 引用 core crate，不依赖 sibling 路径；改 core 需在 core 仓库提交、打 tag，再同步依赖 tag 与 `Cargo.lock`。
 
 ## Architecture & Data Flow
 
@@ -68,7 +69,7 @@ pnpm lint:css       # CSS 兼容性检查（基线见 package.json browserslist�
 pnpm i18n:check     # i18n 门禁：zh/en key 对称 + 占位符一致 + 后端 key + 前端静态 t() + 裸中文 + 未本地化错误首行（存量见 scripts/i18n-rust-plain-baseline.json；--update-baseline 重写）
 
 cd src-tauri && cargo fmt                                # 改 Tauri 壳后必跑
-cd src-tauri && cargo check                              # 编译检查（含 path 依赖 core）
+cd src-tauri && cargo check                              # 编译检查（含 git tag 依赖 core）
 cd src-tauri && cargo clippy --lib                       # lint（保持零代码警告）
 cd src-tauri && cargo test --lib -- --test-threads=1     # 壳层单元测试
 cd src-tauri && cargo run --bin gen_ts --features gen-ts # 生成前端 TS 类型（elytra-dto）
@@ -149,7 +150,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **包管理器必须 pnpm**：`beforeDevCommand` 硬编码 `pnpm dev`；`pnpm-lock.yaml` 入库；CI 与本地一律 `pnpm install --frozen-lockfile`
 - **工具链单一版本源 `mise.toml`**（node / pnpm / rust / protoc）：本地 `mise install`；CI 用 `jdx/mise-action` 读同一文件，不写死版本号。各 job 设 `MISE_RUSTUP_HOME` 指向 mise 数据目录（rust 实体在 rustup home，否则缓存命中但工具链缺失）
 - **工具链很新**：vite 8、typescript 6、vue-tsc 3、vue-router 5——新增依赖前确认兼容
-- **窗口**：默认 1008×648、`decorations:false` + `transparent:true` + `resizable:true`（minWidth 900 / minHeight 560，尺寸/位置/最大化经 `window_state.rs` 持久化），前端自绘 TitleBar；CSP 的 `img-src` 需放行 `cdn.modrinth.com` / `*.forgecdn.net` / `mod.mcimirror.top`，否则远程图标被静默拦截
+- **窗口**：默认 1008×648、`decorations:false` + `transparent:true` + `resizable:true`（minWidth 1008 / minHeight 648，尺寸/位置/最大化经 `window_state.rs` 持久化），前端自绘 TitleBar；CSP 的 `img-src` 需放行 `cdn.modrinth.com` / `*.forgecdn.net` / `mod.mcimirror.top`，否则远程图标被静默拦截
 - **capabilities 是 v2 权限门**：新增 JS 侧 window/fs/dialog API 必须先改 `src-tauri/capabilities/default.json`
 - **Rust 变更需重启 `pnpm tauri dev`**（vite 忽略 src-tauri）；前端跨多个 store 的批量改动后建议重启 dev——HMR 可能停在半旧半新（组件逻辑更新但 store 是旧的），排查前端怪状前先重启排除
 - **reqwest 0.13 无 `.form()`**：表单手工 urlencode
@@ -158,7 +159,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **版本号三处一致**：`tauri.conf.json` / `Cargo.toml` / `package.json`（当前 1.7.5）
 - **系统代理**：Windows 读注册表（`winreg`）→ env；Linux env → GNOME gsettings；reqwest 默认不读，开启系统代理时官方源直连会被劫持
 - **打包**：`bundle.targets` 列全 deb/rpm/appimage/app/dmg/nsis/msi（bundler 按平台求交过滤）。NSIS 卸载是逐文件 `Delete` + 非递归 `RMDir`，**不会删游戏数据**；`identifier`（`xyz.bridgefish.elytra`）≠ 配置目录（`Elytra`），故 `POSTUNINSTALL` 按真实路径补删；MSI 装 `Program Files`，`default_game_dir_base` 有回退；卸载后保留 `HKCU\Software\<manufacturer>\<product>` 是有意行为
-- **发布工作流**：`.github/workflows/release.yml` 只在推 `v*` tag 时跑（手动 dispatch 只出 artifacts，需 workflow 在 `main`）。门禁复用 `check.yml`（frontend：vue-tsc + lint:css + i18n + fmt；rust-windows：clippy + test；rust-cross：Linux/macOS clippy）；`prepare` → `build`（三平台并行）→ `publish`，任一失败 Release 停在草稿。**core 引用策略：本地 dev 用 path 依赖（最新工作区）；check CI 克隆 core `main` 最新提交做集成验证；release 从 `.github/elytra-core-tag` 读取 tag 并 checkout，发布前先给 core 打新 tag 并更新该文件**。产物：Win 便携 zip + NSIS + MSI、macOS universal dmg（ad-hoc 签名，Apple Silicon 上未签名无法启动）、Linux AppImage + deb + rpm + tar.gz。密钥走 Secrets（`ELYTRA_CURSEFORGE_API_KEY`，缺失 workflow 直接失败；本地缺 `.env` 时 CurseForge 静默降级）。Linux 固定 `ubuntu-22.04`（glibc 下限）。同版本重跑：`git tag -f v1.0.0 <提交> && git push -f origin v1.0.0`（tag 必须与版本号一致）
+- **发布工作流**：`.github/workflows/release.yml` 只在推 `v*` tag 时跑（手动 dispatch 只出 artifacts，需 workflow 在 `main`）。门禁复用 `check.yml`（frontend：vue-tsc + lint:css + i18n + fmt；rust-windows：clippy + test；rust-cross：Linux/macOS clippy）；`prepare` → `build`（三平台并行）→ `publish`，任一失败 Release 停在草稿。**core 引用策略：`src-tauri/Cargo.toml` 的 5 个 `elytra-*` 依赖统一用 git tag；发 core 新版本先打 tag，再同步这些 tag 与 `Cargo.lock`。CI/release 由 Cargo 拉取，不 checkout sibling；core 自身的 fmt/clippy/test 在 core 仓库 CI 跑**。产物：Win 便携 zip + NSIS + MSI、macOS universal dmg（ad-hoc 签名，Apple Silicon 上未签名无法启动）、Linux AppImage + deb + rpm + tar.gz。密钥走 Secrets（`ELYTRA_CURSEFORGE_API_KEY`，缺失 workflow 直接失败；本地缺 `.env` 时 CurseForge 静默降级）。Linux 固定 `ubuntu-22.04`（glibc 下限）。同版本重跑：`git tag -f v1.0.0 <提交> && git push -f origin v1.0.0`（tag 必须与版本号一致）
 - **EasyTier 构建依赖**：`kcp` feature 需 libclang（`winget install LLVM.LLVM` + `LIBCLANG_PATH`）；`7z` 在 PATH；`protoc`（mise 已列，勿在 workflow 另装）
 - **种子预览构建依赖**：`build.rs` 编译 `vendor/cubiomes`；Windows MSVC 用 **clang-cl**（上游用 VLA，cl.exe 不兼容），从 `LIBCLANG_PATH` / `C:\Program Files\LLVM\bin` / PATH 自动查找
 - 敏感信息（token/client secret）不硬编码、不打印日志、不提交 git
@@ -171,7 +172,7 @@ npx vue-tsc --noEmit    # 前端全量类型检查
 - **断言风格**：`assert_eq!` 精确值为主要；行为不变量用 `assert!` + 中文 message
 - **平台隔离**：Windows 专属（BAT 渲染、DPAPI、注册表代理）用 `#[cfg(target_os = "windows")]`
 - **persist 测试隔离**：测试进程配置落 `target/debug/deps/Elytra/Settings.toml`；每个测试先 remove_file 再 save（串行依赖）
-- **日常验证命令**：`cd src-tauri && cargo test --lib -- --test-threads=1`（壳层）+ `cd ../elytra-core && cargo test --workspace -- --test-threads=1`（core；**并行会偶发竞争**：persist 共用 Settings.toml + 网络抖动）
+- **日常验证命令**：`cd src-tauri && cargo test --lib -- --test-threads=1`（壳层）+ `cd ../elytra-core && cargo test --workspace -- --test-threads=1`（core 改动在 elytra-core 仓库内跑；**并行会偶发竞争**：persist 共用 Settings.toml + 网络抖动）
 - **clippy 红线**：`cargo clippy --lib`（壳）与 `cargo clippy --workspace -- -D warnings`（core）零代码警告
 - **e2e**：`elytra-core/crates/domain/tests/e2e_download.rs` 用 `#[tokio::test(flavor = "multi_thread")]`（终态收口走 `block_in_place`，current_thread 会 panic）；任务层事件出口抽象为 `task::emit::EventSink`，测试注入记录型实现即可，不触碰 IPC
 - **ModLoader 矩阵**：`game/loader/mod.rs` 的 `#[cfg(test)] mod matrix`，真实网络 + 真实 JDK 跑「形态」而非「版本」：loader 9 条（Fabric / Quilt / Forge 1.7.10·1.8.9 spec-0 / Forge 1.12.2 / 1.16.5 / 1.20.1 / NeoForge 20.4·1.21.1）+ OptiFine 5 条；每例把安装出的版本 JSON 按真实模型解析并构建启动命令（classpath 项数、`${}` 残留、loader 是否进 `-cp`/`--module-path`、natives 标志）

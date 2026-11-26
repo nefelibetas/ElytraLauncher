@@ -2131,6 +2131,7 @@ dependencies = [
 [[package]]
 name = "elytra-domain"
 version = "0.1.1"
+source = "git+https://github.com/ElytraLauncher/elytra-core?tag=v0.1.1#2911d31bcf8a479c58013f0378d1471462a0a082"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305 0.11.0",
@@ -2164,6 +2165,7 @@ dependencies = [
 [[package]]
 name = "elytra-dto"
 version = "0.1.1"
+source = "git+https://github.com/ElytraLauncher/elytra-core?tag=v0.1.1#2911d31bcf8a479c58013f0378d1471462a0a082"
 dependencies = [
  "elytra-domain",
  "elytra-map",
@@ -2177,6 +2179,7 @@ dependencies = [
 [[package]]
 name = "elytra-map"
 version = "0.1.1"
+source = "git+https://github.com/ElytraLauncher/elytra-core?tag=v0.1.1#2911d31bcf8a479c58013f0378d1471462a0a082"
 dependencies = [
  "elytra-domain",
  "fastanvil",
@@ -2195,6 +2198,7 @@ dependencies = [
 [[package]]
 name = "elytra-online"
 version = "0.1.1"
+source = "git+https://github.com/ElytraLauncher/elytra-core?tag=v0.1.1#2911d31bcf8a479c58013f0378d1471462a0a082"
 dependencies = [
  "easytier",
  "easytier-core",
@@ -2211,6 +2215,7 @@ dependencies = [
 [[package]]
 name = "elytra-seedmap"
 version = "0.1.1"
+source = "git+https://github.com/ElytraLauncher/elytra-core?tag=v0.1.1#2911d31bcf8a479c58013f0378d1471462a0a082"
 dependencies = [
  "cc",
  "elytra-domain",

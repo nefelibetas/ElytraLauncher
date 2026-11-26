@@ -51,11 +51,11 @@ gen-ts = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-elytra-domain = { path = "../../elytra-core/crates/domain" }
-elytra-dto = { path = "../../elytra-core/crates/dto" }
-elytra-map = { path = "../../elytra-core/crates/map" }
-elytra-seedmap = { path = "../../elytra-core/crates/seedmap" }
-elytra-online = { path = "../../elytra-core/crates/online" }
+elytra-domain = { git = "https://github.com/ElytraLauncher/elytra-core", tag = "v0.1.1" }
+elytra-dto = { git = "https://github.com/ElytraLauncher/elytra-core", tag = "v0.1.1" }
+elytra-map = { git = "https://github.com/ElytraLauncher/elytra-core", tag = "v0.1.1" }
+elytra-seedmap = { git = "https://github.com/ElytraLauncher/elytra-core", tag = "v0.1.1" }
+elytra-online = { git = "https://github.com/ElytraLauncher/elytra-core", tag = "v0.1.1" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"

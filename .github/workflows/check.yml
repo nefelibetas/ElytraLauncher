@@ -4,6 +4,7 @@ name: Check
 #   frontend     平台无关检查（前端类型 / CSS / i18n + cargo fmt），只跑一次
 #   rust-windows Windows 全量 clippy + test
 #   rust-cross   Linux clippy + 单测 / macOS clippy（macOS 暂不跑 test）
+# core 由 Cargo.toml 的 git tag 拉取；core 自身的 fmt/clippy/test 在 elytra-core 仓库运行。
 on:
   workflow_call:
 
@@ -19,11 +20,6 @@ jobs:
       MISE_RUSTUP_HOME: C:\Users\runneradmin\AppData\Local\mise\rustup
     steps:
       - uses: actions/checkout@v5
-      - name: Checkout core
-        shell: bash
-        env:
-          CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "node npm:pnpm rust"
@@ -32,6 +28,16 @@ jobs:
           path: ~/AppData/Local/pnpm/store
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-store-${{ runner.os }}-
+      - name: 校验 core git tag 一致
+        shell: bash
+        run: |
+          tags=$(grep -oE '^elytra-[a-z]+ = \{ git = "[^"]+", tag = "[^"]+" \}' src-tauri/Cargo.toml \
+            | sed -E 's/.*tag = "([^"]+)".*/\1/' | sort -u)
+          if [ "$(printf '%s\n' "$tags" | sed '/^$/d' | wc -l)" -ne 1 ]; then
+            echo "::error::src-tauri/Cargo.toml 的 elytra-* git tag 不一致：$tags"
+            exit 1
+          fi
+          echo "core tag: $tags"
       - run: pnpm install --frozen-lockfile
       - name: 前端类型检查
         run: npx vue-tsc --noEmit
@@ -44,9 +50,6 @@ jobs:
       - name: Rust 格式检查
         working-directory: src-tauri
         run: cargo fmt --check
-      - name: Rust 格式检查（core）
-        working-directory: ../elytra-core
-        run: cargo fmt --all --check
 
   rust-windows:
     name: Rust（Windows clippy + test）
@@ -59,11 +62,6 @@ jobs:
       MISE_RUSTUP_HOME: C:\Users\runneradmin\AppData\Local\mise\rustup
     steps:
       - uses: actions/checkout@v5
-      - name: Checkout core
-        shell: bash
-        env:
-          CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "rust protoc"
@@ -96,18 +94,6 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
-      - name: core clippy（零警告）
-        working-directory: ../elytra-core
-        run: cargo clippy --workspace -- -D warnings
-      - name: core test（串行，lib）
-        working-directory: ../elytra-core
-        run: cargo test --workspace --lib -- --test-threads=1
-      - name: core DTO 契约漂移
-        working-directory: ../elytra-core
-        run: cargo test -p elytra-dto --test shape
-      - name: core 工具箱下载器集成
-        working-directory: ../elytra-core
-        run: cargo test -p elytra-domain --test tool_download
 
   rust-cross:
     name: Rust（${{ matrix.name }} clippy）
@@ -127,11 +113,6 @@ jobs:
       MISE_RUSTUP_HOME: ${{ matrix.mise_rustup_home }}
     steps:
       - uses: actions/checkout@v5
-      - name: Checkout core
-        shell: bash
-        env:
-          CORE_TOKEN: ${{ secrets.ELYTRA_CORE_TOKEN || github.token }}
-        run: git clone --depth 1 "https://x-access-token:${CORE_TOKEN}@github.com/ElytraLauncher/elytra-core.git" ../elytra-core
       - uses: jdx/mise-action@v5
         with:
           install_args: "rust protoc"
@@ -151,14 +132,7 @@ jobs:
       - name: cargo clippy（零警告）
         working-directory: src-tauri
         run: cargo clippy --lib -- -D warnings
-      - name: core clippy（零警告）
-        working-directory: ../elytra-core
-        run: cargo clippy --workspace -- -D warnings
       - name: cargo test（Linux 串行；macOS 只 clippy）
         if: runner.os == 'Linux'
         working-directory: src-tauri
         run: cargo test --lib -- --test-threads=1
-      - name: core test（Linux，lib）
-        if: runner.os == 'Linux'
-        working-directory: ../elytra-core
-        run: cargo test --workspace --lib -- --test-threads=1
