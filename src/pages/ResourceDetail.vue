@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AlertCircle, RefreshCw } from "@lucide/vue";
+import { AlertCircle, Download, LoaderCircle, RefreshCw } from "@lucide/vue";
 import { showToast } from "../utils/toast";
 import { showError } from "../store/app/alert";
 import { errMsg, formatError } from "../utils/error";
@@ -1057,26 +1057,6 @@ async function copyName() {
           <div class="md-card md-versions">
             <div class="mv-head">
               <span class="mv-title">{{ t("download.detail.versionFiles") }}<span v-if="!loadingVersions" class="mv-count"> | {{ t("download.detail.versionCount", { count: filteredVersions.length }, filteredVersions.length) }}</span></span>
-              <span class="mv-spacer"></span>
-
-              <button
-                type="button"
-                class="mv-icon-btn"
-                :disabled="loadingVersions"
-                v-tooltip="t('download.detail.refreshVersions')"
-                @click="loadVersions(true)"
-              >
-                <RefreshCw :size="14" :class="{ 'mv-spin': loadingVersions }" />
-              </button>
-
-              <button
-                v-if="fileKind || isModpack"
-                class="mv-dl"
-                :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload || depResolving }"
-                :disabled="!selectedVersionId || selectedWithoutDownload || depResolving"
-                v-tooltip="downloadButtonTooltip"
-                @click="submitDownload"
-              >{{ depResolving ? t("download.detail.modDepsLoading") : isModpack ? t("download.detail.install") : t("download.detail.download") }}</button>
 
               <VersionFilterSelect
                 v-if="isMod"
@@ -1098,6 +1078,32 @@ async function copyName() {
                 @update:open="openFilter = $event ? 'game' : ''"
                 @select="pickGame"
               />
+
+              <span class="mv-spacer"></span>
+
+              <button
+                type="button"
+                class="mv-icon-btn"
+                :disabled="loadingVersions"
+                v-tooltip="t('download.detail.refreshVersions')"
+                :aria-label="t('download.detail.refreshVersions')"
+                @click="loadVersions(true)"
+              >
+                <RefreshCw :size="16" :class="{ 'mv-spin': loadingVersions }" />
+              </button>
+
+              <button
+                v-if="fileKind || isModpack"
+                class="mv-dl"
+                :class="{ 'mv-dl-disabled': !selectedVersionId || selectedWithoutDownload || depResolving }"
+                :disabled="!selectedVersionId || selectedWithoutDownload || depResolving"
+                v-tooltip="downloadButtonTooltip"
+                :aria-label="downloadButtonTooltip"
+                @click="submitDownload"
+              >
+                <LoaderCircle v-if="depResolving" :size="16" class="mv-spin" aria-hidden="true" />
+                <Download v-else :size="16" aria-hidden="true" />
+              </button>
             </div>
 
             <div v-if="selectedWithoutDownload" class="mv-dl-note">
@@ -1534,19 +1540,22 @@ async function copyName() {
 }
 
 .mv-dl {
-  flex-shrink: 0;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
   height: 30px;
-  padding: 0 16px;
+  padding: 0;
   border: 1px solid var(--color-brand);
   border-radius: var(--radius-sm);
   background: var(--color-brand);
   color: var(--text-inverse);
-  font-size: var(--fs-base);
-  font-weight: 600;
   cursor: pointer;
   transition: all var(--dur-fast);
   outline: none;
 }
+.mv-dl > svg { flex: none; }
 .mv-dl:hover:not(.mv-dl-disabled) {
   filter: brightness(1.12);
 }
@@ -1565,8 +1574,8 @@ async function copyName() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
