@@ -796,8 +796,8 @@ function retryDependencyPlan() {
 }
 
 /**
- * 解析前置后再决定是否弹窗：没有可确认的前置就直接提交主 Mod，避免空前置弹窗抢占主下载。
- * 解析失败仍打开弹窗承接错误与重试。
+ * 前置解析过程与结果始终在确认弹窗内展示：先打开 loading 弹窗再解析，
+ * 即使没有前置也停留在“没有前置 Mod”结果页，由用户确认提交。
  */
 async function openModDownload(version: CommunityVersion, target: string) {
   if (depDisposed) return;
@@ -808,8 +808,8 @@ async function openModDownload(version: CommunityVersion, target: string) {
   depModLoaders.value = version.loaders;
   depPlan.value = null;
   depDialogError.value = "";
-  depDialogLoading.value = false;
-  depDialogOpen.value = false;
+  depDialogLoading.value = true;
+  depDialogOpen.value = true;
   depVersionOverrides.value = {};
   depDialogUpdating.value = false;
   depSubmitting.value = false;
@@ -823,22 +823,18 @@ async function openModDownload(version: CommunityVersion, target: string) {
       versionDirName: target,
       versionOverrides: {},
     });
-    if (depDisposed || seq !== depDialogSeq) return;
+    if (depDisposed || seq !== depDialogSeq || !depDialogOpen.value) return;
     applyDependencyPlan(plan);
-    if (plan.items.length === 0 && plan.errors.length === 0) {
-      await submitModFiles(
-        [mainDownloadFile(version, mainReplacements(version))],
-        depModName.value,
-      );
-      return;
-    }
     depDialogOpen.value = true;
   } catch (e) {
-    if (depDisposed || seq !== depDialogSeq) return;
+    if (depDisposed || seq !== depDialogSeq || !depDialogOpen.value) return;
     depDialogError.value = errMsg(e);
     depDialogOpen.value = true;
   } finally {
-    if (seq === depDialogSeq) depResolving.value = false;
+    if (seq === depDialogSeq) {
+      depDialogLoading.value = false;
+      depResolving.value = false;
+    }
   }
 }
 

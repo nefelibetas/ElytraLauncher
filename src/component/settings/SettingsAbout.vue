@@ -191,25 +191,6 @@ async function copyVersionInfo() {
         <div class="ab-title-row">
           <h2>Elytra Launcher</h2>
           <span class="ab-version" :class="{ 'has-update': updateAvailable }">{{ t("settings.about.version", { version }) }}</span>
-          <span v-if="updateState === 'available' && updateInfo" class="ab-update-summary">
-            <span class="ab-update-new">{{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}</span>
-            <button type="button" class="ab-update-download" @click="openUpdateDownloadDialog">
-              {{ t("settings.about.downloadUpdate") }}
-            </button>
-          </span>
-          <span v-else-if="updateState === 'latest'" class="ab-latest">
-            <Check :size="13" />
-            {{ t("settings.about.upToDate") }}
-          </span>
-          <span v-else-if="updateState === 'none'" class="ab-update-note">
-            {{ t("settings.about.noRelease") }}
-          </span>
-          <span v-else-if="updateState === 'error'" class="ab-update-note is-error" :title="updateError">
-            {{ t("settings.about.checkFailed") }}
-          </span>
-          <span class="ab-dot-toggle">
-            <CheckToggle v-model="dotEnabled">{{ t("settings.about.updateNotifications") }}</CheckToggle>
-          </span>
         </div>
         <p class="ab-tagline">{{ t("settings.about.tagline") }}</p>
         <div class="ab-quick">
@@ -225,7 +206,27 @@ async function copyVersionInfo() {
             {{ updateState === "checking" ? t("settings.about.checkingUpdate") : t("settings.about.checkUpdate") }}
           </button>
         </div>
-        <!-- 更新检查结果已并入标题行，避免在卡片内再占一行。 -->
+      </div>
+      <div class="ab-update-side">
+        <span v-if="updateState === 'available' && updateInfo" class="ab-update-summary">
+          <span class="ab-update-new">{{ t("settings.about.newVersion", { version: updateInfo.latest_version }) }}</span>
+          <button type="button" class="ab-update-download" @click="openUpdateDownloadDialog">
+            {{ t("settings.about.downloadUpdate") }}
+          </button>
+        </span>
+        <span v-else-if="updateState === 'latest'" class="ab-latest">
+          <Check :size="13" />
+          {{ t("settings.about.upToDate") }}
+        </span>
+        <span v-else-if="updateState === 'none'" class="ab-update-note">
+          {{ t("settings.about.noRelease") }}
+        </span>
+        <span v-else-if="updateState === 'error'" class="ab-update-note is-error" :title="updateError">
+          {{ t("settings.about.checkFailed") }}
+        </span>
+        <span class="ab-dot-toggle">
+          <CheckToggle v-model="dotEnabled">{{ t("settings.about.updateNotifications") }}</CheckToggle>
+        </span>
       </div>
     </header>
 
@@ -370,7 +371,7 @@ async function copyVersionInfo() {
 
 .ab-hero {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   padding: 20px 24px;
   background: var(--surface-card);
@@ -389,6 +390,16 @@ async function copyVersionInfo() {
 .ab-hero-main {
   min-width: 0;
   flex: 1;
+}
+
+.ab-update-side {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
 }
 
 .ab-title-row {
@@ -427,8 +438,8 @@ async function copyVersionInfo() {
 }
 
 .ab-dot-toggle {
-  margin-left: auto;
-  align-self: center;
+  margin-left: 0;
+  align-self: flex-end;
   display: inline-flex;
   align-items: center;
   flex: none;

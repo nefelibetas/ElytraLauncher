@@ -71,8 +71,10 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
         @click="emit('update:modelValue', tab.key)"
       >
         <component :is="tab.icon" :size="16" />
-        <span class="sn-label">{{ tab.label }}</span>
-        <span v-if="tab.dot" class="sn-dot" aria-hidden="true" />
+        <span class="sn-label-wrap">
+          <span class="sn-label">{{ tab.label }}</span>
+          <span v-if="tab.dot" class="sn-dot" aria-hidden="true" />
+        </span>
         <button
           v-if="refreshable && !noRefreshKeys.includes(tab.key)"
           class="sn-refresh"
@@ -141,7 +143,13 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
   text-align: left;
 }
 
+.sn-label-wrap {
+  position: relative;
+  min-width: 0;
+}
+
 .sn-label {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,9 +157,11 @@ const switchName = computed(() => `sn-slide-${slideDir.value}`);
 }
 
 .sn-dot {
-  width: 7px;
-  height: 7px;
-  margin-left: auto;
+  position: absolute;
+  top: -4px;
+  right: -7px;
+  width: 8px;
+  height: 8px;
   flex: none;
   border-radius: 50%;
   background: var(--color-error);

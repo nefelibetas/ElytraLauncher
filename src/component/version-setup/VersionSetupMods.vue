@@ -224,7 +224,7 @@ async function openModsFolder() {
                 : t("settings.version.setup.mods.noMatch", { query: searchQuery.trim() }) }}
             </p>
           </EmptyState>
-          <div v-else key="list">
+          <div v-else :key="'list-' + tab">
             <div v-if="modsNetworkError" class="vs-net-warn">{{ t("settings.version.setup.mods.networkWarn") }}</div>
             <div class="vs-list">
               <div v-for="m in items" :key="m.file_name" class="vs-list-item">

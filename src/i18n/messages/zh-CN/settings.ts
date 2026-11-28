@@ -405,7 +405,7 @@ export default {
     kindCommand: "命令",
     kindBuiltin: "内置",
     delete: "删除",
-    commandPlaceholder: "如：echo hello > D:\\backup.txt（Windows cmd /C，其余 sh -c）",
+    commandPlaceholder: "如：echo hello > backup.txt（Windows cmd /C，其余 sh -c）",
     timeout: "超时",
     seconds: "秒",
     scopeAll: "全部世界",

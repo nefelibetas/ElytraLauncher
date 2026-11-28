@@ -143,12 +143,14 @@ onUnmounted(() => unlistenResize?.());
             <Download v-if="item.icon === 'download'" :size="16" />
             <ListChecks v-if="item.icon === 'list'" :size="16" />
             <Settings v-if="item.icon === 'settings'" :size="16" />
-            <span class="label">{{ t(item.labelKey) }}</span>
-            <span
-              v-if="item.path === '/settings' && showUpdateBadge"
-              class="nav-dot"
-              aria-hidden="true"
-            />
+            <span class="label">
+              {{ t(item.labelKey) }}
+              <span
+                v-if="item.path === '/settings' && showUpdateBadge"
+                class="nav-dot"
+                aria-hidden="true"
+              />
+            </span>
             <span
               v-if="item.path === '/download-detail' && activeTasks > 0"
               class="nav-badge"
@@ -279,14 +281,14 @@ onUnmounted(() => unlistenResize?.());
   background-color: color-mix(in srgb, var(--titlebar-fg) 22%, transparent);
 }
 
-.label { font-size: var(--fs-base); }
+.label { position: relative; font-size: var(--fs-base); }
 
 .nav-dot {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
+  top: -4px;
+  right: -7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--color-error);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);

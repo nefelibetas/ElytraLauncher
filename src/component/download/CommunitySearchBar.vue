@@ -202,6 +202,9 @@ watch(
 }
 .cs-form-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .cs-btn {
+  height: 34px;
+  min-width: 88px;
+  justify-content: center;
   padding: 6px 24px;
   border: 1px solid var(--border-default); border-radius: var(--radius-md);
   background: var(--surface-card); color: var(--text-primary); font-size: var(--fs-base); font-weight: 600;

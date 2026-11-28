@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 联机面板：EasyTier 虚拟局域网（host 开房 / guest 加入 / 停止）；配置在「设置 → 联机设置」。
 // host 可先开联机（等待态）再「对局域网开放」，检测到端口自动生成房间码；正版 host 由服务器验证会话。
-import { nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { Copy, Link2, Settings2, Unplug } from "@lucide/vue";
@@ -18,6 +18,16 @@ import { copyText } from "../../utils/clipboard";
 
 const { t } = useI18n();
 const router = useRouter();
+
+/** Tab 内容左右切换：新内容从目标 tab 所在方向滑入。 */
+const onlineSlide = ref<"left" | "right">("right");
+const onlineTabTransition = computed(() => `online-tab-${onlineSlide.value}`);
+
+function setOnlineTab(tab: "host" | "join") {
+  if (tab === onlinePanelTab.value) return;
+  onlineSlide.value = tab === "join" ? "right" : "left";
+  onlinePanelTab.value = tab;
+}
 
 /** 跳到 设置 → 联机设置，并滚动到昵称/广播名区域。 */
 async function openOnlineSettings() {
@@ -53,8 +63,8 @@ onMounted(() => {
 watch(
   onlineStatus,
   (status) => {
-    if (status === "joining") onlinePanelTab.value = "join";
-    else if (status === "waiting" || status === "hosting") onlinePanelTab.value = "host";
+    if (status === "joining") setOnlineTab("join");
+    else if (status === "waiting" || status === "hosting") setOnlineTab("host");
   },
   { immediate: true },
 );
@@ -143,7 +153,7 @@ async function copyRoomCode() {
         :class="{ active: onlinePanelTab === 'host' }"
         role="tab"
         :aria-selected="onlinePanelTab === 'host'"
-        @click="onlinePanelTab = 'host'"
+        @click="setOnlineTab('host')"
       >
         {{ t("tools.online.hostSection") }}
       </button>
@@ -153,13 +163,13 @@ async function copyRoomCode() {
         :class="{ active: onlinePanelTab === 'join' }"
         role="tab"
         :aria-selected="onlinePanelTab === 'join'"
-        @click="onlinePanelTab = 'join'"
+        @click="setOnlineTab('join')"
       >
         {{ t("tools.online.joinSection") }}
       </button>
     </div>
 
-    <Transition name="online-tab" mode="out-in">
+    <Transition :name="onlineTabTransition" mode="out-in">
     <div v-if="onlinePanelTab === 'host'" key="host" class="online-sec">
       <p class="online-desc">{{ t("tools.online.hostDesc1") }}</p>
       <div class="online-hint-row">
@@ -348,19 +358,23 @@ async function copyRoomCode() {
   box-shadow: var(--shadow-sm);
 }
 
-.online-tab-enter-active,
-.online-tab-leave-active {
+.online-tab-right-enter-active,
+.online-tab-right-leave-active,
+.online-tab-left-enter-active,
+.online-tab-left-leave-active {
   transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
 
-.online-tab-enter-from {
+.online-tab-right-enter-from,
+.online-tab-left-leave-to {
   opacity: 0;
-  transform: translateY(4px);
+  transform: translateX(10px);
 }
 
-.online-tab-leave-to {
+.online-tab-right-leave-to,
+.online-tab-left-enter-from {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateX(-10px);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -408,7 +408,7 @@ export default {
     kindCommand: "Command",
     kindBuiltin: "Built-in",
     delete: "Delete",
-    commandPlaceholder: "e.g. echo hello > D:\\backup.txt (Windows cmd /C, sh -c elsewhere)",
+    commandPlaceholder: "e.g. echo hello > backup.txt (Windows cmd /C, sh -c elsewhere)",
     timeout: "Timeout",
     seconds: "s",
     scopeAll: "All worlds",

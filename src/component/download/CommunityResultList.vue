@@ -96,8 +96,10 @@ function shownLoaders(item: CommunityDisplayItem): string[] {
               <span class="cs-title-row">
                 <span class="cs-title">{{ communityTranslationEnabled && m.title_zh ? m.title_zh : m.title }}</span>
                 <span v-if="communityTranslationEnabled && m.title_zh" class="cs-title-en"> | {{ m.title }}</span>
-                <span v-if="search.source === 'all'" class="cs-badge" :class="m.source">{{ m.source === "modrinth" ? "Modrinth" : "CurseForge" }}</span>
-                <span class="cs-sub">{{ t("download.search.downloads", { count: fmtCount(m.downloads) }) }}</span>
+                <span class="cs-title-meta">
+                  <span v-if="search.source === 'all'" class="cs-badge" :class="m.source">{{ m.source === "modrinth" ? "Modrinth" : "CurseForge" }}</span>
+                  <span class="cs-sub">{{ t("download.search.downloads", { count: fmtCount(m.downloads) }) }}</span>
+                </span>
               </span>
               <span class="cs-desc">{{ communityTranslationEnabled ? (m.translated ?? m.description) : m.description }}</span>
               <span
@@ -116,7 +118,7 @@ function shownLoaders(item: CommunityDisplayItem): string[] {
         </div>
       </div>
       <div class="cs-footer">
-        <div v-if="totalPages > 1 || search.hasMore" class="cs-pager">
+        <div class="cs-pager">
           <button class="cs-pager-btn" :disabled="search.page <= 1" @click="search.search(search.page - 1)">{{ t("download.search.prev") }}</button>
           <span v-if="search.source === 'all'" class="cs-pager-info">{{ t("download.search.pageLabel", { page: search.page }) }}</span>
           <span v-else class="cs-pager-info">{{ search.page }} / {{ totalPages }}</span>
@@ -218,7 +220,8 @@ function shownLoaders(item: CommunityDisplayItem): string[] {
 .cs-badge { font-size: var(--fs-2xs); padding: 1px 6px; border-radius: var(--radius-md); color: var(--text-inverse); flex-shrink: 0; font-weight: 600; }
 .cs-badge.modrinth { background: var(--color-modrinth); }
 .cs-badge.curseforge { background: var(--color-curseforge); }
-.cs-sub { flex-shrink: 0; margin-left: auto; font-size: var(--fs-xs); color: var(--text-tertiary); white-space: nowrap; }
+.cs-sub { flex-shrink: 0; font-size: var(--fs-xs); color: var(--text-tertiary); white-space: nowrap; }
+.cs-title-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .cs-desc {
   font-size: var(--fs-xs); color: var(--text-tertiary); line-height: 1.4;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
