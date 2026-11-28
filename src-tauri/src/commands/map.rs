@@ -10,6 +10,7 @@ use elytra_domain::game::version::dir::version_dir_path;
 use elytra_domain::util::is_simple_name;
 use elytra_map::folder::{discover_worlds, MapFolderEntry};
 use elytra_map::mod_color::overlay_for_world;
+use elytra_map::players::{load_players, MapPlayer};
 use elytra_map::region_io::{
     dimension_dir, list_region_files, region_file_for, surface_info, MapRegionInfo,
 };
@@ -146,6 +147,22 @@ pub async fn get_map_world_info(
     Ok(info)
 }
 
+/// 存档内玩家最后位置（按最后游玩时间降序）。
+#[tauri::command]
+pub async fn get_map_players(
+    version_name: String,
+    world_name: String,
+) -> Result<Vec<MapPlayer>, CoreError> {
+    let players =
+        tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapPlayer>, CoreError> {
+            let world = world_root(&version_name, &world_name)?;
+            Ok(load_players(&world))
+        })
+        .await
+        .map_err(common_err_ctx_key!("errors.map.failed", "地图操作失败"))??;
+    Ok(players)
+}
+
 #[tauri::command]
 pub async fn list_map_regions(
     version_name: String,
@@ -228,6 +245,19 @@ pub async fn get_map_folder_info(root: String) -> Result<MapWorldInfo, CoreError
     .await
     .map_err(common_err_ctx_key!("errors.map.failed", "地图操作失败"))??;
     Ok(info)
+}
+
+/// 文件夹世界入口的玩家最后位置（按最后游玩时间降序）。
+#[tauri::command]
+pub async fn get_map_folder_players(root: String) -> Result<Vec<MapPlayer>, CoreError> {
+    let players =
+        tauri::async_runtime::spawn_blocking(move || -> Result<Vec<MapPlayer>, CoreError> {
+            let world = folder_root(&root)?;
+            Ok(load_players(&world))
+        })
+        .await
+        .map_err(common_err_ctx_key!("errors.map.failed", "地图操作失败"))??;
+    Ok(players)
 }
 
 #[tauri::command]

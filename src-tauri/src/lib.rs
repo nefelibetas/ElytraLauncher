@@ -68,9 +68,9 @@ use commands::loader::{
 };
 use commands::map::{
     find_map_biome, find_map_folder_biome, find_map_slime_chunks, get_map_block,
-    get_map_folder_block, get_map_folder_info, get_map_folder_tile, get_map_slime_chunks,
-    get_map_tile, get_map_world_info, list_map_biomes, list_map_folder_biomes,
-    list_map_folder_regions, list_map_regions, resolve_map_folders,
+    get_map_folder_block, get_map_folder_info, get_map_folder_players, get_map_folder_tile,
+    get_map_players, get_map_slime_chunks, get_map_tile, get_map_world_info, list_map_biomes,
+    list_map_folder_biomes, list_map_folder_regions, list_map_regions, resolve_map_folders,
 };
 use commands::offline_account::{
     get_last_offline_username, get_offline_accounts, remove_offline_account,
@@ -333,11 +333,13 @@ pub fn run() {
             list_worlds,
             get_world_icon,
             get_map_world_info,
+            get_map_players,
             list_map_regions,
             get_map_tile,
             get_map_block,
             resolve_map_folders,
             get_map_folder_info,
+            get_map_folder_players,
             list_map_folder_regions,
             get_map_folder_tile,
             get_map_folder_block,

@@ -5,6 +5,7 @@ import type { MapBlockInfo } from "../types/map/MapBlockInfo";
 import type { MapBiomeHit } from "../types/map/MapBiomeHit";
 import type { MapBiomeSummary } from "../types/map/MapBiomeSummary";
 import type { MapFolderEntry } from "../types/map/MapFolderEntry";
+import type { MapPlayer } from "../types/map/MapPlayer";
 import type { MapRegionInfo } from "../types/map/MapRegionInfo";
 import type { MapWorldInfo } from "../types/map/MapWorldInfo";
 import type { SeedMapSlimeChunk } from "../types/seedmap/SeedMapSlimeChunk";
@@ -14,6 +15,7 @@ export type {
   MapBiomeSummary,
   MapBlockInfo,
   MapFolderEntry,
+  MapPlayer,
   MapRegionInfo,
   MapWorldInfo,
   SeedMapSlimeChunk,
@@ -23,12 +25,25 @@ export function getMapWorldInfo(versionName: string, worldName: string): Promise
   return invoke<MapWorldInfo>("get_map_world_info", { versionName, worldName });
 }
 
+/** 存档内玩家最后位置（按最后游玩时间降序）。 */
+export function getMapPlayers(
+  versionName: string,
+  worldName: string,
+): Promise<MapPlayer[]> {
+  return invoke<MapPlayer[]>("get_map_players", { versionName, worldName });
+}
+
 export function resolveMapFolders(path: string): Promise<MapFolderEntry[]> {
   return invoke<MapFolderEntry[]>("resolve_map_folders", { path });
 }
 
 export function getMapFolderInfo(root: string): Promise<MapWorldInfo> {
   return invoke<MapWorldInfo>("get_map_folder_info", { root });
+}
+
+/** 文件夹世界入口的玩家最后位置（按最后游玩时间降序）。 */
+export function getMapFolderPlayers(root: string): Promise<MapPlayer[]> {
+  return invoke<MapPlayer[]>("get_map_folder_players", { root });
 }
 
 export function listMapFolderRegions(

@@ -11,6 +11,7 @@ import {
   listMapFolderRegions,
   listMapRegions,
   type MapBlockInfo,
+  type MapPlayer,
   type MapRegionInfo,
   type SeedMapSlimeChunk,
 } from "../../api/map";
@@ -37,6 +38,10 @@ const props = defineProps<{
   seed?: string;
   /** 仅主世界显示史莱姆区块覆盖层 */
   showSlime?: boolean;
+  /** 当前维度下需绘制的玩家标记（已按选择过滤） */
+  players?: MapPlayer[];
+  /** 群系/史莱姆查找结果点 */
+  findResult?: { x: number; z: number } | null;
 }>();
 
 const folderMode = computed(() => props.rootPath.length > 0);
@@ -54,6 +59,8 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 const REGION_BLOCKS = 512;
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 8;
+/** 滚轮每档缩放系数（与 GPUI 地图一致） */
+const WHEEL_ZOOM = 1.15;
 const MAX_INFLIGHT = 4;
 const MAX_TILES = 96;
 const PROBE_DELAY = 120;
@@ -249,13 +256,13 @@ function zoomAt(clientX: number, clientY: number, factor: number) {
 function zoomIn() {
   const rect = wrapRef.value?.getBoundingClientRect();
   if (!rect) return;
-  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, WHEEL_ZOOM);
 }
 
 function zoomOut() {
   const rect = wrapRef.value?.getBoundingClientRect();
   if (!rect) return;
-  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.25);
+  zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / WHEEL_ZOOM);
 }
 
 function fitRegions() {
@@ -468,6 +475,117 @@ function invalidate() {
   }
 }
 
+/** 圆角矩形路径（避免依赖 ctx.roundRect 的 WebView 版本）。 */
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+/** 玩家标点：实心圆点 + 名称胶囊（与 GPUI 世界预览一致）。 */
+function drawPlayers(
+  ctx: CanvasRenderingContext2D,
+  toScreenX: (x: number) => number,
+  toScreenY: (z: number) => number,
+  width: number,
+  height: number,
+  styles: CSSStyleDeclaration,
+) {
+  const players = props.players ?? [];
+  if (players.length === 0) return;
+  const brand = styles.getPropertyValue("--color-brand").trim() || "#3b82f6";
+  const ring = styles.getPropertyValue("--text-inverse").trim() || "#fff";
+  const card = styles.getPropertyValue("--surface-card").trim() || "#222";
+  const border = styles.getPropertyValue("--border-default").trim() || "rgba(127,127,127,0.4)";
+  const text = styles.getPropertyValue("--text-primary").trim() || "#fff";
+  ctx.save();
+  ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  for (const player of players) {
+    const sx = toScreenX(player.x);
+    const sy = toScreenY(player.z);
+    if (sx < -16 || sx > width + 16 || sy < -16 || sy > height + 16) continue;
+    const pillH = 18;
+    const padX = 5;
+    const pillW = Math.ceil(ctx.measureText(player.name).width) + padX * 2;
+    const pillX = sx + 8;
+    const pillY = sy - pillH / 2;
+    roundedRectPath(ctx, pillX, pillY, pillW, pillH, 4);
+    ctx.fillStyle = card;
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = text;
+    ctx.fillText(player.name, pillX + padX, sy + 0.5);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = brand;
+    ctx.fill();
+    ctx.strokeStyle = ring;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 查找结果：警示色准星 + 坐标胶囊。 */
+function drawFindResult(
+  ctx: CanvasRenderingContext2D,
+  toScreenX: (x: number) => number,
+  toScreenY: (z: number) => number,
+  width: number,
+  height: number,
+  styles: CSSStyleDeclaration,
+) {
+  const hit = props.findResult;
+  if (!hit) return;
+  const sx = toScreenX(hit.x);
+  const sy = toScreenY(hit.z);
+  if (sx < -20 || sx > width + 20 || sy < -20 || sy > height + 20) return;
+  const warning = styles.getPropertyValue("--color-warning").trim() || "#f59e0b";
+  const card = styles.getPropertyValue("--surface-card").trim() || "#222";
+  const text = styles.getPropertyValue("--text-primary").trim() || "#fff";
+  const label = Math.round(hit.x) + ", " + Math.round(hit.z);
+  ctx.save();
+  ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const pillW = Math.ceil(ctx.measureText(label).width) + 10;
+  const pillH = 18;
+  roundedRectPath(ctx, sx - pillW / 2, sy - 30, pillW, pillH, 4);
+  ctx.fillStyle = card;
+  ctx.fill();
+  ctx.strokeStyle = warning;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = text;
+  ctx.fillText(label, sx, sy - 21);
+  ctx.beginPath();
+  ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+  ctx.strokeStyle = warning;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = warning;
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawChecker(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
   const cell = Math.max(8, Math.min(24, size / 24));
   ctx.fillStyle = "rgba(127,127,127,0.08)";
@@ -499,7 +617,8 @@ function draw() {
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = cam.scale < 1;
-  ctx.fillStyle = getComputedStyle(canvas).getPropertyValue("--surface-page") || "#111";
+  const styles = getComputedStyle(canvas);
+  ctx.fillStyle = styles.getPropertyValue("--surface-page") || "#111";
   ctx.fillRect(0, 0, w, h);
 
   const scale = cam.scale;
@@ -595,6 +714,9 @@ function draw() {
       ctx.stroke();
     }
   }
+
+  drawPlayers(ctx, toScreenX, toScreenY, w, h, styles);
+  drawFindResult(ctx, toScreenX, toScreenY, w, h, styles);
 }
 
 function tick(ts: number) {
@@ -739,7 +861,7 @@ function onWheel(e: WheelEvent) {
   autoFitPending = false;
   const delta = normalizeWheel(e);
   if (delta === 0) return;
-  const factor = Math.exp(-delta * 0.0018);
+  const factor = delta < 0 ? WHEEL_ZOOM : 1 / WHEEL_ZOOM;
   zoomAt(e.clientX, e.clientY, factor);
 }
 
@@ -774,6 +896,8 @@ watch(
   },
 );
 watch(() => [props.showGrid, props.chunkBorders], invalidate);
+watch(() => props.players, invalidate, { deep: true });
+watch(() => props.findResult, invalidate, { deep: true });
 
 onMounted(() => {
   setState("loading");
@@ -800,9 +924,12 @@ onBeforeUnmount(() => {
   raf = 0;
 });
 
-function focusOn(x: number, z: number) {
+function focusOn(x: number, z: number, scale?: number) {
+  firstFit = false;
+  autoFitPending = false;
   target.x = x;
   target.z = z;
+  if (scale !== undefined) target.scale = clampScale(scale);
   invalidate();
 }
 

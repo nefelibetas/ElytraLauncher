@@ -18,16 +18,20 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Users,
 } from "@lucide/vue";
 import {
   findMapBiome,
   findMapFolderBiome,
   findMapSlimeChunks,
   getMapFolderInfo,
+  getMapFolderPlayers,
+  getMapPlayers,
   getMapWorldInfo,
   listMapBiomes,
   listMapFolderBiomes,
   type MapBiomeSummary,
+  type MapPlayer,
   type MapWorldInfo,
 } from "../../api/map";
 import WorldMapCanvas from "./WorldMapCanvas.vue";
@@ -82,8 +86,31 @@ const biomeList = ref<MapBiomeSummary[]>([]);
 const biomeLoading = ref(false);
 const findBusy = ref(false);
 const findStatus = ref("");
+const findHit = ref<{ x: number; z: number } | null>(null);
 const showSlime = ref(false);
 let searchGen = 0;
+
+const players = ref<MapPlayer[]>([]);
+const playersLoading = ref(false);
+const selectedPlayers = ref<string[]>([]);
+const playerQuery = ref("");
+const filteredPlayers = computed(() => {
+  const query = playerQuery.value.trim().toLowerCase();
+  if (!query) return players.value;
+  return players.value.filter(
+    (player) =>
+      player.name.toLowerCase().includes(query) || player.uuid.toLowerCase().includes(query),
+  );
+});
+let playersGen = 0;
+let playerSelectionSeeded = false;
+
+/** 当前维度下已勾选的玩家标记（最多 5 个）。 */
+const visiblePlayers = computed(() =>
+  players.value.filter(
+    (player) => player.dimension === dimension.value && selectedPlayers.value.includes(player.uuid),
+  ),
+);
 
 const findModeOptions = computed(() => [
   { value: "biome", label: t("worldPreview.findBiome") },
@@ -95,9 +122,15 @@ const biomeOptions = computed(() =>
 
 const hover = ref<HoverInfo | null>(null);
 
-// v2：坐标面板改为默认收起，旧键不再复用
-const panelKey = "elytra.worldPreview.panels.v2";
-const panels = reactive({ dim: true, coord: false, config: false });
+// v3：所有浮层默认收起，旧键不再复用
+const panelKey = "elytra.worldPreview.panels.v3";
+const panels = reactive({
+  dim: false,
+  coord: false,
+  config: false,
+  find: false,
+  players: false,
+});
 
 const active = computed(() => hover.value);
 const coordText = computed(() => {
@@ -141,9 +174,11 @@ function dimensionLabel(id: string): string {
 function loadPanels() {
   try {
     const saved = JSON.parse(localStorage.getItem(panelKey) ?? "") as Partial<typeof panels>;
-    panels.dim = saved.dim ?? true;
-    panels.coord = saved.coord ?? true;
+    panels.dim = saved.dim ?? false;
+    panels.coord = saved.coord ?? false;
     panels.config = saved.config ?? false;
+    panels.find = saved.find ?? false;
+    panels.players = saved.players ?? false;
   } catch {
     // 使用默认展开状态
   }
@@ -158,7 +193,7 @@ function savePanels() {
 loadPanels();
 watch(panels, savePanels, { deep: true });
 
-async function loadInfo() {
+async function loadInfo(focusPlayers = false) {
   const gen = ++searchGen;
   loading.value = true;
   loadError.value = "";
@@ -177,6 +212,7 @@ async function loadInfo() {
     biomeList.value = [];
     biome.value = "";
     findStatus.value = "";
+    findHit.value = null;
     biomeLoading.value = false;
     if (dimension.value !== "") {
       showSlime.value = false;
@@ -185,12 +221,63 @@ async function loadInfo() {
       showSlime.value = findMode.value === "slime";
     }
     mapState.value = data.dimensions.length ? "loading" : "empty";
+    void loadPlayers(focusPlayers);
   } catch (e) {
     if (gen === searchGen) loadError.value = errMsg(e);
   } finally {
     if (gen === searchGen) loading.value = false;
   }
-  if (panels.config && findMode.value === "biome") void ensureBiomes();
+  if (panels.find && findMode.value === "biome") void ensureBiomes();
+}
+
+/**
+ * 读取玩家最后位置；focus 仅用于世界首次打开。
+ * 默认选中：1..=5 人全选，否则只选最近游玩的一位（后端已按时间降序）。
+ */
+async function loadPlayers(focus: boolean) {
+  const gen = ++playersGen;
+  playersLoading.value = true;
+  if (focus) {
+    players.value = [];
+    selectedPlayers.value = [];
+    playerQuery.value = "";
+    playerSelectionSeeded = false;
+  }
+  try {
+    const list = folderMode.value
+      ? await getMapFolderPlayers(folder.value)
+      : await getMapPlayers(versionName.value, worldName.value);
+    if (gen !== playersGen) return;
+    players.value = list;
+    const available = new Set(list.map((player) => player.uuid));
+    if (playerSelectionSeeded) {
+      selectedPlayers.value = selectedPlayers.value.filter((uuid) => available.has(uuid));
+    } else {
+      playerSelectionSeeded = true;
+      selectedPlayers.value = list.slice(0, 5).map((player) => player.uuid);
+    }
+    if (!focus || list.length === 0) return;
+    const latest = list[0];
+    const dimensionAvailable = info.value?.dimensions.includes(latest.dimension) ?? false;
+    if (!dimensionAvailable) return;
+    if (dimension.value !== latest.dimension) {
+      dimension.value = latest.dimension;
+    }
+    await nextTick();
+    canvasRef.value?.focusOn(latest.x, latest.z, 1);
+  } catch (e) {
+    if (gen === playersGen) showToast(errMsg(e));
+  } finally {
+    if (gen === playersGen) playersLoading.value = false;
+  }
+}
+
+function togglePlayer(uuid: string) {
+  if (selectedPlayers.value.includes(uuid)) {
+    selectedPlayers.value = selectedPlayers.value.filter((id) => id !== uuid);
+    return;
+  }
+  selectedPlayers.value = [...selectedPlayers.value, uuid];
 }
 
 function onHover(value: HoverInfo | null) {
@@ -234,6 +321,7 @@ async function doFind() {
   const gen = searchGen;
   findBusy.value = true;
   findStatus.value = "";
+  findHit.value = null;
   const center = canvasRef.value?.center() ?? { x: 0, z: 0 };
   try {
     if (findMode.value === "slime") {
@@ -255,6 +343,7 @@ async function doFind() {
       }
       const x = list[0].x * 16 + 8;
       const z = list[0].z * 16 + 8;
+      findHit.value = { x, z };
       canvasRef.value?.focusOn(x, z);
       findStatus.value = t("worldPreview.foundAt", { x, z });
       return;
@@ -286,6 +375,7 @@ async function doFind() {
       findStatus.value = t("worldPreview.noFind");
       return;
     }
+    findHit.value = { x: hit.x, z: hit.z };
     canvasRef.value?.focusOn(hit.x, hit.z);
     findStatus.value = t("worldPreview.foundAt", { x: hit.x, z: hit.z });
   } catch (e) {
@@ -301,11 +391,12 @@ watch(dimension, (id) => {
   biomeLoading.value = false;
   findBusy.value = false;
   findStatus.value = "";
+  findHit.value = null;
   if (id !== "") {
     showSlime.value = false;
     if (findMode.value === "slime") findMode.value = "biome";
   }
-  if (panels.config && findMode.value === "biome") void ensureBiomes();
+  if (panels.find && findMode.value === "biome") void ensureBiomes();
 });
 
 watch(findMode, (mode) => {
@@ -315,7 +406,7 @@ watch(findMode, (mode) => {
 });
 
 watch(
-  () => panels.config,
+  () => panels.find,
   (open) => {
     if (open) void ensureBiomes();
   },
@@ -368,7 +459,7 @@ async function openSaves() {
 }
 
 async function reload() {
-  await loadInfo();
+  await loadInfo(false);
   await nextTick();
   await canvasRef.value?.refresh();
 }
@@ -382,7 +473,7 @@ onMounted(() => {
 
 watch(
   () => [props.versionName, props.worldName, props.folder],
-  () => void loadInfo(),
+  () => void loadInfo(true),
   { immediate: true },
 );
 
@@ -407,6 +498,8 @@ defineExpose({ reload });
         :mod-colors="modColors"
         :seed="info.seed ?? ''"
         :show-slime="showSlime"
+        :players="visiblePlayers"
+        :find-result="findHit"
         @hover="onHover"
         @state="onState"
       />
@@ -493,15 +586,15 @@ defineExpose({ reload });
         </button>
       </div>
 
-      <!-- 右上角：控件下方配置（展开时仅收起箭头） -->
-      <section class="wp-panel wp-config" :class="{ collapsed: !panels.config }">
+      <!-- 左上角：管理面板（展开时仅收起箭头） -->
+      <section class="wp-panel wp-config" :class="{ collapsed: !panels.config, 'find-open': panels.find }">
         <button class="wp-panel-head" :aria-expanded="panels.config" @click="panels.config = !panels.config">
           <SlidersHorizontal :size="14" />
-          <span>{{ t("worldPreview.config") }}</span>
+          <span>{{ t("worldPreview.manage") }}</span>
           <ChevronRight
             :size="13"
             class="wp-head-chevron wp-chevron"
-            :class="{ flipped: !panels.config }"
+            :class="{ flipped: panels.config }"
           />
         </button>
         <Transition name="expand">
@@ -534,35 +627,6 @@ defineExpose({ reload });
             </div>
 
             <div class="wp-group">
-              <div class="wp-group-title">{{ t("worldPreview.find") }}</div>
-              <DropSelect v-model="findMode" :options="findModeOptions" width="100%" />
-              <DropSelect
-                v-if="findMode === 'biome'"
-                v-model="biome"
-                :options="biomeOptions"
-                :disabled="biomeLoading || !biomeOptions.length"
-                :placeholder="
-                  biomeLoading ? t('worldPreview.scanning') : t('worldPreview.noBiomes')
-                "
-                width="100%"
-              />
-              <button
-                class="wp-link"
-                :disabled="
-                  findBusy ||
-                  biomeLoading ||
-                  (findMode === 'biome' && !biome) ||
-                  (findMode === 'slime' && !info.seed)
-                "
-                @click="doFind"
-              >
-                <Search :size="13" />
-                <span>{{ findBusy ? t("worldPreview.finding") : t("worldPreview.findAction") }}</span>
-              </button>
-              <span v-if="findStatus" class="wp-find-status">{{ findStatus }}</span>
-            </div>
-
-            <div class="wp-group">
               <div class="wp-group-title">{{ t("worldPreview.data") }}</div>
               <button class="wp-link" :disabled="!info.seed" @click="copySeed">
                 <Copy :size="13" />
@@ -572,6 +636,109 @@ defineExpose({ reload });
                 <FolderOpen :size="13" />
                 <span>{{ t("worldPreview.openFolder") }}</span>
               </button>
+            </div>
+          </div>
+        </Transition>
+      </section>
+
+      <!-- 左下角：查找（默认收起） -->
+      <section class="wp-panel wp-find" :class="{ collapsed: !panels.find }">
+        <button
+          class="wp-panel-head"
+          :aria-expanded="panels.find"
+          @click="panels.find = !panels.find"
+        >
+          <Search :size="14" />
+          <span>{{ t("worldPreview.find") }}</span>
+          <ChevronUp
+            :size="13"
+            class="wp-head-chevron wp-chevron"
+            :class="{ flipped: panels.find }"
+          />
+        </button>
+        <Transition name="expand">
+          <div v-if="panels.find" class="wp-find-body">
+            <div class="wp-field">
+              <span class="wp-field-label">{{ t("worldPreview.type") }}</span>
+              <DropSelect v-model="findMode" :options="findModeOptions" width="100%" />
+            </div>
+            <div v-if="findMode === 'biome'" class="wp-field">
+              <span class="wp-field-label">{{ t("worldPreview.findBiome") }}</span>
+              <DropSelect
+                v-model="biome"
+                :options="biomeOptions"
+                :disabled="biomeLoading || !biomeOptions.length"
+                :placeholder="
+                  biomeLoading ? t('worldPreview.scanning') : t('worldPreview.noBiomes')
+                "
+                width="100%"
+              />
+            </div>
+            <button
+              class="wp-find-btn"
+              :disabled="
+                findBusy ||
+                biomeLoading ||
+                (findMode === 'biome' && !biome) ||
+                (findMode === 'slime' && !info.seed)
+              "
+              @click="doFind"
+            >
+              <Search :size="13" />
+              <span>{{ findBusy ? t("worldPreview.finding") : t("worldPreview.findAction") }}</span>
+            </button>
+            <span v-if="findStatus" class="wp-find-status">{{ findStatus }}</span>
+          </div>
+        </Transition>
+      </section>
+
+      <!-- 右下角：玩家标点（带搜索，默认收起） -->
+      <section class="wp-panel wp-player-panel" :class="{ collapsed: !panels.players }">
+        <button
+          class="wp-panel-head"
+          :aria-expanded="panels.players"
+          @click="panels.players = !panels.players"
+        >
+          <Users :size="14" />
+          <span>{{ t("worldPreview.players") }}</span>
+          <ChevronUp
+            :size="13"
+            class="wp-head-chevron wp-chevron"
+            :class="{ flipped: panels.players }"
+          />
+        </button>
+        <Transition name="expand">
+          <div v-if="panels.players" class="wp-player-body">
+            <input
+              v-model="playerQuery"
+              class="wp-search"
+              type="search"
+              :placeholder="t('worldPreview.playerSearch')"
+            />
+            <div class="wp-count">
+              {{ selectedPlayers.length }} / {{ players.length }}
+            </div>
+            <div v-if="playersLoading" class="wp-muted">
+              {{ t("worldPreview.playersLoading") }}
+            </div>
+            <div v-else-if="!players.length" class="wp-muted">
+              {{ t("worldPreview.playersEmpty") }}
+            </div>
+            <div v-else-if="!filteredPlayers.length" class="wp-muted">
+              {{ t("worldPreview.playerSearchEmpty") }}
+            </div>
+            <div v-else class="wp-players-list">
+              <label v-for="player in filteredPlayers" :key="player.uuid" class="wp-check wp-player">
+                <input
+                  type="checkbox"
+                  :checked="selectedPlayers.includes(player.uuid)"
+                  @change="togglePlayer(player.uuid)"
+                />
+                <span class="wp-player-label">
+                  {{ player.name }} · {{ dimensionLabel(player.dimension) }}
+                  ({{ Math.round(player.x) }}, {{ Math.round(player.z) }})
+                </span>
+              </label>
             </div>
           </div>
         </Transition>
@@ -672,6 +839,11 @@ defineExpose({ reload });
 .wp-chevron { flex: none; transition: transform 0.18s ease; }
 .wp-chevron.flipped { transform: rotate(180deg); }
 
+.wp-top,
+.wp-coord {
+  z-index: 20;
+}
+
 .wp-top {
   top: 12px;
   left: 50%;
@@ -756,8 +928,8 @@ defineExpose({ reload });
 .wp-icon-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
 
 .wp-config {
-  top: 56px;
-  right: 14px;
+  top: 12px;
+  left: 14px;
   width: 232px;
   max-height: calc(100% - 120px);
   display: flex;
@@ -766,6 +938,10 @@ defineExpose({ reload });
   background: var(--surface-card);
   backdrop-filter: none;
   transition: width 0.18s ease;
+}
+
+.wp-config.find-open {
+  max-height: calc(100% - 300px);
 }
 
 .wp-config.collapsed { width: 112px; }
@@ -780,6 +956,126 @@ defineExpose({ reload });
   min-height: 0;
   overflow-y: auto;
   padding: 0 10px 10px;
+}
+
+.wp-count,
+.wp-muted {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.wp-player-panel {
+  bottom: 14px;
+  right: 14px;
+  width: 252px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  backdrop-filter: none;
+  transition: width 0.18s ease;
+}
+
+.wp-player-panel.collapsed { width: 112px; }
+
+.wp-player-panel .wp-panel-head { justify-content: flex-start; }
+
+.wp-player-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.wp-search {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.wp-search:focus { border-color: var(--color-brand); }
+.wp-search::placeholder { color: var(--text-tertiary); }
+
+.wp-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.wp-player {
+  align-items: flex-start;
+}
+
+.wp-player-label {
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.wp-find {
+  bottom: 14px;
+  left: 14px;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-card);
+  backdrop-filter: none;
+  transition: width 0.18s ease;
+}
+
+.wp-find.collapsed { width: 112px; }
+
+.wp-find .wp-panel-head { justify-content: flex-start; }
+
+.wp-find-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.wp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wp-field-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.wp-find-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.wp-find-btn:hover:not(:disabled) {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+
+.wp-find-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .wp-group {
@@ -969,6 +1265,7 @@ defineExpose({ reload });
 
 @media (max-width: 820px) {
   .wp-config { width: 208px; }
+  /* 窄视口下查找面板上移，给底部坐标栏让位 */
   .wp-coord { max-width: calc(100% - 250px); }
 }
 </style>
